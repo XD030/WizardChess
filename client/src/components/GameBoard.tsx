@@ -214,8 +214,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const useImage = piece.type === 'wizard' && wizardHatImage;
       
       if (useImage) {
-        // Draw wizard hat image with high quality
-        const displaySize = 36;
+        // Draw wizard moon image with high quality
+        const displaySize = 28; // Smaller size
         const highResSize = 128; // Use higher resolution for better quality
         ctx.save();
         
@@ -293,44 +293,29 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (piece.side === 'black') {
             // Black moon gets white outline in normal state
             outlineColor = '#fff';
-            outlineWidth = 1.5;
+            outlineWidth = 1;
           }
           // White and neutral moons have no outline in normal state
           
-          // Draw outline using simpler stroke method
+          // Draw fine outline
           if (outlineColor && outlineWidth > 0) {
-            // Draw the image multiple times with slight offsets to create outline
+            ctx.save();
+            
+            // Use shadow for subtle outline
+            ctx.shadowColor = outlineColor;
+            ctx.shadowBlur = 0;
+            
             const offsets = [
-              [-1, -1], [0, -1], [1, -1],
-              [-1, 0],           [1, 0],
-              [-1, 1],  [0, 1],  [1, 1]
+              [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
+              [-0.8, 0],                [0.8, 0],
+              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8]
             ];
             
-            ctx.save();
-            ctx.globalCompositeOperation = 'source-over';
-            
-            // Draw outline by repeating image with color filter
-            for (let i = 0; i < outlineWidth; i++) {
-              offsets.forEach(([dx, dy]) => {
-                const offsetX = node.x - displaySize / 2 + dx * (i + 1);
-                const offsetY = node.y - displaySize / 2 + dy * (i + 1);
-                
-                // Create a colored version for outline
-                const outlineCanvas = document.createElement('canvas');
-                outlineCanvas.width = highResSize;
-                outlineCanvas.height = highResSize;
-                const outlineCtx = outlineCanvas.getContext('2d');
-                
-                if (outlineCtx) {
-                  outlineCtx.drawImage(tempCanvas, 0, 0);
-                  outlineCtx.globalCompositeOperation = 'source-in';
-                  outlineCtx.fillStyle = outlineColor;
-                  outlineCtx.fillRect(0, 0, highResSize, highResSize);
-                  
-                  ctx.drawImage(outlineCanvas, offsetX, offsetY, displaySize, displaySize);
-                }
-              });
-            }
+            offsets.forEach(([dx, dy]) => {
+              ctx.shadowOffsetX = dx;
+              ctx.shadowOffsetY = dy;
+              ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+            });
             
             ctx.restore();
           }
