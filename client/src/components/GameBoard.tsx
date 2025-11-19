@@ -198,10 +198,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     });
 
     // Draw coordinate labels
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
     
-    // Row labels (A-I) on the right side
+    // Row labels (A-I) on the right side, close to nodes
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     const labelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16];
     
@@ -210,7 +210,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(rowLabels[labelIdx], rightNode.x + 25, rightNode.y);
+        ctx.fillText(rowLabels[labelIdx], rightNode.x + 15, rightNode.y);
       }
     });
     
@@ -223,7 +223,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       if (idx < colLabels.length) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(colLabels[idx], node.x, bottomY + 25);
+        ctx.fillText(colLabels[idx], node.x, bottomY + 20);
       }
     });
 
