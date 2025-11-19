@@ -27,6 +27,7 @@ export interface Piece {
   row: number;
   col: number;
   activated?: boolean; // For bard - whether it's activated to enable jumping
+  stealthed?: boolean; // For assassin - whether it's in stealth mode
 }
 
 export interface BurnMark {

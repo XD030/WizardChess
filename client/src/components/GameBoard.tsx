@@ -13,6 +13,21 @@ interface GameBoardProps {
   burnMarks: BurnMark[];
 }
 
+// Helper function to check if a piece should be visible to current player
+function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean {
+  // Own pieces are always visible
+  if (piece.side === currentPlayer || piece.side === 'neutral') {
+    return true;
+  }
+  
+  // Enemy stealthed assassins are not visible
+  if (piece.type === 'assassin' && piece.stealthed) {
+    return false;
+  }
+  
+  return true;
+}
+
 export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks }: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
@@ -261,6 +276,11 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     ctx.font = 'bold 28px serif';
 
     pieces.forEach((piece, idx) => {
+      // Skip drawing enemy stealthed assassins
+      if (!isPieceVisible(piece, currentPlayer)) {
+        return;
+      }
+      
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
       if (!node) return;
 

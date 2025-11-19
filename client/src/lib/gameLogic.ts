@@ -71,8 +71,13 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   },
   assassin: {
     name: '《刺客》',
-    move: ['沿平行四邊形對角移動（之後補完）。'],
-    ability: ['潛行與顯形機制之後加入。'],
+    move: ['沿相鄰黑白三角形組成的平行四邊形對角點移動。'],
+    ability: [
+      '白→黑：進入潛行狀態，可被踩殺，敵方看不見其位置。',
+      '黑→白：現形。',
+      '不論潛行與否，落點若有敵人即擊殺。',
+      '若進入或停留在聖騎士守護區或交換位置，立即現形。',
+    ],
   },
   bard: {
     name: '《吟遊詩人》',
@@ -146,6 +151,25 @@ export function getNodeCoordinate(row: number, col: number): string {
   const rank = y + 1;
   
   return `${file}${rank}`;
+}
+
+// Determine if a node is on a black or white triangle
+// Black triangles: upward pointing (apex at top)
+// White triangles: downward pointing (apex at bottom)
+export function isBlackTriangle(row: number, col: number): boolean {
+  // In the expanding rows (row 0-4), even columns are black (upward)
+  // In the contracting rows (row 5-8), odd columns are black (upward)
+  // This pattern alternates based on the structure of the hexagonal board
+  
+  const centerRow = 4; // Middle row of the board
+  
+  if (row <= centerRow) {
+    // Expanding rows: even columns are black
+    return col % 2 === 0;
+  } else {
+    // Contracting rows: odd columns are black
+    return col % 2 === 1;
+  }
 }
 
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
@@ -474,6 +498,56 @@ export function calculateRangerMoves(
         if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
           highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
         }
+      }
+    }
+  }
+
+  return highlights;
+}
+
+// Calculate assassin moves - diagonal jumps (parallelogram corners)
+export function calculateAssassinMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): MoveHighlight[] {
+  const highlights: MoveHighlight[] = [];
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  
+  if (nodeIdx === -1) return highlights;
+
+  // Assassin moves diagonally (2 steps in one direction)
+  // This forms parallelogram corners with adjacent black/white triangles
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    
+    // Calculate direction vector
+    const dRow = adjNode.row - piece.row;
+    const dCol = adjNode.col - piece.col;
+    
+    // Expected landing position (2 steps in same direction)
+    const landRow = piece.row + dRow * 2;
+    const landCol = piece.col + dCol * 2;
+    
+    // Find landing node among adjacent nodes of adjNode
+    for (const nextIdx of adjacency[adjIdx]) {
+      const nextNode = allNodes[nextIdx];
+      if (nextNode.row === landRow && nextNode.col === landCol) {
+        // Found valid diagonal move target
+        const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
+        
+        if (targetPieceIdx === -1) {
+          highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
+        } else {
+          // Can attack enemy
+          const targetPiece = pieces[targetPieceIdx];
+          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+            highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
+          }
+        }
+        break;
       }
     }
   }

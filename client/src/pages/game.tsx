@@ -11,10 +11,12 @@ import {
   calculateDragonMoves,
   calculateDragonPath,
   calculateRangerMoves,
+  calculateAssassinMoves,
   buildRows,
   buildAllNodes,
   buildAdjacency,
   getNodeCoordinate,
+  isBlackTriangle,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
 
@@ -65,6 +67,10 @@ export default function Game() {
               setDragonPathNodes(result.pathNodes);
             } else if (piece.type === 'ranger') {
               const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
+            } else if (piece.type === 'assassin') {
+              const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
             } else {
@@ -118,6 +124,10 @@ export default function Game() {
               const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
+            } else if (piece.type === 'assassin') {
+              const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
@@ -139,7 +149,23 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
 
     if (highlight.type === 'move') {
-      newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
+      // Check for assassin stealth state change
+      let updatedPiece = { ...selectedPiece, row, col };
+      if (selectedPiece.type === 'assassin') {
+        const fromIsBlack = isBlackTriangle(selectedPiece.row, selectedPiece.col);
+        const toIsBlack = isBlackTriangle(row, col);
+        
+        // White triangle -> Black triangle: Enter stealth
+        if (!fromIsBlack && toIsBlack) {
+          updatedPiece.stealthed = true;
+        }
+        // Black triangle -> White triangle: Reveal
+        else if (fromIsBlack && !toIsBlack) {
+          updatedPiece.stealthed = false;
+        }
+      }
+      
+      newPieces[selectedPieceIndex] = updatedPiece;
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       
       // If dragon moves, add burn marks to the path (including starting point, excluding destination)
@@ -197,8 +223,24 @@ export default function Game() {
       // Adjust selectedPieceIndex if needed (if target was before selected piece)
       const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
       
+      // Check for assassin stealth state change
+      let updatedPiece = { ...selectedPiece, row, col };
+      if (selectedPiece.type === 'assassin') {
+        const fromIsBlack = isBlackTriangle(selectedPiece.row, selectedPiece.col);
+        const toIsBlack = isBlackTriangle(row, col);
+        
+        // White triangle -> Black triangle: Enter stealth
+        if (!fromIsBlack && toIsBlack) {
+          updatedPiece.stealthed = true;
+        }
+        // Black triangle -> White triangle: Reveal
+        else if (fromIsBlack && !toIsBlack) {
+          updatedPiece.stealthed = false;
+        }
+      }
+      
       // Move the attacking piece to the target position
-      newPieces[adjustedIdx] = { ...selectedPiece, row, col };
+      newPieces[adjustedIdx] = updatedPiece;
       
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
