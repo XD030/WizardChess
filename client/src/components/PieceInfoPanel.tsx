@@ -1,6 +1,6 @@
 import type { Piece } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PIECE_EMOJI, PIECE_CHINESE, SIDE_CHINESE, PIECE_DESCRIPTIONS } from '@/lib/gameLogic';
+import { getPieceSymbol, PIECE_CHINESE, SIDE_CHINESE, PIECE_DESCRIPTIONS } from '@/lib/gameLogic';
 
 interface PieceInfoPanelProps {
   piece: Piece | null;
@@ -36,8 +36,16 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center gap-3">
-          <div className="text-4xl" data-testid="text-piece-emoji">
-            {PIECE_EMOJI[piece.type]}
+          <div 
+            className="text-5xl font-bold" 
+            style={{ 
+              fontFamily: 'serif',
+              color: piece.side === 'white' ? '#fff' : piece.side === 'black' ? '#000' : '#a855f7',
+              textShadow: piece.side === 'white' ? '0 0 2px #000' : '0 0 2px #fff'
+            }}
+            data-testid="text-piece-emoji"
+          >
+            {getPieceSymbol(piece.type, piece.side)}
           </div>
           <div>
             <div className="text-base font-bold text-foreground" data-testid="text-piece-name">

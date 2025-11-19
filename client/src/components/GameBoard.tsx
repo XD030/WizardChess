@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Piece, MoveHighlight, NodePosition } from '@shared/schema';
-import { PIECE_EMOJI, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt } from '@/lib/gameLogic';
+import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt } from '@/lib/gameLogic';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -191,7 +191,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     // Draw pieces
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '24px sans-serif';
+    ctx.font = 'bold 36px serif';
 
     pieces.forEach((piece, idx) => {
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
@@ -201,39 +201,56 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
       const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
 
-      // Background circle
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
-      if (piece.side === 'white') {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      } else if (piece.side === 'black') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      } else {
-        ctx.fillStyle = 'rgba(124, 58, 237, 0.2)';
-      }
-      ctx.fill();
-
-      // Highlight rings
+      // Highlight rings (draw behind piece)
       if (idx === selectedPieceIndex) {
         // Selection ring (gold)
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
         ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.stroke();
       } else if (swapHighlight) {
         // Swap target ring (blue)
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
         ctx.strokeStyle = '#3b82f6';
         ctx.lineWidth = 3;
         ctx.stroke();
       } else if (attackHighlight) {
         // Attack target ring (red)
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 3;
         ctx.stroke();
       }
 
-      // Emoji
-      ctx.fillStyle = '#fff';
-      ctx.fillText(PIECE_EMOJI[piece.type], node.x, node.y);
+      // Chess piece symbol
+      const symbol = getPieceSymbol(piece.type, piece.side);
+      
+      // Draw piece with appropriate color
+      if (piece.side === 'white') {
+        // White pieces - white with black outline
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.strokeText(symbol, node.x, node.y);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(symbol, node.x, node.y);
+      } else if (piece.side === 'black') {
+        // Black pieces - black with white outline
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeText(symbol, node.x, node.y);
+        ctx.fillStyle = '#000';
+        ctx.fillText(symbol, node.x, node.y);
+      } else {
+        // Neutral (bard) - purple
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.strokeText(symbol, node.x, node.y);
+        ctx.fillStyle = '#a855f7';
+        ctx.fillText(symbol, node.x, node.y);
+      }
     });
   }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode]);
 
