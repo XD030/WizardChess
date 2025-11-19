@@ -365,6 +365,7 @@ export function calculateDragonMoves(
   burnMarks: { row: number; col: number }[]
 ): { highlights: MoveHighlight[]; pathNodes: { row: number; col: number }[] } {
   const highlights: MoveHighlight[] = [];
+  // Don't record path nodes during move calculation - we'll calculate them when a move is selected
   const pathNodes: { row: number; col: number }[] = [];
   
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -379,7 +380,6 @@ export function calculateDragonMoves(
     
     let currentIdx = nodeIdx;
     let nextIdx = firstAdjIdx;
-    const currentPath: { row: number; col: number }[] = [];
     
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
@@ -401,7 +401,6 @@ export function calculateDragonMoves(
       
       // If there's a burn mark, can pass through but cannot stop
       if (hasBurnMark) {
-        currentPath.push({ row: nextNode.row, col: nextNode.col });
         // Continue in the same direction
         currentIdx = nextIdx;
         nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
@@ -410,18 +409,60 @@ export function calculateDragonMoves(
       
       // Empty space - can move here
       highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
-      currentPath.push({ row: nextNode.row, col: nextNode.col });
       
       // Continue in the same direction
       currentIdx = nextIdx;
       nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
     }
-    
-    // Add this path to all paths
-    pathNodes.push(...currentPath);
   }
   
   return { highlights, pathNodes };
+}
+
+// Calculate the path from dragon's current position to a target position
+export function calculateDragonPath(
+  startRow: number,
+  startCol: number,
+  targetRow: number,
+  targetCol: number,
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): { row: number; col: number }[] {
+  const path: { row: number; col: number }[] = [];
+  
+  const startIdx = allNodes.findIndex((n) => n.row === startRow && n.col === startCol);
+  const targetIdx = allNodes.findIndex((n) => n.row === targetRow && n.col === targetCol);
+  
+  if (startIdx === -1 || targetIdx === -1) return path;
+  
+  // Find which direction from start leads to target
+  for (const firstAdjIdx of adjacency[startIdx]) {
+    const direction = {
+      from: startIdx,
+      to: firstAdjIdx,
+    };
+    
+    let currentIdx = startIdx;
+    let nextIdx = firstAdjIdx;
+    const currentPath: { row: number; col: number }[] = [];
+    
+    // Follow this direction until we find target or reach the end
+    while (nextIdx !== -1) {
+      const nextNode = allNodes[nextIdx];
+      currentPath.push({ row: nextNode.row, col: nextNode.col });
+      
+      // Found the target!
+      if (nextNode.row === targetRow && nextNode.col === targetCol) {
+        return currentPath;
+      }
+      
+      // Continue in the same direction
+      currentIdx = nextIdx;
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
+    }
+  }
+  
+  return path;
 }
 
 // Helper function to find the next node in the same direction

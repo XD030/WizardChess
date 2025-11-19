@@ -9,6 +9,7 @@ import {
   calculateWizardMoves,
   calculateApprenticeMoves,
   calculateDragonMoves,
+  calculateDragonPath,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -133,7 +134,17 @@ export default function Game() {
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       
       // If dragon moves, add burn marks to the path (including starting point, excluding destination)
-      if (selectedPiece.type === 'dragon' && dragonPathNodes.length > 0) {
+      if (selectedPiece.type === 'dragon') {
+        // Calculate the actual path from start to destination
+        const path = calculateDragonPath(
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col,
+          adjacency,
+          allNodes
+        );
+        
         // Add burn mark for the starting position
         if (!updatedBurnMarks.some(b => b.row === selectedPiece.row && b.col === selectedPiece.col)) {
           updatedBurnMarks.push({ 
@@ -144,7 +155,7 @@ export default function Game() {
         }
         
         // Add burn marks for all nodes in the path except the destination
-        for (const pathNode of dragonPathNodes) {
+        for (const pathNode of path) {
           if (!(pathNode.row === row && pathNode.col === col)) {
             // Check if not already a burn mark
             if (!updatedBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
