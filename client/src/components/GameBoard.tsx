@@ -297,59 +297,42 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           }
           // White and neutral moons have no outline in normal state
           
-          // Only draw outline if highlighted
+          // Draw outline using simpler stroke method
           if (outlineColor && outlineWidth > 0) {
-            const outlineCanvas = document.createElement('canvas');
-            outlineCanvas.width = highResSize;
-            outlineCanvas.height = highResSize;
-            const outlineCtx = outlineCanvas.getContext('2d');
+            // Draw the image multiple times with slight offsets to create outline
+            const offsets = [
+              [-1, -1], [0, -1], [1, -1],
+              [-1, 0],           [1, 0],
+              [-1, 1],  [0, 1],  [1, 1]
+            ];
             
-            if (outlineCtx) {
-              // Draw outline by expanding the alpha channel
-              const outlineData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-              const oData = outlineData.data;
-              const thickness = Math.ceil(outlineWidth * (highResSize / displaySize));
-              
-              // Create outline by dilating the alpha channel
-              for (let y = 0; y < highResSize; y++) {
-                for (let x = 0; x < highResSize; x++) {
-                  const idx = (y * highResSize + x) * 4;
-                  if (oData[idx + 3] > 0) continue; // Skip if already has alpha
+            ctx.save();
+            ctx.globalCompositeOperation = 'source-over';
+            
+            // Draw outline by repeating image with color filter
+            for (let i = 0; i < outlineWidth; i++) {
+              offsets.forEach(([dx, dy]) => {
+                const offsetX = node.x - displaySize / 2 + dx * (i + 1);
+                const offsetY = node.y - displaySize / 2 + dy * (i + 1);
+                
+                // Create a colored version for outline
+                const outlineCanvas = document.createElement('canvas');
+                outlineCanvas.width = highResSize;
+                outlineCanvas.height = highResSize;
+                const outlineCtx = outlineCanvas.getContext('2d');
+                
+                if (outlineCtx) {
+                  outlineCtx.drawImage(tempCanvas, 0, 0);
+                  outlineCtx.globalCompositeOperation = 'source-in';
+                  outlineCtx.fillStyle = outlineColor;
+                  outlineCtx.fillRect(0, 0, highResSize, highResSize);
                   
-                  // Check surrounding pixels
-                  let hasNeighbor = false;
-                  for (let dy = -thickness; dy <= thickness; dy++) {
-                    for (let dx = -thickness; dx <= thickness; dx++) {
-                      if (dx * dx + dy * dy > thickness * thickness) continue;
-                      const ny = y + dy;
-                      const nx = x + dx;
-                      if (ny >= 0 && ny < highResSize && nx >= 0 && nx < highResSize) {
-                        const nIdx = (ny * highResSize + nx) * 4;
-                        if (data[nIdx + 3] > 0) {
-                          hasNeighbor = true;
-                          break;
-                        }
-                      }
-                    }
-                    if (hasNeighbor) break;
-                  }
-                  
-                  if (hasNeighbor) {
-                    // Set outline color
-                    const rgb = parseInt(outlineColor.slice(1), 16);
-                    oData[idx] = (rgb >> 16) & 255;
-                    oData[idx + 1] = (rgb >> 8) & 255;
-                    oData[idx + 2] = rgb & 255;
-                    oData[idx + 3] = 255;
-                  }
+                  ctx.drawImage(outlineCanvas, offsetX, offsetY, displaySize, displaySize);
                 }
-              }
-              
-              outlineCtx.putImageData(outlineData, 0, 0);
-              
-              // Draw outline first, then main image
-              ctx.drawImage(outlineCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+              });
             }
+            
+            ctx.restore();
           }
           
           // Draw main image on top
