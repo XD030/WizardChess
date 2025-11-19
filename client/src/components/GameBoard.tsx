@@ -214,23 +214,9 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const useImage = piece.type === 'wizard' && wizardHatImage;
       
       if (useImage) {
-        // Draw wizard hat image with transparency
+        // Draw wizard hat image with transparency and outline
         const imgSize = 32;
         ctx.save();
-        
-        // Set blend mode to multiply to remove white background
-        ctx.globalCompositeOperation = 'multiply';
-        
-        // Apply color filter for different sides
-        if (piece.side === 'white') {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.filter = 'invert(1) brightness(1.2) contrast(1.5)';
-        } else if (piece.side === 'black') {
-          ctx.filter = 'brightness(0.3) contrast(1.5)';
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.filter = 'invert(1) sepia(1) saturate(3) hue-rotate(240deg) contrast(1.5)';
-        }
         
         // Create temporary canvas to process image
         const tempCanvas = document.createElement('canvas');
@@ -254,31 +240,72 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             // If pixel is white or very light, make it transparent
             if (r > 240 && g > 240 && b > 240) {
               data[i + 3] = 0; // Set alpha to 0
+            } else {
+              // Apply color based on piece side
+              if (piece.side === 'white') {
+                // White hat - invert to white
+                data[i] = 255 - data[i];
+                data[i + 1] = 255 - data[i + 1];
+                data[i + 2] = 255 - data[i + 2];
+              } else if (piece.side === 'neutral') {
+                // Purple hat
+                data[i] = Math.min(255, data[i] * 0.6 + 168);
+                data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
+                data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
+              }
+              // Black hat - keep as is
             }
           }
           
           tempCtx.putImageData(imageData, 0, 0);
           
-          // Draw the processed image
+          // Determine outline color and width
+          let outlineColor = '#fff'; // Default white for black pieces
+          let outlineWidth = 1.2;
+          
+          if (idx === selectedPieceIndex) {
+            outlineColor = '#fbbf24';
+            outlineWidth = 2.5;
+          } else if (swapHighlight) {
+            outlineColor = '#3b82f6';
+            outlineWidth = 2.5;
+          } else if (attackHighlight) {
+            outlineColor = '#ef4444';
+            outlineWidth = 2.5;
+          } else {
+            // Normal outline based on piece color
+            if (piece.side === 'white') {
+              outlineColor = '#000'; // Black outline for white pieces
+            } else if (piece.side === 'black') {
+              outlineColor = '#fff'; // White outline for black pieces
+            } else {
+              outlineColor = '#000'; // Black outline for neutral pieces
+            }
+          }
+          
+          // Draw outline by drawing the image multiple times with offset
+          const offsets = [
+            [-outlineWidth, -outlineWidth], [0, -outlineWidth], [outlineWidth, -outlineWidth],
+            [-outlineWidth, 0], [outlineWidth, 0],
+            [-outlineWidth, outlineWidth], [0, outlineWidth], [outlineWidth, outlineWidth]
+          ];
+          
+          ctx.globalCompositeOperation = 'source-over';
+          
+          // Draw outline
+          offsets.forEach(([dx, dy]) => {
+            ctx.save();
+            ctx.globalAlpha = 0.8;
+            ctx.filter = `drop-shadow(${dx}px ${dy}px 0px ${outlineColor})`;
+            ctx.drawImage(tempCanvas, node.x - imgSize / 2, node.y - imgSize / 2);
+            ctx.restore();
+          });
+          
+          // Draw the main image on top
           ctx.drawImage(tempCanvas, node.x - imgSize / 2, node.y - imgSize / 2);
         }
         
         ctx.restore();
-        
-        // Draw highlight outline if needed
-        if (idx === selectedPieceIndex || swapHighlight || attackHighlight) {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, 18, 0, Math.PI * 2);
-          if (idx === selectedPieceIndex) {
-            ctx.strokeStyle = '#fbbf24';
-          } else if (swapHighlight) {
-            ctx.strokeStyle = '#3b82f6';
-          } else if (attackHighlight) {
-            ctx.strokeStyle = '#ef4444';
-          }
-          ctx.lineWidth = 2.5;
-          ctx.stroke();
-        }
       } else {
         // Draw chess symbol for other pieces
         const symbol = getPieceSymbol(piece.type, piece.side);
