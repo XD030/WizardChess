@@ -70,13 +70,13 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const rowB = rows[r + 1];
       
       if (rowB.length === rowA.length + 1) {
-        // Expanding rows
+        // Expanding rows - draw both black (upward) and white (downward) triangles
         for (let c = 0; c < rowA.length; c++) {
           const p1 = rowA[c];
           const p2 = { x: rowB[c].x, y: rowB[c].y };
           const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
           
-          // Upward triangle (black)
+          // Upward triangle (black) - apex at top
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
@@ -88,20 +88,58 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
-      } else if (rowA.length === rowB.length + 1) {
-        // Contracting rows
-        for (let c = 0; c < rowB.length; c++) {
-          const p1 = rowB[c];
-          const p2 = { x: rowA[c].x, y: rowA[c].y };
-          const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
+        
+        // Also draw white triangles for the same region
+        for (let c = 0; c < rowA.length - 1; c++) {
+          const p1 = rowA[c];
+          const p2 = rowA[c + 1];
+          const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
           
-          // Downward triangle (white)
+          // Downward triangle (white) - apex at bottom
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
           ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      } else if (rowA.length === rowB.length + 1) {
+        // Contracting rows - draw both white (downward) and black (upward) triangles
+        for (let c = 0; c < rowB.length; c++) {
+          const p1 = rowB[c];
+          const p2 = { x: rowA[c].x, y: rowA[c].y };
+          const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
+          
+          // Downward triangle (white) - apex at bottom
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        
+        // Also draw black triangles for the same region
+        for (let c = 0; c < rowB.length - 1; c++) {
+          const p1 = rowB[c];
+          const p2 = rowB[c + 1];
+          const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
+          
+          // Upward triangle (black) - apex at top
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
           ctx.fill();
           ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
           ctx.lineWidth = 1.5;
