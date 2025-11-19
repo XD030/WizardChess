@@ -209,7 +209,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 15, rightNode.y - 8);
+        ctx.fillText(label, rightNode.x + 15, rightNode.y);
       }
     });
     
@@ -221,7 +221,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const leftNode = rows[rowIdx][0];
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, leftNode.x - 15, leftNode.y - 8);
+        ctx.fillText(label, leftNode.x - 15, leftNode.y);
       }
     });
 
