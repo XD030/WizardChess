@@ -273,7 +273,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           
           tempCtx.putImageData(imageData, 0, 0);
           
-          // Determine outline color and width (only for highlights)
+          // Determine outline color and width
           let outlineColor = null;
           let outlineWidth = 0;
           
@@ -286,8 +286,12 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (attackHighlight) {
             outlineColor = '#ef4444';
             outlineWidth = 3;
+          } else if (piece.side === 'black') {
+            // Black moon gets white outline in normal state
+            outlineColor = '#fff';
+            outlineWidth = 1.5;
           }
-          // No outline in normal state
+          // White and neutral moons have no outline in normal state
           
           // Only draw outline if highlighted
           if (outlineColor && outlineWidth > 0) {
