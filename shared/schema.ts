@@ -28,6 +28,11 @@ export interface Piece {
   col: number;
 }
 
+export interface BurnMark {
+  row: number;
+  col: number;
+}
+
 export interface GameState {
   pieces: Piece[];
   currentPlayer: Side;
@@ -35,6 +40,7 @@ export interface GameState {
   gameOver: boolean;
   winner?: Side;
   moveHistory: string[];
+  burnMarks: BurnMark[];
 }
 
 export interface NodePosition {

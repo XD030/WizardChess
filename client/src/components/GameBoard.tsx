@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Piece, MoveHighlight, NodePosition } from '@shared/schema';
+import type { Piece, MoveHighlight, NodePosition, BurnMark } from '@shared/schema';
 import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate } from '@/lib/gameLogic';
 import wizardMoonImg from '@assets/wizard_moon.png';
 
@@ -9,9 +9,10 @@ interface GameBoardProps {
   highlights: MoveHighlight[];
   currentPlayer: 'white' | 'black';
   onNodeClick: (row: number, col: number) => void;
+  burnMarks: BurnMark[];
 }
 
-export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick }: GameBoardProps) {
+export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks }: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
@@ -178,6 +179,29 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.beginPath();
       ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = isHovered ? 'rgba(148, 163, 184, 0.4)' : 'rgba(148, 163, 184, 0.2)';
+      ctx.fill();
+    });
+
+    // Draw burn marks
+    burnMarks.forEach((mark) => {
+      const node = allNodes.find((n) => n.row === mark.row && n.col === mark.col);
+      if (!node) return;
+      
+      // Draw a flame effect - orange glowing circle
+      const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
+      gradient.addColorStop(0, 'rgba(255, 140, 0, 0.8)'); // Orange center
+      gradient.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)'); // Red-orange
+      gradient.addColorStop(1, 'rgba(255, 69, 0, 0)'); // Transparent edge
+      
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Add a small red dot in the center
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff4500';
       ctx.fill();
     });
 
@@ -395,7 +419,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         ctx.fillText(symbol, node.x, node.y);
       }
     });
-  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode]);
+  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode, burnMarks]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

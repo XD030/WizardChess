@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Piece, Side, MoveHighlight, NodePosition } from '@shared/schema';
+import type { Piece, Side, MoveHighlight, NodePosition, BurnMark } from '@shared/schema';
 import GameBoard from '@/components/GameBoard';
 import PieceInfoPanel from '@/components/PieceInfoPanel';
 import TurnHistoryPanel from '@/components/TurnHistoryPanel';
@@ -8,6 +8,7 @@ import {
   getPieceAt,
   calculateWizardMoves,
   calculateApprenticeMoves,
+  calculateDragonMoves,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -23,6 +24,8 @@ export default function Game() {
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
+  const [burnMarks, setBurnMarks] = useState<BurnMark[]>([]);
+  const [dragonPathNodes, setDragonPathNodes] = useState<{ row: number; col: number }[]>([]);
 
   useEffect(() => {
     const rows = buildRows(700, 700);
@@ -49,14 +52,22 @@ export default function Game() {
             if (piece.type === 'wizard') {
               const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
+              setDragonPathNodes([]);
             } else if (piece.type === 'apprentice') {
               const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
+              setDragonPathNodes([]);
+            } else if (piece.type === 'dragon') {
+              const result = calculateDragonMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, burnMarks);
+              setHighlights(result.highlights);
+              setDragonPathNodes(result.pathNodes);
             } else {
               setHighlights([]);
+              setDragonPathNodes([]);
             }
           } else {
             setHighlights([]);
+            setDragonPathNodes([]);
           }
         }
       }
@@ -70,6 +81,7 @@ export default function Game() {
     if (clickedPieceIdx === selectedPieceIndex) {
       setSelectedPieceIndex(-1);
       setHighlights([]);
+      setDragonPathNodes([]);
       return;
     }
 
@@ -87,14 +99,22 @@ export default function Game() {
             if (piece.type === 'wizard') {
               const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
+              setDragonPathNodes([]);
             } else if (piece.type === 'apprentice') {
               const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
+              setDragonPathNodes([]);
+            } else if (piece.type === 'dragon') {
+              const result = calculateDragonMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, burnMarks);
+              setHighlights(result.highlights);
+              setDragonPathNodes(result.pathNodes);
             } else {
               setHighlights([]);
+              setDragonPathNodes([]);
             }
           } else {
             setHighlights([]);
+            setDragonPathNodes([]);
           }
         }
       }
@@ -110,6 +130,21 @@ export default function Game() {
     if (highlight.type === 'move') {
       newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
+      
+      // If dragon moves, add burn marks to the path
+      if (selectedPiece.type === 'dragon' && dragonPathNodes.length > 0) {
+        const newBurnMarks = [...burnMarks];
+        // Add burn marks for all nodes in the path except the destination
+        for (const pathNode of dragonPathNodes) {
+          if (!(pathNode.row === row && pathNode.col === col)) {
+            // Check if not already a burn mark
+            if (!newBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
+              newBurnMarks.push({ row: pathNode.row, col: pathNode.col });
+            }
+          }
+        }
+        setBurnMarks(newBurnMarks);
+      }
     } else if (highlight.type === 'swap') {
       const targetIdx = clickedPieceIdx;
       const targetPiece = pieces[targetIdx];
@@ -131,6 +166,7 @@ export default function Game() {
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
     setHighlights([]);
+    setDragonPathNodes([]);
     setCurrentPlayer(currentPlayer === 'white' ? 'black' : 'white');
   };
 
@@ -155,6 +191,7 @@ export default function Game() {
               highlights={highlights}
               currentPlayer={currentPlayer}
               onNodeClick={handleNodeClick}
+              burnMarks={burnMarks}
             />
           </div>
 

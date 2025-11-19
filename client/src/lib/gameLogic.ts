@@ -52,8 +52,12 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   },
   dragon: {
     name: '《龍》',
-    move: ['沿直線前進，距離不限（之後補上灼痕效果）。'],
-    ability: ['（之後補完）'],
+    move: ['沿任意直線方向前進，距離不限，不可轉換方向或穿越其他棋子。'],
+    ability: [
+      '碰到潛行刺客會擊殺。',
+      '經過的節點留下灼痕。',
+      '灼痕雙方都無法停留，可穿越。',
+    ],
   },
   ranger: {
     name: '《遊俠》',
@@ -349,4 +353,103 @@ export function calculateApprenticeMoves(
   }
 
   return highlights;
+}
+
+// Calculate dragon moves - straight lines in any direction
+export function calculateDragonMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[],
+  burnMarks: { row: number; col: number }[]
+): { highlights: MoveHighlight[]; pathNodes: { row: number; col: number }[] } {
+  const highlights: MoveHighlight[] = [];
+  const pathNodes: { row: number; col: number }[] = [];
+  
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  if (nodeIdx === -1) return { highlights, pathNodes };
+
+  // For each adjacent direction, follow the straight line
+  for (const firstAdjIdx of adjacency[nodeIdx]) {
+    const direction = {
+      from: nodeIdx,
+      to: firstAdjIdx,
+    };
+    
+    let currentIdx = nodeIdx;
+    let nextIdx = firstAdjIdx;
+    const currentPath: { row: number; col: number }[] = [];
+    
+    while (nextIdx !== -1) {
+      const nextNode = allNodes[nextIdx];
+      const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
+      const hasBurnMark = burnMarks.some(b => b.row === nextNode.row && b.col === nextNode.col);
+      
+      // If there's a piece at this position
+      if (targetPieceIdx !== -1) {
+        const targetPiece = pieces[targetPieceIdx];
+        
+        // Can attack enemy pieces (including assassins)
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+          highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
+        }
+        
+        // Stop - cannot pass through pieces
+        break;
+      }
+      
+      // If there's a burn mark, can pass through but cannot stop
+      if (hasBurnMark) {
+        currentPath.push({ row: nextNode.row, col: nextNode.col });
+        // Continue in the same direction
+        currentIdx = nextIdx;
+        nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
+        continue;
+      }
+      
+      // Empty space - can move here
+      highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
+      currentPath.push({ row: nextNode.row, col: nextNode.col });
+      
+      // Continue in the same direction
+      currentIdx = nextIdx;
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
+    }
+    
+    // Add this path to all paths
+    pathNodes.push(...currentPath);
+  }
+  
+  return { highlights, pathNodes };
+}
+
+// Helper function to find the next node in the same direction
+function findNextInDirection(
+  currentIdx: number,
+  direction: { from: number; to: number },
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): number {
+  const currentNode = allNodes[currentIdx];
+  const directionNode = allNodes[direction.to];
+  const fromNode = allNodes[direction.from];
+  
+  // Calculate direction vector
+  const dRow = directionNode.row - fromNode.row;
+  const dCol = directionNode.col - fromNode.col;
+  
+  // Expected next position
+  const nextRow = currentNode.row + dRow;
+  const nextCol = currentNode.col + dCol;
+  
+  // Find node at expected position among adjacent nodes
+  for (const adjIdx of adjacency[currentIdx]) {
+    const adjNode = allNodes[adjIdx];
+    if (adjNode.row === nextRow && adjNode.col === nextCol) {
+      return adjIdx;
+    }
+  }
+  
+  return -1; // No valid next node in this direction
 }
