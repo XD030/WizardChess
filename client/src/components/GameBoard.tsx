@@ -196,7 +196,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         onMouseLeave={() => setHoveredNode(null)}
       />
       <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        巫師：綠=移動、黃=與學徒換位、紅=導線攻擊
+        綠=移動、黃=換位、紅=攻擊
       </p>
     </div>
   );

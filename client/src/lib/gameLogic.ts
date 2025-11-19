@@ -38,8 +38,11 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   },
   apprentice: {
     name: '《學徒》',
-    move: ['沿節點連線移動 1 節點。'],
-    ability: ['可作為巫師導線的導體。'],
+    move: ['僅能朝敵方方向，沿節點連線移動 1 節點。'],
+    ability: [
+      '可與相鄰己方棋子交換位置。',
+      '為巫師導線的導體，可傳遞導線至其他學徒或吟遊詩人。',
+    ],
   },
   dragon: {
     name: '《龍》',
@@ -280,12 +283,34 @@ export function calculateApprenticeMoves(
   
   if (nodeIdx === -1) return highlights;
 
-  // 1-step moves to adjacent nodes
+  // 1-step moves to adjacent nodes (only towards enemy direction)
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
-    const targetPiece = getPieceAt(pieces, adjNode.row, adjNode.col);
-    if (targetPiece === -1) {
+    
+    // White pieces move towards smaller row numbers (up the board)
+    // Black pieces move towards larger row numbers (down the board)
+    const isValidDirection = piece.side === 'white' 
+      ? adjNode.row < piece.row 
+      : adjNode.row > piece.row;
+    
+    if (!isValidDirection) continue;
+    
+    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    if (targetPieceIdx === -1) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+    }
+  }
+
+  // Swap with adjacent friendly pieces
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    
+    if (targetPieceIdx !== -1) {
+      const targetPiece = pieces[targetPieceIdx];
+      if (targetPiece.side === piece.side) {
+        highlights.push({ type: 'swap', row: adjNode.row, col: adjNode.col });
+      }
     }
   }
 
