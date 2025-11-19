@@ -507,7 +507,7 @@ export function calculateRangerMoves(
 
 // Calculate assassin moves - parallelogram diagonal moves
 // Assassin can move along parallelogram diagonals formed by adjacent triangles
-// Key: Can move to opposite corner of parallelogram ONLY if target is opposite color (not a square)
+// Key: Exclude SQUARES (perpendicular vectors) but allow DIAMONDS (non-perpendicular)
 export function calculateAssassinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -520,7 +520,6 @@ export function calculateAssassinMoves(
   
   if (nodeIdx === -1) return highlights;
 
-  const currentIsBlack = isBlackTriangle(piece.row, piece.col);
   const adjacent = adjacency[nodeIdx];
   
   // Iterate through all pairs of adjacent nodes
@@ -533,6 +532,12 @@ export function calculateAssassinMoves(
       
       // Check if adj1 and adj2 are also adjacent to each other (forming a triangle)
       if (adjacency[adj1Idx].includes(adj2Idx)) {
+        // CRITICAL: Skip if the two adjacent nodes are in the same row
+        // This indicates perpendicular vectors forming a SQUARE, not a parallelogram
+        if (adj1.row === adj2.row) {
+          continue; // Square diagonal - not allowed
+        }
+        
         // These three nodes form a triangle
         // The fourth corner of the parallelogram:
         const targetRow = adj1.row + adj2.row - piece.row;
@@ -544,15 +549,6 @@ export function calculateAssassinMoves(
           // Check if target is adjacent to both adj1 and adj2 (completing the parallelogram)
           if (adjacency[adj1Idx].includes(targetIdx) && adjacency[adj2Idx].includes(targetIdx)) {
             const targetNode = allNodes[targetIdx];
-            
-            // CRITICAL: Only allow move if target is OPPOSITE color from current
-            // This excludes squares (same color diagonals) but allows parallelograms
-            const targetIsBlack = isBlackTriangle(targetNode.row, targetNode.col);
-            if (currentIsBlack === targetIsBlack) {
-              // Same color = square diagonal, not allowed
-              continue;
-            }
-            
             const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
             
             if (targetPieceIdx === -1) {
