@@ -263,9 +263,9 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           
           tempCtx.putImageData(imageData, 0, 0);
           
-          // Determine outline color and width
-          let outlineColor = '#fff'; // Default white outline for all wizard hats
-          let outlineWidth = 1.5;
+          // Determine outline color and width (only for highlights)
+          let outlineColor = null;
+          let outlineWidth = 0;
           
           if (idx === selectedPieceIndex) {
             outlineColor = '#fbbf24';
@@ -277,59 +277,61 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             outlineColor = '#ef4444';
             outlineWidth = 3;
           }
-          // All wizard hats use white outline by default
+          // No outline in normal state
           
-          // Create outline canvas
-          const outlineCanvas = document.createElement('canvas');
-          outlineCanvas.width = highResSize;
-          outlineCanvas.height = highResSize;
-          const outlineCtx = outlineCanvas.getContext('2d');
-          
-          if (outlineCtx) {
-            // Draw outline by expanding the alpha channel
-            const outlineData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-            const oData = outlineData.data;
-            const thickness = Math.ceil(outlineWidth * (highResSize / displaySize));
+          // Only draw outline if highlighted
+          if (outlineColor && outlineWidth > 0) {
+            const outlineCanvas = document.createElement('canvas');
+            outlineCanvas.width = highResSize;
+            outlineCanvas.height = highResSize;
+            const outlineCtx = outlineCanvas.getContext('2d');
             
-            // Create outline by dilating the alpha channel
-            for (let y = 0; y < highResSize; y++) {
-              for (let x = 0; x < highResSize; x++) {
-                const idx = (y * highResSize + x) * 4;
-                if (oData[idx + 3] > 0) continue; // Skip if already has alpha
-                
-                // Check surrounding pixels
-                let hasNeighbor = false;
-                for (let dy = -thickness; dy <= thickness; dy++) {
-                  for (let dx = -thickness; dx <= thickness; dx++) {
-                    if (dx * dx + dy * dy > thickness * thickness) continue;
-                    const ny = y + dy;
-                    const nx = x + dx;
-                    if (ny >= 0 && ny < highResSize && nx >= 0 && nx < highResSize) {
-                      const nIdx = (ny * highResSize + nx) * 4;
-                      if (data[nIdx + 3] > 0) {
-                        hasNeighbor = true;
-                        break;
+            if (outlineCtx) {
+              // Draw outline by expanding the alpha channel
+              const outlineData = tempCtx.getImageData(0, 0, highResSize, highResSize);
+              const oData = outlineData.data;
+              const thickness = Math.ceil(outlineWidth * (highResSize / displaySize));
+              
+              // Create outline by dilating the alpha channel
+              for (let y = 0; y < highResSize; y++) {
+                for (let x = 0; x < highResSize; x++) {
+                  const idx = (y * highResSize + x) * 4;
+                  if (oData[idx + 3] > 0) continue; // Skip if already has alpha
+                  
+                  // Check surrounding pixels
+                  let hasNeighbor = false;
+                  for (let dy = -thickness; dy <= thickness; dy++) {
+                    for (let dx = -thickness; dx <= thickness; dx++) {
+                      if (dx * dx + dy * dy > thickness * thickness) continue;
+                      const ny = y + dy;
+                      const nx = x + dx;
+                      if (ny >= 0 && ny < highResSize && nx >= 0 && nx < highResSize) {
+                        const nIdx = (ny * highResSize + nx) * 4;
+                        if (data[nIdx + 3] > 0) {
+                          hasNeighbor = true;
+                          break;
+                        }
                       }
                     }
+                    if (hasNeighbor) break;
                   }
-                  if (hasNeighbor) break;
-                }
-                
-                if (hasNeighbor) {
-                  // Set outline color
-                  const rgb = parseInt(outlineColor.slice(1), 16);
-                  oData[idx] = (rgb >> 16) & 255;
-                  oData[idx + 1] = (rgb >> 8) & 255;
-                  oData[idx + 2] = rgb & 255;
-                  oData[idx + 3] = 255;
+                  
+                  if (hasNeighbor) {
+                    // Set outline color
+                    const rgb = parseInt(outlineColor.slice(1), 16);
+                    oData[idx] = (rgb >> 16) & 255;
+                    oData[idx + 1] = (rgb >> 8) & 255;
+                    oData[idx + 2] = rgb & 255;
+                    oData[idx + 3] = 255;
+                  }
                 }
               }
+              
+              outlineCtx.putImageData(outlineData, 0, 0);
+              
+              // Draw outline first, then main image
+              ctx.drawImage(outlineCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
             }
-            
-            outlineCtx.putImageData(outlineData, 0, 0);
-            
-            // Draw outline first, then main image
-            ctx.drawImage(outlineCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
           }
           
           // Draw main image on top
