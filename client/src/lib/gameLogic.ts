@@ -267,3 +267,27 @@ export function calculateWizardMoves(
 
   return highlights;
 }
+
+export function calculateApprenticeMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): MoveHighlight[] {
+  const highlights: MoveHighlight[] = [];
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  
+  if (nodeIdx === -1) return highlights;
+
+  // 1-step moves to adjacent nodes
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const targetPiece = getPieceAt(pieces, adjNode.row, adjNode.col);
+    if (targetPiece === -1) {
+      highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+    }
+  }
+
+  return highlights;
+}

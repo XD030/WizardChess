@@ -7,6 +7,7 @@ import {
   getInitialPieces,
   getPieceAt,
   calculateWizardMoves,
+  calculateApprenticeMoves,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -42,10 +43,17 @@ export default function Game() {
         if (piece.side === currentPlayer) {
           setSelectedPieceIndex(clickedPieceIdx);
           
-          // Calculate moves for wizard only (others not fully implemented)
-          if (piece.type === 'wizard' && allNodes.length > 0) {
-            const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
-            setHighlights(moves);
+          // Calculate moves based on piece type
+          if (allNodes.length > 0) {
+            if (piece.type === 'wizard') {
+              const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+            } else if (piece.type === 'apprentice') {
+              const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+            } else {
+              setHighlights([]);
+            }
           } else {
             setHighlights([]);
           }
@@ -73,9 +81,17 @@ export default function Game() {
         if (piece.side === currentPlayer) {
           setSelectedPieceIndex(clickedPieceIdx);
           
-          if (piece.type === 'wizard' && allNodes.length > 0) {
-            const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
-            setHighlights(moves);
+          // Calculate moves based on piece type
+          if (allNodes.length > 0) {
+            if (piece.type === 'wizard') {
+              const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+            } else if (piece.type === 'apprentice') {
+              const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+            } else {
+              setHighlights([]);
+            }
           } else {
             setHighlights([]);
           }
