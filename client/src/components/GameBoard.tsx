@@ -201,16 +201,15 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
     
-    // Row labels (A-I) on the right side, close to nodes
+    // Row labels (A-I) on the right side, one per row 0-8
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-    const labelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16];
     
-    labelRows.forEach((rowIdx, labelIdx) => {
-      if (rowIdx < rows.length && labelIdx < rowLabels.length) {
+    rowLabels.forEach((label, rowIdx) => {
+      if (rowIdx < rows.length) {
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(rowLabels[labelIdx], rightNode.x + 15, rightNode.y);
+        ctx.fillText(label, rightNode.x + 15, rightNode.y);
       }
     });
     
