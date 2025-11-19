@@ -241,16 +241,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           const data = imageData.data;
           
           for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
+            const alpha = data[i + 3];
             
-            // Remove orange/yellow background (make it transparent)
-            // Orange is high R, medium-high G, low B
-            if ((r > 200 && g > 140 && b < 100) || // Orange background
-                (r > 240 && g > 240 && b > 240)) { // White background
-              data[i + 3] = 0;
-            } else {
+            // Only process non-transparent pixels
+            if (alpha > 0) {
               // Apply color based on piece side
               if (piece.side === 'white') {
                 // White moon - invert to white
