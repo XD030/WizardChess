@@ -157,19 +157,11 @@ export function getNodeCoordinate(row: number, col: number): string {
 // Black triangles: upward pointing (apex at top)
 // White triangles: downward pointing (apex at bottom)
 export function isBlackTriangle(row: number, col: number): boolean {
-  // Diamond board has rows 0-16 (2*N where N=8)
-  // The board expands from row 0 to row 8, then contracts from row 8 to row 16
-  // Triangle colors alternate based on position
-  
-  const centerRow = N; // Middle row of the board (row 8)
-  
-  if (row <= centerRow) {
-    // Expanding half (rows 0-8): even columns are black
-    return col % 2 === 0;
-  } else {
-    // Contracting half (rows 9-16): odd columns are black
-    return col % 2 === 1;
-  }
+  // Diamond board has a checkerboard pattern of black and white triangles
+  // Black triangles: (row + col) is even
+  // White triangles: (row + col) is odd
+  // This creates a consistent alternating pattern across the entire board
+  return (row + col) % 2 === 0;
 }
 
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
