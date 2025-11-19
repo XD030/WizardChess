@@ -132,8 +132,17 @@ export default function Game() {
       newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       
-      // If dragon moves, add burn marks to the path
+      // If dragon moves, add burn marks to the path (including starting point, excluding destination)
       if (selectedPiece.type === 'dragon' && dragonPathNodes.length > 0) {
+        // Add burn mark for the starting position
+        if (!updatedBurnMarks.some(b => b.row === selectedPiece.row && b.col === selectedPiece.col)) {
+          updatedBurnMarks.push({ 
+            row: selectedPiece.row, 
+            col: selectedPiece.col,
+            createdBy: currentPlayer 
+          });
+        }
+        
         // Add burn marks for all nodes in the path except the destination
         for (const pathNode of dragonPathNodes) {
           if (!(pathNode.row === row && pathNode.col === col)) {
