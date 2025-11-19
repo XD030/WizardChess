@@ -190,7 +190,16 @@ export default function Game() {
     } else if (highlight.type === 'attack') {
       const targetIdx = clickedPieceIdx;
       const targetPiece = pieces[targetIdx];
+      
+      // Remove the attacked piece first
       newPieces.splice(targetIdx, 1);
+      
+      // Adjust selectedPieceIndex if needed (if target was before selected piece)
+      const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+      
+      // Move the attacking piece to the target position
+      newPieces[adjustedIdx] = { ...selectedPiece, row, col };
+      
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
 
