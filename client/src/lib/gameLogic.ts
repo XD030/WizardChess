@@ -513,21 +513,13 @@ export function calculateAssassinMoves(
   adjacency: number[][],
   allNodes: NodePosition[]
 ): MoveHighlight[] {
-  console.log('calculateAssassinMoves called for piece at', piece.row, piece.col);
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   
-  console.log('nodeIdx:', nodeIdx);
-  if (nodeIdx === -1) {
-    console.log('Node not found in allNodes!');
-    return highlights;
-  }
-
-  console.log('adjacency[nodeIdx]:', adjacency[nodeIdx]);
+  if (nodeIdx === -1) return highlights;
 
   // Assassin moves diagonally (2 steps in one direction)
   // This forms parallelogram corners with adjacent black/white triangles
-  let moveCount = 0;
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     
@@ -539,29 +531,20 @@ export function calculateAssassinMoves(
     const landRow = piece.row + dRow * 2;
     const landCol = piece.col + dCol * 2;
     
-    console.log(`Checking adjacent ${adjNode.row},${adjNode.col}, looking for landing at ${landRow},${landCol}`);
-    
     // Find landing node among adjacent nodes of adjNode
     for (const nextIdx of adjacency[adjIdx]) {
       const nextNode = allNodes[nextIdx];
       if (nextNode.row === landRow && nextNode.col === landCol) {
-        console.log('Found valid landing at', nextNode.row, nextNode.col);
         // Found valid diagonal move target
         const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
         
         if (targetPieceIdx === -1) {
-          console.log('Landing is empty, adding move');
           highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
-          moveCount++;
         } else {
           // Can attack enemy
           const targetPiece = pieces[targetPieceIdx];
           if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-            console.log('Landing has enemy, adding attack');
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
-            moveCount++;
-          } else {
-            console.log('Landing has friendly piece, skipping');
           }
         }
         break;
@@ -569,7 +552,6 @@ export function calculateAssassinMoves(
     }
   }
 
-  console.log('calculateAssassinMoves returning', moveCount, 'moves');
   return highlights;
 }
 

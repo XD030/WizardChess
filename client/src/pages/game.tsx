@@ -40,36 +40,20 @@ export default function Game() {
   }, []);
 
   const handleNodeClick = (row: number, col: number) => {
-    console.log('Node clicked:', row, col);
-    console.log('selectedPieceIndex:', selectedPieceIndex);
-    console.log('currentPlayer:', currentPlayer);
-
     const clickedPieceIdx = getPieceAt(pieces, row, col);
-    console.log('clickedPieceIdx:', clickedPieceIdx);
 
     // If no piece selected, try to select a piece
     if (selectedPieceIndex === -1) {
-      console.log('No piece selected, trying to select');
       if (clickedPieceIdx !== -1) {
         const piece = pieces[clickedPieceIdx];
-        console.log('Found piece at click:', piece.type, piece.side);
         if (piece.side === currentPlayer) {
-          console.log('Piece belongs to current player, selecting it');
-          console.log('Calling setSelectedPieceIndex with:', clickedPieceIdx);
           setSelectedPieceIndex(clickedPieceIdx);
-          console.log('setSelectedPieceIndex called');
           
           // Calculate moves based on piece type
-          console.log('Calculating moves for', piece.type, 'at', piece.row, piece.col);
-          console.log('allNodes.length:', allNodes.length);
-          console.log('adjacency.length:', adjacency.length);
           if (allNodes.length > 0) {
             if (piece.type === 'wizard') {
               const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
-              console.log('Wizard moves calculated:', JSON.stringify(moves));
-              console.log('Setting highlights to', moves.length, 'moves');
               setHighlights(moves);
-              console.log('setHighlights called');
               setDragonPathNodes([]);
             } else if (piece.type === 'apprentice') {
               const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
@@ -85,8 +69,6 @@ export default function Game() {
               setDragonPathNodes([]);
             } else if (piece.type === 'assassin') {
               const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
-              console.log('Assassin moves calculated:', JSON.stringify(moves));
-              console.log('Setting highlights to', moves.length, 'moves');
               setHighlights(moves);
               setDragonPathNodes([]);
             } else {
@@ -114,10 +96,7 @@ export default function Game() {
     }
 
     // Check if this is a valid move
-    console.log('Checking for highlight at', row, col);
-    console.log('Available highlights:', JSON.stringify(highlights, null, 2));
     const highlight = highlights.find((h) => h.row === row && h.col === col);
-    console.log('Found highlight:', highlight);
     if (!highlight) {
       // Try selecting a different piece
       if (clickedPieceIdx !== -1) {
@@ -145,8 +124,6 @@ export default function Game() {
               setDragonPathNodes([]);
             } else if (piece.type === 'assassin') {
               const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
-              console.log('Assassin moves calculated:', JSON.stringify(moves));
-              console.log('Setting highlights to', moves.length, 'moves');
               setHighlights(moves);
               setDragonPathNodes([]);
             } else {
@@ -283,11 +260,6 @@ export default function Game() {
   };
 
   const selectedPiece = selectedPieceIndex !== -1 ? pieces[selectedPieceIndex] : null;
-
-  // Log state changes
-  useEffect(() => {
-    console.log('State updated - selectedPieceIndex:', selectedPieceIndex, 'highlights:', highlights.length);
-  }, [selectedPieceIndex, highlights]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8">

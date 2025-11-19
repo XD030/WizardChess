@@ -554,23 +554,15 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     const x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
     const y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
 
-    console.log('Canvas clicked at logical coords:', x, y);
-
     // Find clicked node
-    let foundNode = false;
     for (const node of allNodes) {
       const dx = x - node.x;
       const dy = y - node.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < 20) {
-        console.log('Found node at distance:', dist, 'node:', node.row, node.col);
         onNodeClick(node.row, node.col);
-        foundNode = true;
         return;
       }
-    }
-    if (!foundNode) {
-      console.log('No node found within 20 pixels of click');
     }
   };
 
