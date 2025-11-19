@@ -201,7 +201,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
     
-    // Row labels (A-I) on the right side, one per row 0-8
+    // Row labels (A-I) on the right side, rows 0-8
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     
     rowLabels.forEach((label, rowIdx) => {
@@ -213,15 +213,16 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
     });
     
-    // Column labels (1-9) at the bottom (below row 8 - the widest row)
-    const widestRow = rows[8]; // Row with 9 nodes
+    // Column labels (1-9) on the left side, rows 8-16
     const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
     
-    widestRow.forEach((node, idx) => {
-      if (idx < colLabels.length) {
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(colLabels[idx], node.x, node.y + 20);
+    colLabels.forEach((label, idx) => {
+      const rowIdx = 8 + idx;
+      if (rowIdx < rows.length) {
+        const leftNode = rows[rowIdx][0];
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, leftNode.x - 15, leftNode.y);
       }
     });
 
