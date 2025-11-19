@@ -336,6 +336,12 @@ export function calculateApprenticeMoves(
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
     if (targetPieceIdx === -1) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+    } else {
+      // Can attack enemy pieces in forward direction
+      const targetPiece = pieces[targetPieceIdx];
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+      }
     }
   }
 
