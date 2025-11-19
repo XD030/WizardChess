@@ -392,7 +392,15 @@ export function calculateRangerMoves(
       const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
 
       // If there's a piece at adjacent position, try to jump over it
+      // Exception: Cannot jump over unactivated bards
       if (pieceAtAdj !== -1) {
+        const adjacentPiece = pieces[pieceAtAdj];
+        
+        // Skip if it's an unactivated bard
+        if (adjacentPiece.type === 'bard' && !adjacentPiece.activated) {
+          continue;
+        }
+        
         // Find the node in the same direction after jumping
         const jumpTarget = findJumpTarget(current.nodeIdx, adjIdx, adjacency, allNodes);
         
