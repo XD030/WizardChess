@@ -61,8 +61,56 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // Draw connections
+    // Draw triangular cells
     const adjacency = buildAdjacency(rows);
+    
+    // Draw upward triangles (black) and downward triangles (white)
+    for (let r = 0; r < rows.length - 1; r++) {
+      const rowA = rows[r];
+      const rowB = rows[r + 1];
+      
+      if (rowB.length === rowA.length + 1) {
+        // Expanding rows
+        for (let c = 0; c < rowA.length; c++) {
+          const p1 = rowA[c];
+          const p2 = { x: rowB[c].x, y: rowB[c].y };
+          const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
+          
+          // Upward triangle (black)
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      } else if (rowA.length === rowB.length + 1) {
+        // Contracting rows
+        for (let c = 0; c < rowB.length; c++) {
+          const p1 = rowB[c];
+          const p2 = { x: rowA[c].x, y: rowA[c].y };
+          const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
+          
+          // Downward triangle (white)
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p3.x, p3.y);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw connections
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
@@ -134,8 +182,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         ctx.lineWidth = 2;
         ctx.stroke();
       } else if (swapHighlight) {
-        // Swap target ring (yellow)
-        ctx.strokeStyle = '#fbbf24';
+        // Swap target ring (blue)
+        ctx.strokeStyle = '#3b82f6';
         ctx.lineWidth = 3;
         ctx.stroke();
       } else if (attackHighlight) {
@@ -206,7 +254,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         onMouseLeave={() => setHoveredNode(null)}
       />
       <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        綠=移動、黃=換位、紅=攻擊
+        綠=移動、藍=換位、紅=攻擊
       </p>
     </div>
   );
