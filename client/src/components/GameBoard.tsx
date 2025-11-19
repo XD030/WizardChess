@@ -265,8 +265,12 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
                   data[i] = Math.min(255, data[i] * 0.6 + 168);
                   data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
                   data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
+                } else {
+                  // Black moon - force pure black
+                  data[i] = 0;
+                  data[i + 1] = 0;
+                  data[i + 2] = 0;
                 }
-                // Black moon - keep as is
               }
             }
           }
