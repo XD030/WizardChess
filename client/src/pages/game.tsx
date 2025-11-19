@@ -156,10 +156,12 @@ export default function Game() {
         // White triangle -> Black triangle: Enter stealth
         if (!fromIsBlack && toIsBlack) {
           updatedPiece.stealthed = true;
+          console.log(`刺客进入潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
         }
         // Black triangle -> White triangle: Reveal
         else if (fromIsBlack && !toIsBlack) {
           updatedPiece.stealthed = false;
+          console.log(`刺客解除潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
         }
       }
       
@@ -230,10 +232,12 @@ export default function Game() {
         // White triangle -> Black triangle: Enter stealth
         if (!fromIsBlack && toIsBlack) {
           updatedPiece.stealthed = true;
+          console.log(`刺客攻击后进入潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
         }
         // Black triangle -> White triangle: Reveal
         else if (fromIsBlack && !toIsBlack) {
           updatedPiece.stealthed = false;
+          console.log(`刺客攻击后解除潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
         }
       }
       

@@ -22,6 +22,7 @@ function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean
   
   // Enemy stealthed assassins are not visible
   if (piece.type === 'assassin' && piece.stealthed) {
+    console.log(`刺客隐身检测: side=${piece.side}, currentPlayer=${currentPlayer}, stealthed=${piece.stealthed}, row=${piece.row}, col=${piece.col}`);
     return false;
   }
   

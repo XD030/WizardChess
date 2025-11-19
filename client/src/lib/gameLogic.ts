@@ -243,17 +243,35 @@ export function getInitialPieces(): Piece[] {
 
   // White pieces
   for (const p of whiteBasePieces) {
-    pieces.push({ ...p, side: 'white' });
+    const piece: Piece = { ...p, side: 'white' };
+    // Initialize stealthed to false for assassins
+    if (p.type === 'assassin') {
+      piece.stealthed = false;
+    }
+    // Initialize activated to false for bards
+    if (p.type === 'bard') {
+      piece.activated = false;
+    }
+    pieces.push(piece);
   }
 
   // Black pieces (mirrored)
   for (const p of whiteBasePieces) {
-    pieces.push({
+    const piece: Piece = {
       type: p.type,
       side: 'black',
       row: 2 * N - p.row,
       col: p.col,
-    });
+    };
+    // Initialize stealthed to false for assassins
+    if (p.type === 'assassin') {
+      piece.stealthed = false;
+    }
+    // Initialize activated to false for bards
+    if (p.type === 'bard') {
+      piece.activated = false;
+    }
+    pieces.push(piece);
   }
 
   // Bard (neutral, center)
@@ -262,6 +280,7 @@ export function getInitialPieces(): Piece[] {
     side: 'neutral',
     row: 8,
     col: 4,
+    activated: false,
   });
 
   return pieces;
