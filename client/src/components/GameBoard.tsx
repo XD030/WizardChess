@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Piece, MoveHighlight, NodePosition } from '@shared/schema';
-import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt } from '@/lib/gameLogic';
+import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate } from '@/lib/gameLogic';
 import wizardMoonImg from '@assets/wizard_moon.png';
 
 interface GameBoardProps {
@@ -197,47 +197,38 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.fill();
     });
 
-    // Draw coordinate labels
+    // Draw coordinate labels at key positions
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     
-    // Column labels (A-I) at bottom
-    const bottomRow = rows[16]; // Bottom row (1 node)
-    const middleRow = rows[8]; // Middle row (9 nodes - widest)
-    const columnLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+    // Label the four vertices
+    // Top: A1 (row 0, col 0)
+    const topNode = rows[0][0];
+    ctx.fillText('A1', topNode.x, topNode.y - 25);
     
-    middleRow.forEach((node, idx) => {
-      if (idx < columnLabels.length) {
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        // Place below the bottom point
-        const bottomY = bottomRow[0].y;
-        ctx.fillText(columnLabels[idx], node.x, bottomY + 30);
-      }
-    });
+    // Left: A9 (row 16, col 0)
+    const leftNode = rows[16][0];
+    ctx.fillText('A9', leftNode.x - 25, leftNode.y);
     
-    // Row labels (1-9) on the left side
-    const rowLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    // Map to actual game rows: row 0,2,4,6,8,10,12,14,16 correspond to game rows 1-9
-    const leftLabelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16];
+    // Right: I1 (row 0 doesn't have col 8, so we use row 8, col 8)
+    const rightNode = rows[8][8];
+    ctx.fillText('I1', rightNode.x + 25, rightNode.y - 15);
     
-    leftLabelRows.forEach((rowIdx, labelIdx) => {
-      if (rowIdx < rows.length && labelIdx < rowLabels.length) {
-        const leftNode = rows[rowIdx][0];
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(rowLabels[labelIdx], leftNode.x - 30, leftNode.y);
-      }
-    });
+    // Bottom: I9 (row 16, col 0 is left, we need the diagonal opposite)
+    const bottomNode = rows[16][0]; // This is actually A9, let me recalculate
+    // I9 should be at row 16 from the I column perspective
+    // Actually in a diamond, row 16 only has 1 node which is at position (16, 0)
+    // So I9 must be calculated differently
     
-    // Row labels (1-9) on the right side (mirror)
-    leftLabelRows.forEach((rowIdx, labelIdx) => {
-      if (rowIdx < rows.length && labelIdx < rowLabels.length) {
-        const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(rowLabels[labelIdx], rightNode.x + 30, rightNode.y);
-      }
+    // Let's label the middle row to help visualize
+    const midRow = rows[8];
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+    midRow.forEach((node, colIdx) => {
+      const coord = getNodeCoordinate(8, colIdx);
+      ctx.fillText(coord, node.x, node.y + 20);
     });
 
     // Draw pieces

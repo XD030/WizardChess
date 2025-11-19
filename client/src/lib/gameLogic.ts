@@ -116,6 +116,30 @@ export function buildAllNodes(rows: { x: number; y: number }[][]): NodePosition[
   return allNodes;
 }
 
+// Get coordinate label for a node (e.g., "A1", "E5", "I9")
+// Top vertex (0,0) = A1
+// Left vertex (16,0) = A9  
+// Right vertex (0+offset) = I1
+// Bottom vertex (16, last) = I9
+export function getNodeCoordinate(row: number, col: number): string {
+  // Game row: 1-9 (from top to bottom, counting every 2 rows)
+  const gameRow = Math.floor(row / 2) + 1;
+  
+  // Game col: A-I (diagonal coordinate)
+  // The col index shifts based on which half of the diamond we're in
+  let gameCol: number;
+  if (row <= 8) {
+    // Upper half: expanding
+    gameCol = col;
+  } else {
+    // Lower half: contracting  
+    gameCol = col + (row - 8);
+  }
+  
+  const colLetter = String.fromCharCode(65 + gameCol); // A-I
+  return `${colLetter}${gameRow}`;
+}
+
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
   const rcToIndex: Record<string, number> = {};
   let idx = 0;
