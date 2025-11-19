@@ -46,14 +46,22 @@ function AssassinIcon({ side }: { side: 'white' | 'black' }) {
             data[i + 1] = 255;
             data[i + 2] = 255;
           } else {
-            data[i] = 0;
-            data[i + 1] = 0;
-            data[i + 2] = 0;
+            // Dark gray instead of pure black so it's visible on dark background
+            data[i] = 180;
+            data[i + 1] = 180;
+            data[i + 2] = 180;
           }
         }
       }
 
       ctx.putImageData(imageData, 0, 0);
+      
+      // Add white outline for black pieces
+      if (side === 'black') {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, size, size);
+      }
     };
   }, [side]);
 
