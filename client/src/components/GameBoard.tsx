@@ -214,20 +214,55 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const useImage = piece.type === 'wizard' && wizardHatImage;
       
       if (useImage) {
-        // Draw wizard hat image
+        // Draw wizard hat image with transparency
         const imgSize = 32;
         ctx.save();
         
+        // Set blend mode to multiply to remove white background
+        ctx.globalCompositeOperation = 'multiply';
+        
         // Apply color filter for different sides
         if (piece.side === 'white') {
-          ctx.filter = 'invert(1) brightness(1.2)';
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.filter = 'invert(1) brightness(1.2) contrast(1.5)';
         } else if (piece.side === 'black') {
-          ctx.filter = 'brightness(0.3)';
+          ctx.filter = 'brightness(0.3) contrast(1.5)';
         } else {
-          ctx.filter = 'invert(1) sepia(1) saturate(3) hue-rotate(240deg)';
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.filter = 'invert(1) sepia(1) saturate(3) hue-rotate(240deg) contrast(1.5)';
         }
         
-        ctx.drawImage(wizardHatImage, node.x - imgSize / 2, node.y - imgSize / 2, imgSize, imgSize);
+        // Create temporary canvas to process image
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = imgSize;
+        tempCanvas.height = imgSize;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        if (tempCtx) {
+          // Draw image on temp canvas
+          tempCtx.drawImage(wizardHatImage, 0, 0, imgSize, imgSize);
+          
+          // Get image data and make white pixels transparent
+          const imageData = tempCtx.getImageData(0, 0, imgSize, imgSize);
+          const data = imageData.data;
+          
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            
+            // If pixel is white or very light, make it transparent
+            if (r > 240 && g > 240 && b > 240) {
+              data[i + 3] = 0; // Set alpha to 0
+            }
+          }
+          
+          tempCtx.putImageData(imageData, 0, 0);
+          
+          // Draw the processed image
+          ctx.drawImage(tempCanvas, node.x - imgSize / 2, node.y - imgSize / 2);
+        }
+        
         ctx.restore();
         
         // Draw highlight outline if needed
