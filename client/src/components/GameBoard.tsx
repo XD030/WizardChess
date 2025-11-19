@@ -214,22 +214,30 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const useImage = piece.type === 'wizard' && wizardHatImage;
       
       if (useImage) {
-        // Draw wizard hat image with transparency and outline
-        const imgSize = 32;
+        // Draw wizard hat image with high quality
+        const displaySize = 36;
+        const highResSize = 128; // Use higher resolution for better quality
         ctx.save();
         
-        // Create temporary canvas to process image
+        // Enable image smoothing for better quality
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Create high-res temporary canvas
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = imgSize;
-        tempCanvas.height = imgSize;
-        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = highResSize;
+        tempCanvas.height = highResSize;
+        const tempCtx = tempCanvas.getContext('2d', { alpha: true });
         
         if (tempCtx) {
-          // Draw image on temp canvas
-          tempCtx.drawImage(wizardHatImage, 0, 0, imgSize, imgSize);
+          tempCtx.imageSmoothingEnabled = true;
+          tempCtx.imageSmoothingQuality = 'high';
           
-          // Get image data and make white pixels transparent
-          const imageData = tempCtx.getImageData(0, 0, imgSize, imgSize);
+          // Draw image at high resolution
+          tempCtx.drawImage(wizardHatImage, 0, 0, highResSize, highResSize);
+          
+          // Get image data and process
+          const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
           const data = imageData.data;
           
           for (let i = 0; i < data.length; i += 4) {
@@ -239,7 +247,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             
             // If pixel is white or very light, make it transparent
             if (r > 240 && g > 240 && b > 240) {
-              data[i + 3] = 0; // Set alpha to 0
+              data[i + 3] = 0;
             } else {
               // Apply color based on piece side
               if (piece.side === 'white') {
@@ -260,49 +268,83 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           tempCtx.putImageData(imageData, 0, 0);
           
           // Determine outline color and width
-          let outlineColor = '#fff'; // Default white for black pieces
-          let outlineWidth = 1.2;
+          let outlineColor = '#fff';
+          let outlineWidth = 1.5;
           
           if (idx === selectedPieceIndex) {
             outlineColor = '#fbbf24';
-            outlineWidth = 2.5;
+            outlineWidth = 3;
           } else if (swapHighlight) {
             outlineColor = '#3b82f6';
-            outlineWidth = 2.5;
+            outlineWidth = 3;
           } else if (attackHighlight) {
             outlineColor = '#ef4444';
-            outlineWidth = 2.5;
+            outlineWidth = 3;
           } else {
-            // Normal outline based on piece color
             if (piece.side === 'white') {
-              outlineColor = '#000'; // Black outline for white pieces
+              outlineColor = '#000';
             } else if (piece.side === 'black') {
-              outlineColor = '#fff'; // White outline for black pieces
+              outlineColor = '#fff';
             } else {
-              outlineColor = '#000'; // Black outline for neutral pieces
+              outlineColor = '#000';
             }
           }
           
-          // Draw outline by drawing the image multiple times with offset
-          const offsets = [
-            [-outlineWidth, -outlineWidth], [0, -outlineWidth], [outlineWidth, -outlineWidth],
-            [-outlineWidth, 0], [outlineWidth, 0],
-            [-outlineWidth, outlineWidth], [0, outlineWidth], [outlineWidth, outlineWidth]
-          ];
+          // Create outline canvas
+          const outlineCanvas = document.createElement('canvas');
+          outlineCanvas.width = highResSize;
+          outlineCanvas.height = highResSize;
+          const outlineCtx = outlineCanvas.getContext('2d');
           
-          ctx.globalCompositeOperation = 'source-over';
+          if (outlineCtx) {
+            // Draw outline by expanding the alpha channel
+            const outlineData = tempCtx.getImageData(0, 0, highResSize, highResSize);
+            const oData = outlineData.data;
+            const thickness = Math.ceil(outlineWidth * (highResSize / displaySize));
+            
+            // Create outline by dilating the alpha channel
+            for (let y = 0; y < highResSize; y++) {
+              for (let x = 0; x < highResSize; x++) {
+                const idx = (y * highResSize + x) * 4;
+                if (oData[idx + 3] > 0) continue; // Skip if already has alpha
+                
+                // Check surrounding pixels
+                let hasNeighbor = false;
+                for (let dy = -thickness; dy <= thickness; dy++) {
+                  for (let dx = -thickness; dx <= thickness; dx++) {
+                    if (dx * dx + dy * dy > thickness * thickness) continue;
+                    const ny = y + dy;
+                    const nx = x + dx;
+                    if (ny >= 0 && ny < highResSize && nx >= 0 && nx < highResSize) {
+                      const nIdx = (ny * highResSize + nx) * 4;
+                      if (data[nIdx + 3] > 0) {
+                        hasNeighbor = true;
+                        break;
+                      }
+                    }
+                  }
+                  if (hasNeighbor) break;
+                }
+                
+                if (hasNeighbor) {
+                  // Set outline color
+                  const rgb = parseInt(outlineColor.slice(1), 16);
+                  oData[idx] = (rgb >> 16) & 255;
+                  oData[idx + 1] = (rgb >> 8) & 255;
+                  oData[idx + 2] = rgb & 255;
+                  oData[idx + 3] = 255;
+                }
+              }
+            }
+            
+            outlineCtx.putImageData(outlineData, 0, 0);
+            
+            // Draw outline first, then main image
+            ctx.drawImage(outlineCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+          }
           
-          // Draw outline
-          offsets.forEach(([dx, dy]) => {
-            ctx.save();
-            ctx.globalAlpha = 0.8;
-            ctx.filter = `drop-shadow(${dx}px ${dy}px 0px ${outlineColor})`;
-            ctx.drawImage(tempCanvas, node.x - imgSize / 2, node.y - imgSize / 2);
-            ctx.restore();
-          });
-          
-          // Draw the main image on top
-          ctx.drawImage(tempCanvas, node.x - imgSize / 2, node.y - imgSize / 2);
+          // Draw main image on top
+          ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
         }
         
         ctx.restore();
