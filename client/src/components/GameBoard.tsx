@@ -408,9 +408,15 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           const data = imageData.data;
           
           for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
             const alpha = data[i + 3];
             
             if (alpha > 0) {
+              // Only process dark pixels (the actual logo)
+              const brightness = (r + g + b) / 3;
+              
               // Apply color based on piece side
               if (piece.side === 'white') {
                 // White assassin - make it white
@@ -418,7 +424,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
                 data[i + 1] = 255;
                 data[i + 2] = 255;
               } else {
-                // Black assassin - keep it black (or darker)
+                // Black assassin - keep it black
                 data[i] = 0;
                 data[i + 1] = 0;
                 data[i + 2] = 0;

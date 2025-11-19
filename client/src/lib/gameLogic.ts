@@ -61,8 +61,8 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   },
   ranger: {
     name: '《遊俠》',
-    move: ['跳棋式移動或 1 節點移動（之後補完）。'],
-    ability: ['落點若有敵人則擊殺。'],
+    move: ['L型跳躍移動：沿直線2格後轉90度1格，可跨越棋子。'],
+    ability: ['落點若有敵人則擊殺。', '落點若為己方棋子則無法移動至該位置。'],
   },
   paladin: {
     name: '《聖騎士》',
