@@ -209,7 +209,9 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 15, rightNode.y);
+        // For row 8 (I), offset upward to avoid overlap with 1
+        const yOffset = rowIdx === 8 ? -10 : 0;
+        ctx.fillText(label, rightNode.x + 15, rightNode.y + yOffset);
       }
     });
     
@@ -222,7 +224,9 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 15, rightNode.y);
+        // For row 8 (1), offset downward to avoid overlap with I
+        const yOffset = idx === 0 ? 10 : 0;
+        ctx.fillText(label, rightNode.x + 15, rightNode.y + yOffset);
       }
     });
 
