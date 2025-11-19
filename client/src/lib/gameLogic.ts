@@ -456,12 +456,16 @@ export function calculateRangerMoves(
     }
   });
 
-  // If no jumps available, allow simple 1-step move to adjacent empty nodes
-  if (jumpDestinations.size === 0) {
-    for (const adjIdx of adjacency[nodeIdx]) {
-      const adjNode = allNodes[adjIdx];
-      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
-      
+  // Ranger can also move 1 step to adjacent nodes (in addition to jumping)
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    
+    // Check if this position is already in jump destinations
+    const posKey = `${adjNode.row},${adjNode.col}`;
+    const alreadyInJumps = jumpDestinations.has(posKey);
+    
+    if (!alreadyInJumps) {
       if (targetPieceIdx === -1) {
         highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
       } else {
