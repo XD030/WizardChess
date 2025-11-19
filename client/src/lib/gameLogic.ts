@@ -518,7 +518,7 @@ export function calculateRangerMoves(
 
 // Calculate assassin moves - parallelogram diagonal moves
 // Assassin can move along parallelogram diagonals formed by adjacent triangles
-// Key: Exclude SQUARES (perpendicular vectors) but allow DIAMONDS (non-perpendicular)
+// Key: Exclude SQUARES (same-color opposite corners) but allow DIAMONDS (different-color opposite corners)
 export function calculateAssassinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -532,6 +532,7 @@ export function calculateAssassinMoves(
   if (nodeIdx === -1) return highlights;
 
   const adjacent = adjacency[nodeIdx];
+  const currentIsBlack = isBlackTriangle(piece.row, piece.col);
   
   // Iterate through all pairs of adjacent nodes
   for (let i = 0; i < adjacent.length; i++) {
@@ -543,12 +544,6 @@ export function calculateAssassinMoves(
       
       // Check if adj1 and adj2 are also adjacent to each other (forming a triangle)
       if (adjacency[adj1Idx].includes(adj2Idx)) {
-        // CRITICAL: Skip if the two adjacent nodes are in the same row
-        // This indicates perpendicular vectors forming a SQUARE, not a parallelogram
-        if (adj1.row === adj2.row) {
-          continue; // Square diagonal - not allowed
-        }
-        
         // These three nodes form a triangle
         // The fourth corner of the parallelogram:
         const targetRow = adj1.row + adj2.row - piece.row;
@@ -560,6 +555,15 @@ export function calculateAssassinMoves(
           // Check if target is adjacent to both adj1 and adj2 (completing the parallelogram)
           if (adjacency[adj1Idx].includes(targetIdx) && adjacency[adj2Idx].includes(targetIdx)) {
             const targetNode = allNodes[targetIdx];
+            
+            // CRITICAL: Check if opposite corners have DIFFERENT colors
+            // Same color = SQUARE (not allowed), Different color = DIAMOND/PARALLELOGRAM (allowed)
+            const targetIsBlack = isBlackTriangle(targetNode.row, targetNode.col);
+            if (currentIsBlack === targetIsBlack) {
+              // Same color diagonal = square, skip this move
+              continue;
+            }
+            
             const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
             
             if (targetPieceIdx === -1) {
