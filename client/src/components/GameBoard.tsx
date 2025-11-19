@@ -197,38 +197,34 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.fill();
     });
 
-    // Draw coordinate labels at key positions
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    // Draw coordinate labels
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
     
-    // Label the four vertices
-    // Top: A1 (row 0, col 0)
-    const topNode = rows[0][0];
-    ctx.fillText('A1', topNode.x, topNode.y - 25);
+    // Row labels (A-I) on the right side
+    const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+    const labelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16];
     
-    // Left: A9 (row 16, col 0)
-    const leftNode = rows[16][0];
-    ctx.fillText('A9', leftNode.x - 25, leftNode.y);
+    labelRows.forEach((rowIdx, labelIdx) => {
+      if (rowIdx < rows.length && labelIdx < rowLabels.length) {
+        const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(rowLabels[labelIdx], rightNode.x + 25, rightNode.y);
+      }
+    });
     
-    // Right: I1 (row 0 doesn't have col 8, so we use row 8, col 8)
-    const rightNode = rows[8][8];
-    ctx.fillText('I1', rightNode.x + 25, rightNode.y - 15);
+    // Column labels (1-9) at the bottom
+    const widestRow = rows[8]; // Row with 9 nodes
+    const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const bottomY = rows[16][0].y; // Bottom vertex y position
     
-    // Bottom: I9 (row 16, col 0 is left, we need the diagonal opposite)
-    const bottomNode = rows[16][0]; // This is actually A9, let me recalculate
-    // I9 should be at row 16 from the I column perspective
-    // Actually in a diamond, row 16 only has 1 node which is at position (16, 0)
-    // So I9 must be calculated differently
-    
-    // Let's label the middle row to help visualize
-    const midRow = rows[8];
-    ctx.font = 'bold 12px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
-    midRow.forEach((node, colIdx) => {
-      const coord = getNodeCoordinate(8, colIdx);
-      ctx.fillText(coord, node.x, node.y + 20);
+    widestRow.forEach((node, idx) => {
+      if (idx < colLabels.length) {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(colLabels[idx], node.x, bottomY + 25);
+      }
     });
 
     // Draw pieces

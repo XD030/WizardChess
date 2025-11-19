@@ -116,28 +116,25 @@ export function buildAllNodes(rows: { x: number; y: number }[][]): NodePosition[
   return allNodes;
 }
 
-// Get coordinate label for a node (e.g., "A1", "E5", "I9")
-// Top vertex (0,0) = A1
-// Left vertex (16,0) = A9  
-// Right vertex (0+offset) = I1
-// Bottom vertex (16, last) = I9
+// Get coordinate label for a node
+// Row letters (A-I): correspond to rows 0,2,4,6,8,10,12,14,16 (top to bottom)
+// Column numbers (1-9): correspond to positions in the widest row
 export function getNodeCoordinate(row: number, col: number): string {
-  // Game row: 1-9 (from top to bottom, counting every 2 rows)
-  const gameRow = Math.floor(row / 2) + 1;
+  // Row letter A-I (every 2 rows from 0 to 16)
+  const rowLetter = String.fromCharCode(65 + Math.floor(row / 2)); // A-I
   
-  // Game col: A-I (diagonal coordinate)
-  // The col index shifts based on which half of the diamond we're in
-  let gameCol: number;
+  // Column number 1-9 (based on position relative to widest row)
+  // Calculate the column offset based on diamond shape
+  let colNum: number;
   if (row <= 8) {
-    // Upper half: expanding
-    gameCol = col;
+    // Upper half: offset increases as we go down
+    colNum = col + 1;
   } else {
-    // Lower half: contracting  
-    gameCol = col + (row - 8);
+    // Lower half: offset based on how much it's contracting
+    colNum = col + (row - 8) + 1;
   }
   
-  const colLetter = String.fromCharCode(65 + gameCol); // A-I
-  return `${colLetter}${gameRow}`;
+  return `${rowLetter}${colNum}`;
 }
 
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
