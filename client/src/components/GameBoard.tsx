@@ -213,12 +213,11 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
     });
     
-    // Column labels (1-9) on the left side, rows 8-16
+    // Column labels (1-9) on the left side, rows 0-8
     const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
     
-    colLabels.forEach((label, idx) => {
-      const rowIdx = 8 + idx;
-      if (rowIdx < rows.length) {
+    colLabels.forEach((label, rowIdx) => {
+      if (rowIdx < rows.length && rowIdx <= 8) {
         const leftNode = rows[rowIdx][0];
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
