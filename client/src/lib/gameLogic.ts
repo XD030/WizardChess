@@ -61,8 +61,8 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   },
   ranger: {
     name: '《遊俠》',
-    move: ['L型跳躍移動：沿直線2格後轉90度1格，可跨越棋子。'],
-    ability: ['落點若有敵人則擊殺。', '落點若為己方棋子則無法移動至該位置。'],
+    move: ['像跳棋一樣移動，可以連跳最多兩次，跳過的棋子不受影響。', '若無棋子可跳則改為沿節點連線移動 1 節點。'],
+    ability: ['落點若有敵人則擊殺。', '無法跳過或穿越聖光。'],
   },
   paladin: {
     name: '《聖騎士》',
@@ -353,6 +353,143 @@ export function calculateApprenticeMoves(
   }
 
   return highlights;
+}
+
+// Calculate ranger moves - checker-style jumps up to 2 times
+export function calculateRangerMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): MoveHighlight[] {
+  const highlights: MoveHighlight[] = [];
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  
+  if (nodeIdx === -1) return highlights;
+
+  // Track visited positions to avoid infinite loops
+  const visitedPositions = new Set<string>();
+  visitedPositions.add(`${piece.row},${piece.col}`);
+
+  // BFS to find all possible jump destinations (max 2 jumps)
+  interface JumpState {
+    nodeIdx: number;
+    jumpsCount: number;
+    path: number[]; // Path of node indices
+  }
+
+  const queue: JumpState[] = [{ nodeIdx, jumpsCount: 0, path: [nodeIdx] }];
+  const jumpDestinations = new Map<string, JumpState>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentNode = allNodes[current.nodeIdx];
+
+    // Try to jump in each direction
+    for (const adjIdx of adjacency[current.nodeIdx]) {
+      const adjNode = allNodes[adjIdx];
+      const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
+
+      // If there's a piece at adjacent position, try to jump over it
+      if (pieceAtAdj !== -1) {
+        // Find the node in the same direction after jumping
+        const jumpTarget = findJumpTarget(current.nodeIdx, adjIdx, adjacency, allNodes);
+        
+        if (jumpTarget !== -1) {
+          const jumpNode = allNodes[jumpTarget];
+          const posKey = `${jumpNode.row},${jumpNode.col}`;
+          
+          // Check if jump destination is valid
+          const pieceAtJump = getPieceAt(pieces, jumpNode.row, jumpNode.col);
+          
+          // Can only land on empty space or enemy piece
+          if (pieceAtJump === -1 || (pieceAtJump !== -1 && pieces[pieceAtJump].side !== piece.side && pieces[pieceAtJump].side !== 'neutral')) {
+            if (!visitedPositions.has(posKey)) {
+              visitedPositions.add(posKey);
+              const newState = {
+                nodeIdx: jumpTarget,
+                jumpsCount: current.jumpsCount + 1,
+                path: [...current.path, jumpTarget]
+              };
+
+              // Record this as a valid jump destination
+              if (!jumpDestinations.has(posKey) || jumpDestinations.get(posKey)!.jumpsCount > newState.jumpsCount) {
+                jumpDestinations.set(posKey, newState);
+              }
+
+              // If we can still jump (less than 2 jumps), continue exploring
+              if (newState.jumpsCount < 2 && pieceAtJump === -1) {
+                queue.push(newState);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Add jump destinations to highlights
+  Array.from(jumpDestinations.entries()).forEach(([posKey, state]) => {
+    const [row, col] = posKey.split(',').map(Number);
+    const pieceAtDest = getPieceAt(pieces, row, col);
+    
+    if (pieceAtDest === -1) {
+      highlights.push({ type: 'move', row, col });
+    } else {
+      // Enemy piece - can attack
+      highlights.push({ type: 'attack', row, col });
+    }
+  });
+
+  // If no jumps available, allow simple 1-step move to adjacent empty nodes
+  if (jumpDestinations.size === 0) {
+    for (const adjIdx of adjacency[nodeIdx]) {
+      const adjNode = allNodes[adjIdx];
+      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+      
+      if (targetPieceIdx === -1) {
+        highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+      } else {
+        // Can attack enemy
+        const targetPiece = pieces[targetPieceIdx];
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+        }
+      }
+    }
+  }
+
+  return highlights;
+}
+
+// Helper function to find jump target node
+function findJumpTarget(
+  fromIdx: number,
+  overIdx: number,
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): number {
+  const fromNode = allNodes[fromIdx];
+  const overNode = allNodes[overIdx];
+  
+  // Calculate direction vector
+  const dRow = overNode.row - fromNode.row;
+  const dCol = overNode.col - fromNode.col;
+  
+  // Expected landing position
+  const landRow = overNode.row + dRow;
+  const landCol = overNode.col + dCol;
+  
+  // Find landing node among adjacent nodes of overNode
+  for (const adjIdx of adjacency[overIdx]) {
+    const adjNode = allNodes[adjIdx];
+    if (adjNode.row === landRow && adjNode.col === landCol) {
+      return adjIdx;
+    }
+  }
+  
+  return -1; // No valid landing spot
 }
 
 // Calculate dragon moves - straight lines in any direction

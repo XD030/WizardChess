@@ -10,6 +10,7 @@ import {
   calculateApprenticeMoves,
   calculateDragonMoves,
   calculateDragonPath,
+  calculateRangerMoves,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -62,6 +63,10 @@ export default function Game() {
               const result = calculateDragonMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, burnMarks);
               setHighlights(result.highlights);
               setDragonPathNodes(result.pathNodes);
+            } else if (piece.type === 'ranger') {
+              const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
@@ -109,6 +114,10 @@ export default function Game() {
               const result = calculateDragonMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, burnMarks);
               setHighlights(result.highlights);
               setDragonPathNodes(result.pathNodes);
+            } else if (piece.type === 'ranger') {
+              const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
