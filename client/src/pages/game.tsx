@@ -147,29 +147,7 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
 
     if (highlight.type === 'move') {
-      // Check for assassin stealth state change
-      let updatedPiece = { ...selectedPiece, row, col };
-      if (selectedPiece.type === 'assassin') {
-        const fromIsBlack = isBlackTriangle(selectedPiece.row, selectedPiece.col);
-        const toIsBlack = isBlackTriangle(row, col);
-        
-        console.log(`刺客移动: from(${selectedPiece.row},${selectedPiece.col}) fromIsBlack=${fromIsBlack} -> to(${row},${col}) toIsBlack=${toIsBlack}`);
-        
-        // White triangle -> Black triangle: Enter stealth
-        if (!fromIsBlack && toIsBlack) {
-          updatedPiece.stealthed = true;
-          console.log(`✓ 刺客进入潜行`);
-        }
-        // Black triangle -> White triangle: Reveal
-        else if (fromIsBlack && !toIsBlack) {
-          updatedPiece.stealthed = false;
-          console.log(`✓ 刺客解除潜行`);
-        } else {
-          console.log(`✗ 刺客状态不变 (同色移动)`);
-        }
-      }
-      
-      newPieces[selectedPieceIndex] = updatedPiece;
+      newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       
       // If dragon moves, add burn marks to the path (including starting point, excluding destination)
@@ -227,30 +205,8 @@ export default function Game() {
       // Adjust selectedPieceIndex if needed (if target was before selected piece)
       const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
       
-      // Check for assassin stealth state change
-      let updatedPiece = { ...selectedPiece, row, col };
-      if (selectedPiece.type === 'assassin') {
-        const fromIsBlack = isBlackTriangle(selectedPiece.row, selectedPiece.col);
-        const toIsBlack = isBlackTriangle(row, col);
-        
-        console.log(`刺客攻击移动: from(${selectedPiece.row},${selectedPiece.col}) fromIsBlack=${fromIsBlack} -> to(${row},${col}) toIsBlack=${toIsBlack}`);
-        
-        // White triangle -> Black triangle: Enter stealth
-        if (!fromIsBlack && toIsBlack) {
-          updatedPiece.stealthed = true;
-          console.log(`✓ 刺客攻击后进入潜行`);
-        }
-        // Black triangle -> White triangle: Reveal
-        else if (fromIsBlack && !toIsBlack) {
-          updatedPiece.stealthed = false;
-          console.log(`✓ 刺客攻击后解除潜行`);
-        } else {
-          console.log(`✗ 刺客攻击后状态不变`);
-        }
-      }
-      
       // Move the attacking piece to the target position
-      newPieces[adjustedIdx] = updatedPiece;
+      newPieces[adjustedIdx] = { ...selectedPiece, row, col };
       
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }

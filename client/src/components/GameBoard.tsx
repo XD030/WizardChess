@@ -15,17 +15,7 @@ interface GameBoardProps {
 
 // Helper function to check if a piece should be visible to current player
 function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean {
-  // Own pieces are always visible
-  if (piece.side === currentPlayer || piece.side === 'neutral') {
-    return true;
-  }
-  
-  // Enemy stealthed assassins are not visible
-  if (piece.type === 'assassin' && piece.stealthed) {
-    console.log(`刺客隐身检测: side=${piece.side}, currentPlayer=${currentPlayer}, stealthed=${piece.stealthed}, row=${piece.row}, col=${piece.col}`);
-    return false;
-  }
-  
+  // All pieces are always visible (stealth disabled)
   return true;
 }
 
