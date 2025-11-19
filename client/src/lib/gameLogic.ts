@@ -117,16 +117,31 @@ export function buildAllNodes(rows: { x: number; y: number }[][]): NodePosition[
 }
 
 // Get coordinate label for a node
-// Row letters (A-I): rows 0-8 → A-I
-// Column numbers (1-9): based on position
+// Treat the diamond as a rotated 9×9 square
+// Files A-I (x-axis): diagonal columns from bottom-left to top-right
+// Ranks 1-9 (y-axis): diagonal rows from top-left to bottom-right
 export function getNodeCoordinate(row: number, col: number): string {
-  // Row letter A-I (rows 0-8)
-  const rowLetter = String.fromCharCode(65 + row); // A-I
+  // Transform (row, col) to rotated square coordinates (x, y)
+  let x: number;
+  let y: number;
   
-  // Column number based on position
-  const colNum = col + 1;
+  if (row <= 8) {
+    // Upper half: expanding rows
+    x = col;
+    y = row - col;
+  } else {
+    // Lower half: contracting rows
+    const offset = row - 8;
+    x = col + offset;
+    y = 8 - col;
+  }
   
-  return `${rowLetter}${colNum}`;
+  // File letter: A-I (x: 0-8)
+  const file = String.fromCharCode(65 + x);
+  // Rank number: 1-9 (y: 0-8, but we want 1-9)
+  const rank = y + 1;
+  
+  return `${file}${rank}`;
 }
 
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
