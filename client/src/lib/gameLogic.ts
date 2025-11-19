@@ -505,7 +505,8 @@ export function calculateRangerMoves(
   return highlights;
 }
 
-// Calculate assassin moves - diagonal jumps (parallelogram corners)
+// Calculate assassin moves - parallelogram diagonal moves
+// Assassin can move along parallelogram diagonals formed by adjacent triangles
 export function calculateAssassinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -518,36 +519,44 @@ export function calculateAssassinMoves(
   
   if (nodeIdx === -1) return highlights;
 
-  // Assassin moves diagonally (2 steps in one direction)
-  // This forms parallelogram corners with adjacent black/white triangles
-  for (const adjIdx of adjacency[nodeIdx]) {
-    const adjNode = allNodes[adjIdx];
-    
-    // Calculate direction vector
-    const dRow = adjNode.row - piece.row;
-    const dCol = adjNode.col - piece.col;
-    
-    // Expected landing position (2 steps in same direction)
-    const landRow = piece.row + dRow * 2;
-    const landCol = piece.col + dCol * 2;
-    
-    // Find landing node among adjacent nodes of adjNode
-    for (const nextIdx of adjacency[adjIdx]) {
-      const nextNode = allNodes[nextIdx];
-      if (nextNode.row === landRow && nextNode.col === landCol) {
-        // Found valid diagonal move target
-        const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
+  // For each pair of adjacent nodes, check if they form a parallelogram
+  const adjacent = adjacency[nodeIdx];
+  
+  // Iterate through all pairs of adjacent nodes
+  for (let i = 0; i < adjacent.length; i++) {
+    for (let j = i + 1; j < adjacent.length; j++) {
+      const adj1Idx = adjacent[i];
+      const adj2Idx = adjacent[j];
+      const adj1 = allNodes[adj1Idx];
+      const adj2 = allNodes[adj2Idx];
+      
+      // Check if adj1 and adj2 are also adjacent to each other (forming a triangle)
+      if (adjacency[adj1Idx].includes(adj2Idx)) {
+        // These three nodes form a triangle
+        // The fourth corner of the parallelogram would be at:
+        // corner = current + (adj1 - current) + (adj2 - current)
+        // = adj1 + adj2 - current
+        const targetRow = adj1.row + adj2.row - piece.row;
+        const targetCol = adj1.col + adj2.col - piece.col;
         
-        if (targetPieceIdx === -1) {
-          highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
-        } else {
-          // Can attack enemy
-          const targetPiece = pieces[targetPieceIdx];
-          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-            highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
+        // Find if this target exists in the board
+        const targetIdx = allNodes.findIndex(n => n.row === targetRow && n.col === targetCol);
+        if (targetIdx !== -1) {
+          // Check if target is adjacent to both adj1 and adj2 (completing the parallelogram)
+          if (adjacency[adj1Idx].includes(targetIdx) && adjacency[adj2Idx].includes(targetIdx)) {
+            const targetNode = allNodes[targetIdx];
+            const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
+            
+            if (targetPieceIdx === -1) {
+              highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
+            } else {
+              const targetPiece = pieces[targetPieceIdx];
+              if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+                highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
+              }
+            }
           }
         }
-        break;
       }
     }
   }
