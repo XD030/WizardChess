@@ -268,7 +268,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           tempCtx.putImageData(imageData, 0, 0);
           
           // Determine outline color and width
-          let outlineColor = '#fff';
+          let outlineColor = '#fff'; // Default white outline for all wizard hats
           let outlineWidth = 1.5;
           
           if (idx === selectedPieceIndex) {
@@ -280,15 +280,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (attackHighlight) {
             outlineColor = '#ef4444';
             outlineWidth = 3;
-          } else {
-            if (piece.side === 'white') {
-              outlineColor = '#000';
-            } else if (piece.side === 'black') {
-              outlineColor = '#fff';
-            } else {
-              outlineColor = '#000';
-            }
           }
+          // All wizard hats use white outline by default
           
           // Create outline canvas
           const outlineCanvas = document.createElement('canvas');
