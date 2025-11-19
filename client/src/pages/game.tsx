@@ -126,6 +126,7 @@ export default function Game() {
     let moveDesc = '';
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(row, col);
+    let updatedBurnMarks = [...burnMarks];
 
     if (highlight.type === 'move') {
       newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
@@ -133,13 +134,12 @@ export default function Game() {
       
       // If dragon moves, add burn marks to the path
       if (selectedPiece.type === 'dragon' && dragonPathNodes.length > 0) {
-        const newBurnMarks = [...burnMarks];
         // Add burn marks for all nodes in the path except the destination
         for (const pathNode of dragonPathNodes) {
           if (!(pathNode.row === row && pathNode.col === col)) {
             // Check if not already a burn mark
-            if (!newBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
-              newBurnMarks.push({ 
+            if (!updatedBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
+              updatedBurnMarks.push({ 
                 row: pathNode.row, 
                 col: pathNode.col,
                 createdBy: currentPlayer 
@@ -147,7 +147,6 @@ export default function Game() {
             }
           }
         }
-        setBurnMarks(newBurnMarks);
       }
     } else if (highlight.type === 'swap') {
       const targetIdx = clickedPieceIdx;
@@ -178,7 +177,7 @@ export default function Game() {
     
     // Clean up burn marks created by the next player
     // (They last until the enemy's turn ends, which is when we switch back)
-    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    const remainingBurnMarks = updatedBurnMarks.filter(mark => mark.createdBy !== nextPlayer);
     setBurnMarks(remainingBurnMarks);
   };
 
