@@ -2,6 +2,7 @@ import type { Piece } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPieceSymbol, PIECE_CHINESE, SIDE_CHINESE, PIECE_DESCRIPTIONS } from '@/lib/gameLogic';
 import wizardMoonImg from '@assets/wizard_moon.png';
+import assassinLogoImg from '@assets/assassin_logo.png';
 
 interface PieceInfoPanelProps {
   piece: Piece | null;
@@ -48,6 +49,21 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
                   : piece.side === 'black' 
                   ? 'brightness(0.3)'
                   : 'invert(1) sepia(1) saturate(3) hue-rotate(240deg)'
+              }}
+              data-testid="text-piece-emoji"
+            />
+          ) : piece.type === 'assassin' ? (
+            <img 
+              src={assassinLogoImg} 
+              alt="刺客匕首"
+              className="w-16 h-16"
+              style={{
+                filter: piece.side === 'white' 
+                  ? 'brightness(0) invert(1)' 
+                  : 'brightness(0)',
+                WebkitFilter: piece.side === 'white' 
+                  ? 'brightness(0) invert(1) drop-shadow(0 0 2px #000)' 
+                  : 'brightness(0) drop-shadow(0 0 2px #fff)'
               }}
               data-testid="text-piece-emoji"
             />
