@@ -198,29 +198,45 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     });
 
     // Draw coordinate labels
-    ctx.font = '12px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
     
-    // Column labels (A-I) at the widest row
-    const maxRow = rows[8]; // Row 8 has 9 nodes (widest)
+    // Column labels (A-I) at bottom
+    const bottomRow = rows[16]; // Bottom row (1 node)
+    const middleRow = rows[8]; // Middle row (9 nodes - widest)
     const columnLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-    maxRow.forEach((node, idx) => {
+    
+    middleRow.forEach((node, idx) => {
       if (idx < columnLabels.length) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(columnLabels[idx], node.x, node.y + 25);
+        // Place below the bottom point
+        const bottomY = bottomRow[0].y;
+        ctx.fillText(columnLabels[idx], node.x, bottomY + 30);
       }
     });
     
     // Row labels (1-9) on the left side
     const rowLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    const labelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16]; // Every other row
-    labelRows.forEach((rowIdx, labelIdx) => {
+    // Map to actual game rows: row 0,2,4,6,8,10,12,14,16 correspond to game rows 1-9
+    const leftLabelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16];
+    
+    leftLabelRows.forEach((rowIdx, labelIdx) => {
       if (rowIdx < rows.length && labelIdx < rowLabels.length) {
-        const node = rows[rowIdx][0];
+        const leftNode = rows[rowIdx][0];
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(rowLabels[labelIdx], node.x - 25, node.y);
+        ctx.fillText(rowLabels[labelIdx], leftNode.x - 30, leftNode.y);
+      }
+    });
+    
+    // Row labels (1-9) on the right side (mirror)
+    leftLabelRows.forEach((rowIdx, labelIdx) => {
+      if (rowIdx < rows.length && labelIdx < rowLabels.length) {
+        const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(rowLabels[labelIdx], rightNode.x + 30, rightNode.y);
       }
     });
 
