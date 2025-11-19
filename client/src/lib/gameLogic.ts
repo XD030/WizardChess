@@ -117,21 +117,23 @@ export function buildAllNodes(rows: { x: number; y: number }[][]): NodePosition[
 }
 
 // Get coordinate label for a node
-// Row letters (A-I): correspond to rows 0,2,4,6,8,10,12,14,16 (top to bottom)
-// Column numbers (1-9): correspond to positions in the widest row
+// Row letters (A-I): rows 0,2,4,6,8,10,12,14,16 → A,B,C,D,E,F,G,H,I
+// Column numbers (1-9): based on alignment with widest row (row 8)
 export function getNodeCoordinate(row: number, col: number): string {
   // Row letter A-I (every 2 rows from 0 to 16)
   const rowLetter = String.fromCharCode(65 + Math.floor(row / 2)); // A-I
   
-  // Column number 1-9 (based on position relative to widest row)
-  // Calculate the column offset based on diamond shape
+  // Column number 1-9 
+  // Align all positions to the widest row (row 8 has cols 0-8 → positions 1-9)
   let colNum: number;
   if (row <= 8) {
-    // Upper half: offset increases as we go down
+    // Upper half: col directly maps to position
     colNum = col + 1;
   } else {
-    // Lower half: offset based on how much it's contracting
-    colNum = col + (row - 8) + 1;
+    // Lower half: adjust for diamond contraction
+    // row 10 has same width as row 6, row 12 same as row 4, etc.
+    const offsetFromCenter = row - 8;
+    colNum = col + offsetFromCenter + 1;
   }
   
   return `${rowLetter}${colNum}`;
