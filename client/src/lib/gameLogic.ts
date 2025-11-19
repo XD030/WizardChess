@@ -506,7 +506,8 @@ export function calculateRangerMoves(
 }
 
 // Calculate assassin moves - parallelogram diagonal moves
-// Assassin can move along parallelogram diagonals formed by adjacent BLACK and WHITE triangles
+// Assassin can move along parallelogram diagonals formed by adjacent triangles
+// Key: Can move to opposite corner of parallelogram ONLY if target is opposite color (not a square)
 export function calculateAssassinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -519,7 +520,7 @@ export function calculateAssassinMoves(
   
   if (nodeIdx === -1) return highlights;
 
-  // For each pair of adjacent nodes, check if they form a parallelogram
+  const currentIsBlack = isBlackTriangle(piece.row, piece.col);
   const adjacent = adjacency[nodeIdx];
   
   // Iterate through all pairs of adjacent nodes
@@ -533,24 +534,7 @@ export function calculateAssassinMoves(
       // Check if adj1 and adj2 are also adjacent to each other (forming a triangle)
       if (adjacency[adj1Idx].includes(adj2Idx)) {
         // These three nodes form a triangle
-        
-        // CRITICAL: Check if the two triangles (current-adj1-adj2 and its adjacent triangle) 
-        // have different colors. This ensures we have a parallelogram, not a square.
-        // The two triangles share the edge adj1-adj2
-        const currentIsBlack = isBlackTriangle(piece.row, piece.col);
-        const adj1IsBlack = isBlackTriangle(adj1.row, adj1.col);
-        const adj2IsBlack = isBlackTriangle(adj2.row, adj2.col);
-        
-        // For a valid parallelogram made of black and white triangles:
-        // The current node and one of the adjacent nodes should have different triangle colors
-        // This ensures the parallelogram is formed by one black and one white triangle
-        const hasColorDifference = (currentIsBlack !== adj1IsBlack) || (currentIsBlack !== adj2IsBlack);
-        
-        if (!hasColorDifference) continue; // Skip if both triangles have same color (forms a square)
-        
-        // The fourth corner of the parallelogram would be at:
-        // corner = current + (adj1 - current) + (adj2 - current)
-        // = adj1 + adj2 - current
+        // The fourth corner of the parallelogram:
         const targetRow = adj1.row + adj2.row - piece.row;
         const targetCol = adj1.col + adj2.col - piece.col;
         
@@ -559,11 +543,16 @@ export function calculateAssassinMoves(
         if (targetIdx !== -1) {
           // Check if target is adjacent to both adj1 and adj2 (completing the parallelogram)
           if (adjacency[adj1Idx].includes(targetIdx) && adjacency[adj2Idx].includes(targetIdx)) {
-            // Additional check: ensure target has opposite color from current
-            const targetIsBlack = isBlackTriangle(targetRow, targetCol);
-            if (currentIsBlack === targetIsBlack) continue; // Skip if same color (would be a square)
-            
             const targetNode = allNodes[targetIdx];
+            
+            // CRITICAL: Only allow move if target is OPPOSITE color from current
+            // This excludes squares (same color diagonals) but allows parallelograms
+            const targetIsBlack = isBlackTriangle(targetNode.row, targetNode.col);
+            if (currentIsBlack === targetIsBlack) {
+              // Same color = square diagonal, not allowed
+              continue;
+            }
+            
             const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
             
             if (targetPieceIdx === -1) {
