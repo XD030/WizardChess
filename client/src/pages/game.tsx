@@ -139,7 +139,11 @@ export default function Game() {
           if (!(pathNode.row === row && pathNode.col === col)) {
             // Check if not already a burn mark
             if (!newBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
-              newBurnMarks.push({ row: pathNode.row, col: pathNode.col });
+              newBurnMarks.push({ 
+                row: pathNode.row, 
+                col: pathNode.col,
+                createdBy: currentPlayer 
+              });
             }
           }
         }
@@ -167,7 +171,15 @@ export default function Game() {
     setSelectedPieceIndex(-1);
     setHighlights([]);
     setDragonPathNodes([]);
-    setCurrentPlayer(currentPlayer === 'white' ? 'black' : 'white');
+    
+    // Switch to next player
+    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
+    setCurrentPlayer(nextPlayer);
+    
+    // Clean up burn marks created by the next player
+    // (They last until the enemy's turn ends, which is when we switch back)
+    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    setBurnMarks(remainingBurnMarks);
   };
 
   const selectedPiece = selectedPieceIndex !== -1 ? pieces[selectedPieceIndex] : null;

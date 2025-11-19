@@ -31,6 +31,7 @@ export interface Piece {
 export interface BurnMark {
   row: number;
   col: number;
+  createdBy: Side; // Which player created this burn mark
 }
 
 export interface GameState {
