@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { Piece } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPieceSymbol, PIECE_CHINESE, SIDE_CHINESE, PIECE_DESCRIPTIONS } from '@/lib/gameLogic';
@@ -6,6 +7,57 @@ import assassinLogoImg from '@assets/assassin_logo.png';
 
 interface PieceInfoPanelProps {
   piece: Piece | null;
+}
+
+function AssassinIcon({ side }: { side: 'white' | 'black' }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    img.src = assassinLogoImg;
+    img.onload = () => {
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(img, 0, 0, size, size);
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      const data = imageData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const brightness = (r + g + b) / 3;
+
+        if (brightness > 128) {
+          data[i + 3] = 0;
+        } else {
+          if (side === 'white') {
+            data[i] = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+          } else {
+            data[i] = 0;
+            data[i + 1] = 0;
+            data[i + 2] = 0;
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    };
+  }, [side]);
+
+  return <canvas ref={canvasRef} className="w-16 h-16" data-testid="text-piece-emoji" />;
 }
 
 export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
@@ -53,20 +105,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
               data-testid="text-piece-emoji"
             />
           ) : piece.type === 'assassin' ? (
-            <img 
-              src={assassinLogoImg} 
-              alt="刺客匕首"
-              className="w-16 h-16"
-              style={{
-                filter: piece.side === 'white' 
-                  ? 'brightness(0) invert(1)' 
-                  : 'brightness(0)',
-                WebkitFilter: piece.side === 'white' 
-                  ? 'brightness(0) invert(1) drop-shadow(0 0 2px #000)' 
-                  : 'brightness(0) drop-shadow(0 0 2px #fff)'
-              }}
-              data-testid="text-piece-emoji"
-            />
+            <AssassinIcon side={piece.side as 'white' | 'black'} />
           ) : (
             <div 
               className="text-5xl font-bold" 
