@@ -66,7 +66,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
           )}
           <div>
             <div className="text-base font-bold text-foreground" data-testid="text-piece-name">
-              {desc.name} {PIECE_CHINESE[piece.type]}
+              {desc.name}
             </div>
             <div className="text-sm text-muted-foreground" data-testid="text-piece-side">
               陣營：{SIDE_CHINESE[piece.side]}
