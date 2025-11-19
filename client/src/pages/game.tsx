@@ -153,15 +153,19 @@ export default function Game() {
         const fromIsBlack = isBlackTriangle(selectedPiece.row, selectedPiece.col);
         const toIsBlack = isBlackTriangle(row, col);
         
+        console.log(`刺客移动: from(${selectedPiece.row},${selectedPiece.col}) fromIsBlack=${fromIsBlack} -> to(${row},${col}) toIsBlack=${toIsBlack}`);
+        
         // White triangle -> Black triangle: Enter stealth
         if (!fromIsBlack && toIsBlack) {
           updatedPiece.stealthed = true;
-          console.log(`刺客进入潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
+          console.log(`✓ 刺客进入潜行`);
         }
         // Black triangle -> White triangle: Reveal
         else if (fromIsBlack && !toIsBlack) {
           updatedPiece.stealthed = false;
-          console.log(`刺客解除潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
+          console.log(`✓ 刺客解除潜行`);
+        } else {
+          console.log(`✗ 刺客状态不变 (同色移动)`);
         }
       }
       
@@ -229,15 +233,19 @@ export default function Game() {
         const fromIsBlack = isBlackTriangle(selectedPiece.row, selectedPiece.col);
         const toIsBlack = isBlackTriangle(row, col);
         
+        console.log(`刺客攻击移动: from(${selectedPiece.row},${selectedPiece.col}) fromIsBlack=${fromIsBlack} -> to(${row},${col}) toIsBlack=${toIsBlack}`);
+        
         // White triangle -> Black triangle: Enter stealth
         if (!fromIsBlack && toIsBlack) {
           updatedPiece.stealthed = true;
-          console.log(`刺客攻击后进入潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
+          console.log(`✓ 刺客攻击后进入潜行`);
         }
         // Black triangle -> White triangle: Reveal
         else if (fromIsBlack && !toIsBlack) {
           updatedPiece.stealthed = false;
-          console.log(`刺客攻击后解除潜行: from(${selectedPiece.row},${selectedPiece.col}) -> to(${row},${col}), stealthed=${updatedPiece.stealthed}`);
+          console.log(`✓ 刺客攻击后解除潜行`);
+        } else {
+          console.log(`✗ 刺客攻击后状态不变`);
         }
       }
       
