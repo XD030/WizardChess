@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Wizard Chess Board</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #layout {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    #left-panel, #right-panel {
+      width: 260px;
+      font-size: 14px;
+    }
+
+    #left-panel h2, #right-panel h2 {
+      margin: 0 0 6px;
+      font-size: 16px;
+    }
+
+    #left-panel .section-title {
+      margin-top: 8px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    #left-panel ul {
+      margin: 4px 0 0 18px;
+      padding: 0;
+    }
+
+    #left-panel li {
+      margin-bottom: 2px;
+    }
+
+    #piece-name {
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    #board-container {
+      text-align: center;
+      position: relative;
+    }
+
+    canvas {
+      background: #000;
+      border-radius: 8px;
+    }
+
+    .turn {
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+    .dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin: 0 4px;
+      vertical-align: middle;
+      border: 1px solid #fff;
+    }
+    .dot.white { background:#fff; }
+    .dot.black { background:#000; }
+
+    .hint {
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    #history {
+      margin-top: 8px;
+      font-size: 12px;
+      border-top: 1px solid #555;
+      padding-top: 6px;
+      max-height: 260px;
+      overflow-y: auto;
+      white-space: pre-line;
+    }
+    #history-line {
+      font-weight: 600;
+      margin-bottom: 2px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div id="layout">
+    <!-- 左側：棋子資訊 -->
+    <div id="left-panel">
+      <h2>棋子資訊</h2>
+      <div id="piece-name">未選取棋子</div>
+      <div id="piece-side"></div>
+
+      <div class="section-title">移動方式</div>
+      <ul id="move-desc">
+        <li>點擊自己的巫師可以查看能力。</li>
+      </ul>
+
+      <div class="section-title">能力</div>
+      <ul id="ability-desc">
+        <li>目前只實作巫師的完整能力。</li>
+      </ul>
+    </div>
+
+    <!-- 中間：棋盤 -->
+    <div id="board-container">
+      <canvas id="board"></canvas>
+      <div class="hint" id="hint"></div>
+    </div>
+
+    <!-- 右側：回合 + 歷史 -->
+    <div id="right-panel">
+      <h2>回合資訊</h2>
+      <div id="turn" class="turn"></div>
+
+      <div id="history-line">移動紀錄</div>
+      <div id="history">(尚無移動)</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const hintEl = document.getElementById('hint');
+    const turnEl = document.getElementById('turn');
+    const historyEl = document.getElementById('history');
+
+    const pieceNameEl = document.getElementById('piece-name');
+    const pieceSideEl = document.getElementById('piece-side');
+    const moveDescEl = document.getElementById('move-desc');
+    const abilityDescEl = document.getElementById('ability-desc');
+
+    // ===== 版面大小 / HiDPI =====
+    const LOGICAL_SIZE = 700;
+    let W = LOGICAL_SIZE;
+    let H = LOGICAL_SIZE;
+    let CX = W / 2;
+    let CY = H / 2;
+
+    function setupCanvas() {
+      const ratio = window.devicePixelRatio || 1;
+
+      canvas.style.width = LOGICAL_SIZE + 'px';
+      canvas.style.height = LOGICAL_SIZE + 'px';
+      canvas.width = LOGICAL_SIZE * ratio;
+      canvas.height = LOGICAL_SIZE * ratio;
+
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      W = LOGICAL_SIZE;
+      H = LOGICAL_SIZE;
+      CX = W / 2;
+      CY = H / 2;
+    }
+
+    // ===== 棋盤幾何 =====
+    const N = 8;
+    const STEP = 40;
+    const VSTEP = STEP * 0.5;
+    const NODE_RADIUS = 4;
+
+    const rows = [];
+    const allNodes = [];
+    const rcToIndex = {};
+    let adjacency = [];
+
+    function buildRows() {
+      rows.length = 0;
+      for (let i = 0; i <= 2 * N; i++) {
+        const level = i;
+        const count = (level <= N) ? (level + 1) : (2 * N + 1 - level);
+        const y = (level - N) * VSTEP;
+        const xStart = -(count - 1) * STEP / 2;
+
+        const row = [];
+        for (let j = 0; j < count; j++) {
+          const x = xStart + j * STEP;
+          row.push({ x: CX + x, y: CY + y });
+        }
+        rows.push(row);
+      }
+    }
+
+    function buildAllNodes() {
+      allNodes.length = 0;
+      for (let ri = 0; ri < rows.length; ri++) {
+        for (let ci = 0; ci < rows[ri].length; ci++) {
+          const p = rows[ri][ci];
+          const idx = allNodes.length;
+          allNodes.push({ x: p.x, y: p.y, row: ri, col: ci });
+          rcToIndex[`${ri},${ci}`] = idx;
+        }
+      }
+    }
+
+    function connectAdj(adj, r1, c1, r2, c2) {
+      const i1 = rcToIndex[`${r1},${c1}`];
+      const i2 = rcToIndex[`${r2},${c2}`];
+      if (i1 === undefined || i2 === undefined) return;
+      adj[i1].push(i2);
+      adj[i2].push(i1);
+    }
+
+    function buildAdjacency() {
+      adjacency = new Array(allNodes.length);
+      for (let i = 0; i < adjacency.length; i++) adjacency[i] = [];
+
+      // 同列
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        for (let c = 0; c < row.length - 1; c++) {
+          connectAdj(adjacency, r, c, r, c + 1);
+        }
+      }
+
+      // 上下列
+      for (let r = 0; r < rows.length - 1; r++) {
+        const rowA = rows[r];
+        const rowB = rows[r + 1];
+
+        if (rowB.length === rowA.length + 1) {
+          for (let c = 0; c < rowA.length; c++) {
+            connectAdj(adjacency, r, c, r + 1, c);
+            connectAdj(adjacency, r, c, r + 1, c + 1);
+          }
+        } else if (rowA.length === rowB.length + 1) {
+          for (let c = 0; c < rowB.length; c++) {
+            connectAdj(adjacency, r + 1, c, r, c);
+            connectAdj(adjacency, r + 1, c, r, c + 1);
+          }
+        }
+      }
+    }
+
+    function getNodePosition(rowIndex, colIndex) {
+      const r = rows[rowIndex];
+      if (!r || !r[colIndex]) return null;
+      return r[colIndex];
+    }
+
+    // ===== 棋子資料 =====
+    const whiteBasePieces = [
+      { type: 'wizard', row: 16, col: 0 },  // 巫師
+      { type: 'dragon', row: 14, col: 1 },
+
+      { type: 'ranger',  row: 13, col: 0 },
+      { type: 'ranger',  row: 13, col: 3 },
+      { type: 'paladin', row: 13, col: 1 },
+      { type: 'paladin', row: 13, col: 2 },
+      { type: 'assassin', row: 12, col: 1 },
+      { type: 'assassin', row: 12, col: 3 },
+
+      // 7 個學徒（row = 10）
+      { type: 'apprentice', row: 10, col: 0 },
+      { type: 'apprentice', row: 10, col: 1 },
+      { type: 'apprentice', row: 10, col: 2 },
+      { type: 'apprentice', row: 10, col: 3 },
+      { type: 'apprentice', row: 10, col: 4 },
+      { type: 'apprentice', row: 10, col: 5 },
+      { type: 'apprentice', row: 10, col: 6 },
+    ];
+
+    const pieces = [];
+
+    function buildPieces() {
+      pieces.length = 0;
+
+      // 白方
+      for (const p of whiteBasePieces) {
+        pieces.push({
+          type: p.type,
+          side: 'white',
+          row: p.row,
+          col: p.col,
+        });
+      }
+
+      // 黑方（row 對稱）
+      for (const p of whiteBasePieces) {
+        pieces.push({
+          type: p.type,
+          side: 'black',
+          row: 2 * N - p.row,
+          col: p.col,
+        });
+      }
+
+      // 吟遊詩人（中心）
+      pieces.push({
+        type: 'bard',
+        side: 'neutral',
+        row: 8,
+        col: 4,
+      });
+    }
+
+    function pieceEmoji(type) {
+      switch (type) {
+        case 'wizard': return '🧙‍♂️';
+        case 'apprentice': return '🧝';
+        case 'dragon': return '🐉';
+        case 'ranger': return '🏹';
+        case 'paladin': return '🛡️';
+        case 'assassin': return '🗡️';
+        case 'bard': return '🎵';
+        default: return '?';
+      }
+    }
+
+    function getPieceAt(row, col) {
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i];
+        if (p.row === row && p.col === col) return i;
+      }
+      return -1;
+    }
+
+    // ===== 名稱 / 描述 =====
+    const sideNames = {
+      white: '白方',
+      black: '黑方',
+      neutral: '中立'
+    };
+
+    const typeChinese = {
+      wizard: '巫師',
+      apprentice: '學徒',
+      dragon: '龍',
+      ranger: '遊俠',
+      paladin: '聖騎士',
+      assassin: '刺客',
+      bard: '吟遊詩人'
+    };
+
+    const pieceDescriptions = {
+      wizard: {
+        name: '《巫師》',
+        move: [
+          '沿節點連線移動 1 節點。'
+        ],
+        ability: [
+          '導線是指能跟另一棋子連結且中間無其他節點，可轉換方向。',
+          '可透過己方學徒或吟遊詩人建立導線，若導線能連接至敵方棋子，即可擊殺該棋子，距離不限，遇第一個敵方棋子為止。',
+          '可與任意己方學徒無距離換位。'
+        ]
+      },
+      apprentice: {
+        name: '《學徒》',
+        move: ['（尚未實作完整規則）'],
+        ability: ['可作為巫師導線的導體。']
+      },
+      dragon: {
+        name: '《龍》',
+        move: ['沿直線前進，距離不限（之後補上灼痕效果）。'],
+        ability: ['（之後補完）']
+      },
+      ranger: {
+        name: '《遊俠》',
+        move: ['跳棋式移動或 1 節點移動（之後補完）。'],
+        ability: ['落點若有敵人則擊殺。']
+      },
+      paladin: {
+        name: '《聖騎士》',
+        move: ['沿節點連線移動 1 節點（之後補完）'],
+        ability: ['守護與聖光效果將之後加入。']
+      },
+      assassin: {
+        name: '《刺客》',
+        move: ['沿平行四邊形對角移動（之後補完）。'],
+        ability: ['潛行與顯形機制之後加入。']
+      },
+      bard: {
+        name: '《吟遊詩人》',
+        move: ['無法主動移動，只能換位（之後補完）。'],
+        ability: ['可作為巫師導線的一部分。']
+      }
+    };
+
+    function renderPieceInfo(piece) {
+      if (!piece) {
+        pieceNameEl.textContent = '未選取棋子';
+        pieceSideEl.textContent = '';
+        moveDescEl.innerHTML = '<li>點擊自己的巫師可以查看能力。</li>';
+        abilityDescEl.innerHTML = '<li>目前只實作巫師的完整行動。</li>';
+        return;
+      }
+      const desc = pieceDescriptions[piece.type] || null;
+      pieceNameEl.textContent =
+        (desc ? desc.name : '《未知棋子》') + '　' + (typeChinese[piece.type] || '');
+      pieceSideEl.textContent = '陣營：' + (sideNames[piece.side] || '');
+
+      // 移動
+      moveDescEl.innerHTML = '';
+      const moves = desc ? desc.move : ['暫無說明'];
+      moves.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        moveDescEl.appendChild(li);
+      });
+
+      // 能力
+      abilityDescEl.innerHTML = '';
+      const ab = desc ? desc.ability : ['暫無說明'];
+      ab.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        abilityDescEl.appendChild(li);
+      });
+    }
+
+    // ===== 回合 & 選取 & 歷史 =====
+    let currentPlayer = 'white';
+    let selectedPieceIndex = -1;
+    let legalMoveNodeSet = new Set();
+    let legalAttackNodeSet = new Set();
+    let swapTargetMap = new Map();
+    let gameOver = false;
+    const moveHistory = [];
+
+    function coordString(row, col) {
+      return `(${row},${col})`;
+    }
+
+    function logMove(text) {
+      moveHistory.push(text);
+      historyEl.textContent = moveHistory
+        .map((t, i) => `${i + 1}. ${t}`)
+        .join('\n');
+    }
+
+    function updateUI() {
+      if (currentPlayer === 'white') {
+        turnEl.innerHTML = '目前回合：<span class="dot white"></span> 白方';
+      } else {
+        turnEl.innerHTML = '目前回合：<span class="dot black"></span> 黑方';
+      }
+      hintEl.textContent = '巫師：綠=移動、黃=與學徒換位、紅=導線攻擊。';
+    }
+
+    // ===== 巫師能力 =====
+    function getWizardStepMoves(piece) {
+      const moves = [];
+      const startIdx = rcToIndex[`${piece.row},${piece.col}`];
+      if (startIdx === undefined) return moves;
+      const neighbors = adjacency[startIdx];
+      for (const nIdx of neighbors) {
+        const node = allNodes[nIdx];
+        if (getPieceAt(node.row, node.col) === -1) {
+          moves.push(nIdx);
+        }
+      }
+      return moves;
+    }
+
+    function getWizardSwapTargets(piece) {
+      const targets = [];
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i];
+        if (p.type === 'apprentice' && p.side === piece.side) {
+          const idx = rcToIndex[`${p.row},${p.col}`];
+          targets.push({ nodeIndex: idx, pieceIndex: i });
+        }
+      }
+      return targets;
+    }
+
+    function getWizardAttackTargets(piece) {
+      const targets = new Set();
+      const startIdx = rcToIndex[`${piece.row},${piece.col}`];
+      const queue = [startIdx];
+      const visited = new Set([startIdx]);
+
+      while (queue.length) {
+        const cur = queue.shift();
+        for (const nIdx of adjacency[cur]) {
+          if (visited.has(nIdx)) continue;
+          const node = allNodes[nIdx];
+          const occIndex = getPieceAt(node.row, node.col);
+          if (occIndex === -1) continue;
+
+          const occ = pieces[occIndex];
+          const isConductor =
+            (occ.type === 'apprentice' && occ.side === piece.side) ||
+            (occ.type === 'bard');
+
+          if (isConductor) {
+            visited.add(nIdx);
+            queue.push(nIdx);
+          } else if (occ.side !== piece.side) {
+            targets.add(nIdx);
+          }
+        }
+      }
+      return targets;
+    }
+
+    function selectPiece(pieceIndex) {
+      selectedPieceIndex = pieceIndex;
+      const p = pieces[pieceIndex];
+
+      legalMoveNodeSet.clear();
+      legalAttackNodeSet.clear();
+      swapTargetMap.clear();
+
+      if (p.type === 'wizard') {
+        const stepMoves = getWizardStepMoves(p);
+        stepMoves.forEach(n => legalMoveNodeSet.add(n));
+
+        const swapTargets = getWizardSwapTargets(p);
+        swapTargets.forEach(t => {
+          legalMoveNodeSet.add(t.nodeIndex);
+          swapTargetMap.set(t.nodeIndex, t.pieceIndex);
+        });
+
+        const attackTargets = getWizardAttackTargets(p);
+        attackTargets.forEach(t => legalAttackNodeSet.add(t));
+      }
+
+      renderPieceInfo(p);
+    }
+
+    function clearSelection() {
+      selectedPieceIndex = -1;
+      legalMoveNodeSet.clear();
+      legalAttackNodeSet.clear();
+      swapTargetMap.clear();
+      renderPieceInfo(null);
+    }
+
+    // ===== 繪製 =====
+    function drawTriangle(p1, p2, p3, fillColor) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff20';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    function drawPieces() {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      for (const p of pieces) {
+        const pos = getNodePosition(p.row, p.col);
+        if (!pos) continue;
+
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y - 2, 12, 0, Math.PI * 2);
+        if (p.side === 'white') ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        else if (p.side === 'black') ctx.fillStyle = 'rgba(20,20,20,0.9)';
+        else ctx.fillStyle = 'rgba(80,150,255,0.9)';
+        ctx.fill();
+
+        ctx.fillStyle = '#000';
+        ctx.font = '18px system-ui, emoji';
+        ctx.fillText(pieceEmoji(p.type), pos.x, pos.y - 2);
+      }
+    }
+
+    function drawCoordinates() {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '14px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      for (let i = 0; i <= 8; i++) {
+        const p = rows[i][i];
+        const ch = String.fromCharCode(65 + i);
+        ctx.fillText(ch, p.x + 14, p.y - 14);
+      }
+
+      for (let i = 0; i <= 8; i++) {
+        const rowIndex = 8 + i;
+        const colIndex = 8 - i;
+        const p = rows[rowIndex][colIndex];
+        ctx.fillText(String(i + 1), p.x + 14, p.y + 14);
+      }
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, W, H);
+
+      for (let i = 0; i < rows.length - 1; i++) {
+        const rowA = rows[i];
+        const rowB = rows[i + 1];
+
+        if (rowB.length === rowA.length + 1) {
+          const m = rowA.length;
+          for (let j = 0; j < m; j++) {
+            drawTriangle(rowA[j], rowB[j], rowB[j + 1], '#ffffff');
+          }
+          for (let j = 0; j < m - 1; j++) {
+            drawTriangle(rowB[j + 1], rowA[j], rowA[j + 1], '#111111');
+          }
+        } else if (rowA.length === rowB.length + 1) {
+          const m = rowB.length;
+          for (let j = 0; j < m; j++) {
+            drawTriangle(rowB[j], rowA[j], rowA[j + 1], '#111111');
+          }
+          for (let j = 0; j < m - 1; j++) {
+            drawTriangle(rowA[j + 1], rowB[j], rowB[j + 1], '#ffffff');
+          }
+        }
+      }
+
+      for (let idx = 0; idx < allNodes.length; idx++) {
+        const p = allNodes[idx];
+
+        if (swapTargetMap.has(idx)) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, NODE_RADIUS + 11, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 0, 0.55)';
+          ctx.fill();
+        }
+
+        if (legalMoveNodeSet.has(idx)) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, NODE_RADIUS + 5, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 255, 0, 0.6)';
+          ctx.fill();
+        }
+
+        if (legalAttackNodeSet.has(idx)) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, NODE_RADIUS + 7, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.45)';
+          ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, NODE_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = '#3fa9ff';
+        ctx.fill();
+      }
+
+      drawPieces();
+      drawCoordinates();
+    }
+
+    // ===== 點擊事件 =====
+    canvas.addEventListener('click', (e) => {
+      if (gameOver) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      let bestIndex = -1;
+      let bestDist2 = Infinity;
+      const CLICK_RADIUS = 20;
+
+      for (let i = 0; i < allNodes.length; i++) {
+        const p = allNodes[i];
+        const dx = mx - p.x;
+        const dy = my - p.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDist2) {
+          bestDist2 = d2;
+          bestIndex = i;
+        }
+      }
+      if (bestIndex < 0 || bestDist2 > CLICK_RADIUS * CLICK_RADIUS) return;
+
+      const node = allNodes[bestIndex];
+      const pieceIndexAtNode = getPieceAt(node.row, node.col);
+
+      // 已選取
+      if (selectedPieceIndex >= 0) {
+        const sel = pieces[selectedPieceIndex];
+
+        // 攻擊
+        if (legalAttackNodeSet.has(bestIndex)) {
+          if (
+            pieceIndexAtNode !== -1 &&
+            pieces[pieceIndexAtNode].side !== sel.side
+          ) {
+            const killed = pieces[pieceIndexAtNode];
+            logMove(`${sideNames[sel.side]} ${typeChinese[sel.type]} 使用導線擊殺 `
+              + `${sideNames[killed.side]} ${typeChinese[killed.type]} ${coordString(node.row,node.col)}`);
+
+            pieces.splice(pieceIndexAtNode, 1);
+
+            if (killed.type === 'wizard') {
+              gameOver = true;
+              drawBoard();
+              alert(`${sideNames[sel.side]} 獲勝（擊殺巫師）！`);
+              return;
+            }
+          }
+
+          clearSelection();
+          currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+          updateUI();
+          drawBoard();
+          return;
+        }
+
+        // 移動 / 換位
+        if (legalMoveNodeSet.has(bestIndex)) {
+          if (swapTargetMap.has(bestIndex)) {
+            const apIndex = swapTargetMap.get(bestIndex);
+            const ap = pieces[apIndex];
+
+            const fromWizard = coordString(sel.row, sel.col);
+            const fromAp = coordString(ap.row, ap.col);
+
+            // 交換
+            const tmpR = sel.row, tmpC = sel.col;
+            sel.row = ap.row; sel.col = ap.col;
+            ap.row = tmpR; ap.col = tmpC;
+
+            logMove(`${sideNames[sel.side]} 巫師 與 學徒 換位 `
+              + `${fromWizard} ↔ ${fromAp}`);
+
+          } else {
+            const from = coordString(sel.row, sel.col);
+            sel.row = node.row;
+            sel.col = node.col;
+            const to = coordString(sel.row, sel.col);
+            logMove(`${sideNames[sel.side]} ${typeChinese[sel.type]} ${from} → ${to}`);
+          }
+
+          clearSelection();
+          currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+          updateUI();
+          drawBoard();
+          return;
+        }
+
+        // 重新選巫師
+        if (pieceIndexAtNode !== -1) {
+          const p = pieces[pieceIndexAtNode];
+          if (p.type === 'wizard' && p.side === currentPlayer) {
+            selectPiece(pieceIndexAtNode);
+            drawBoard();
+            return;
+          }
+        }
+
+        clearSelection();
+        drawBoard();
+        return;
+      }
+
+      // 未選取 → 只能選自己的巫師
+      if (pieceIndexAtNode !== -1) {
+        const p = pieces[pieceIndexAtNode];
+        if (p.type === 'wizard' && p.side === currentPlayer) {
+          selectPiece(pieceIndexAtNode);
+          drawBoard();
+          return;
+        }
+      }
+
+      drawBoard();
+    });
+
+    // ===== 初始化 =====
+    function init() {
+      setupCanvas();
+      buildRows();
+      buildAllNodes();
+      buildAdjacency();
+      buildPieces();
+      clearSelection();
+      currentPlayer = 'white';
+      gameOver = false;
+      updateUI();
+      drawBoard();
+    }
+
+    init();
+    window.addEventListener('resize', init);
+  </script>
+</body>
+</html>
