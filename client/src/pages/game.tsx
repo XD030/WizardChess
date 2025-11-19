@@ -11,6 +11,7 @@ import {
   buildRows,
   buildAllNodes,
   buildAdjacency,
+  getNodeCoordinate,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
 
@@ -103,10 +104,12 @@ export default function Game() {
     // Execute the move
     const newPieces = [...pieces];
     let moveDesc = '';
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
+    const toCoord = getNodeCoordinate(row, col);
 
     if (highlight.type === 'move') {
       newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
-      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} 移動至 (${row},${col})`;
+      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
     } else if (highlight.type === 'swap') {
       const targetIdx = clickedPieceIdx;
       const targetPiece = pieces[targetIdx];
@@ -116,12 +119,12 @@ export default function Game() {
         row: selectedPiece.row,
         col: selectedPiece.col,
       };
-      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} 與 ${PIECE_CHINESE[targetPiece.type]} 換位`;
+      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     } else if (highlight.type === 'attack') {
       const targetIdx = clickedPieceIdx;
       const targetPiece = pieces[targetIdx];
       newPieces.splice(targetIdx, 1);
-      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} 導線攻擊 ${PIECE_CHINESE[targetPiece.type]} (${row},${col})`;
+      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
 
     setPieces(newPieces);
