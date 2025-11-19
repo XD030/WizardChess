@@ -213,16 +213,16 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
     });
     
-    // Column labels (1-9) on the right side, rows 8-16
+    // Column labels (1-9) on the left side, rows 8-16
     const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
     
     colLabels.forEach((label, idx) => {
       const rowIdx = 8 + idx;
       if (rowIdx < rows.length) {
-        const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
-        ctx.textAlign = 'left';
+        const leftNode = rows[rowIdx][0];
+        ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 15, rightNode.y);
+        ctx.fillText(label, leftNode.x - 15, leftNode.y);
       }
     });
 
