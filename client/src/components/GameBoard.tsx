@@ -241,23 +241,33 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           const data = imageData.data;
           
           for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
             const alpha = data[i + 3];
             
-            // Only process non-transparent pixels
+            // Remove light gray/white pixels (anti-aliasing artifacts)
+            // Only keep dark pixels (the actual moon shape)
             if (alpha > 0) {
-              // Apply color based on piece side
-              if (piece.side === 'white') {
-                // White moon - invert to white
-                data[i] = 255 - data[i];
-                data[i + 1] = 255 - data[i + 1];
-                data[i + 2] = 255 - data[i + 2];
-              } else if (piece.side === 'neutral') {
-                // Purple moon
-                data[i] = Math.min(255, data[i] * 0.6 + 168);
-                data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
-                data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
+              // If pixel is too light (gray/white edge), make it transparent
+              const brightness = (r + g + b) / 3;
+              if (brightness > 50) {
+                data[i + 3] = 0; // Make transparent
+              } else {
+                // Apply color based on piece side
+                if (piece.side === 'white') {
+                  // White moon - invert to white
+                  data[i] = 255 - data[i];
+                  data[i + 1] = 255 - data[i + 1];
+                  data[i + 2] = 255 - data[i + 2];
+                } else if (piece.side === 'neutral') {
+                  // Purple moon
+                  data[i] = Math.min(255, data[i] * 0.6 + 168);
+                  data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
+                  data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
+                }
+                // Black moon - keep as is
               }
-              // Black moon - keep as is
             }
           }
           
