@@ -105,7 +105,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     // Draw pieces
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '32px sans-serif';
+    ctx.font = '24px sans-serif';
 
     pieces.forEach((piece, idx) => {
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
@@ -117,7 +117,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
 
       // Background circle
       ctx.beginPath();
-      ctx.arc(node.x, node.y, 18, 0, Math.PI * 2);
+      ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
       if (piece.side === 'white') {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
       } else if (piece.side === 'black') {
