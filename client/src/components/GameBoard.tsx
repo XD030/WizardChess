@@ -197,6 +197,33 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.fill();
     });
 
+    // Draw coordinate labels
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+    
+    // Column labels (A-I) at the widest row
+    const maxRow = rows[8]; // Row 8 has 9 nodes (widest)
+    const columnLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+    maxRow.forEach((node, idx) => {
+      if (idx < columnLabels.length) {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(columnLabels[idx], node.x, node.y + 25);
+      }
+    });
+    
+    // Row labels (1-9) on the left side
+    const rowLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const labelRows = [0, 2, 4, 6, 8, 10, 12, 14, 16]; // Every other row
+    labelRows.forEach((rowIdx, labelIdx) => {
+      if (rowIdx < rows.length && labelIdx < rowLabels.length) {
+        const node = rows[rowIdx][0];
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(rowLabels[labelIdx], node.x - 25, node.y);
+      }
+    });
+
     // Draw pieces
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -215,7 +242,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       
       if (useImage) {
         // Draw wizard moon image with high quality
-        const displaySize = 28; // Smaller size
+        const displaySize = 36; // Original size
         const highResSize = 128; // Use higher resolution for better quality
         ctx.save();
         
