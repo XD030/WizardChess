@@ -442,20 +442,17 @@ export function calculateRangerMoves(
     }
   });
 
-  // If no jumps available, allow simple 1-step move to adjacent empty nodes
-  if (jumpDestinations.size === 0) {
-    for (const adjIdx of adjacency[nodeIdx]) {
-      const adjNode = allNodes[adjIdx];
-      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
-      
-      if (targetPieceIdx === -1) {
-        highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-      } else {
-        // Can attack enemy
-        const targetPiece = pieces[targetPieceIdx];
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
-        }
+  // Ranger can only move by jumping over activated bards
+  // But can still attack adjacent enemies without jumping
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    
+    if (targetPieceIdx !== -1) {
+      // Can attack adjacent enemy
+      const targetPiece = pieces[targetPieceIdx];
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
     }
   }
