@@ -221,7 +221,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const leftNode = rows[rowIdx][0];
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, leftNode.x - 15, leftNode.y);
+        ctx.fillText(label, leftNode.x - 15, leftNode.y - 8);
       }
     });
 
