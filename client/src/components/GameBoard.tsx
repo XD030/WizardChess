@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Piece, MoveHighlight, NodePosition } from '@shared/schema';
 import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt } from '@/lib/gameLogic';
+import wizardHatImg from '@assets/wizard_hat.png';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -15,8 +16,16 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
+  const [wizardHatImage, setWizardHatImage] = useState<HTMLImageElement | null>(null);
 
   const LOGICAL_SIZE = 700;
+
+  // Load wizard hat image
+  useEffect(() => {
+    const img = new Image();
+    img.src = wizardHatImg;
+    img.onload = () => setWizardHatImage(img);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -201,49 +210,81 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
       const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
 
-      // Chess piece symbol
-      const symbol = getPieceSymbol(piece.type, piece.side);
+      // Determine if we should use image or symbol
+      const useImage = piece.type === 'wizard' && wizardHatImage;
       
-      // Determine outline color based on highlight state
-      let outlineColor = '#000';
-      let outlineWidth = 1.2;
-      
-      if (idx === selectedPieceIndex) {
-        // Selected piece - gold outline
-        outlineColor = '#fbbf24';
-        outlineWidth = 2.5;
-      } else if (swapHighlight) {
-        // Swap target - blue outline
-        outlineColor = '#3b82f6';
-        outlineWidth = 2.5;
-      } else if (attackHighlight) {
-        // Attack target - red outline
-        outlineColor = '#ef4444';
-        outlineWidth = 2.5;
-      } else {
-        // Normal outline based on piece color
+      if (useImage) {
+        // Draw wizard hat image
+        const imgSize = 32;
+        ctx.save();
+        
+        // Apply color filter for different sides
         if (piece.side === 'white') {
-          outlineColor = '#000';
+          ctx.filter = 'invert(1) brightness(1.2)';
         } else if (piece.side === 'black') {
-          outlineColor = '#fff';
+          ctx.filter = 'brightness(0.3)';
         } else {
-          outlineColor = '#000';
+          ctx.filter = 'invert(1) sepia(1) saturate(3) hue-rotate(240deg)';
         }
-      }
-      
-      // Draw piece with appropriate color
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = outlineWidth;
-      ctx.strokeText(symbol, node.x, node.y);
-      
-      if (piece.side === 'white') {
-        ctx.fillStyle = '#fff';
-      } else if (piece.side === 'black') {
-        ctx.fillStyle = '#000';
+        
+        ctx.drawImage(wizardHatImage, node.x - imgSize / 2, node.y - imgSize / 2, imgSize, imgSize);
+        ctx.restore();
+        
+        // Draw highlight outline if needed
+        if (idx === selectedPieceIndex || swapHighlight || attackHighlight) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 18, 0, Math.PI * 2);
+          if (idx === selectedPieceIndex) {
+            ctx.strokeStyle = '#fbbf24';
+          } else if (swapHighlight) {
+            ctx.strokeStyle = '#3b82f6';
+          } else if (attackHighlight) {
+            ctx.strokeStyle = '#ef4444';
+          }
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
       } else {
-        ctx.fillStyle = '#a855f7';
+        // Draw chess symbol for other pieces
+        const symbol = getPieceSymbol(piece.type, piece.side);
+        
+        // Determine outline color based on highlight state
+        let outlineColor = '#000';
+        let outlineWidth = 1.2;
+        
+        if (idx === selectedPieceIndex) {
+          outlineColor = '#fbbf24';
+          outlineWidth = 2.5;
+        } else if (swapHighlight) {
+          outlineColor = '#3b82f6';
+          outlineWidth = 2.5;
+        } else if (attackHighlight) {
+          outlineColor = '#ef4444';
+          outlineWidth = 2.5;
+        } else {
+          if (piece.side === 'white') {
+            outlineColor = '#000';
+          } else if (piece.side === 'black') {
+            outlineColor = '#fff';
+          } else {
+            outlineColor = '#000';
+          }
+        }
+        
+        // Draw piece with appropriate color
+        ctx.strokeStyle = outlineColor;
+        ctx.lineWidth = outlineWidth;
+        ctx.strokeText(symbol, node.x, node.y);
+        
+        if (piece.side === 'white') {
+          ctx.fillStyle = '#fff';
+        } else if (piece.side === 'black') {
+          ctx.fillStyle = '#000';
+        } else {
+          ctx.fillStyle = '#a855f7';
+        }
+        ctx.fillText(symbol, node.x, node.y);
       }
-      ctx.fillText(symbol, node.x, node.y);
     });
   }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode]);
 
