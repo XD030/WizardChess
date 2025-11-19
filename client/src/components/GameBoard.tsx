@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Piece, MoveHighlight, NodePosition } from '@shared/schema';
 import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt } from '@/lib/gameLogic';
-import wizardHatImg from '@assets/wizard_hat.png';
+import wizardMoonImg from '@assets/wizard_moon.png';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -20,10 +20,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
 
   const LOGICAL_SIZE = 700;
 
-  // Load wizard hat image
+  // Load wizard moon image
   useEffect(() => {
     const img = new Image();
-    img.src = wizardHatImg;
+    img.src = wizardMoonImg;
     img.onload = () => setWizardHatImage(img);
   }, []);
 
@@ -245,23 +245,25 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             const g = data[i + 1];
             const b = data[i + 2];
             
-            // If pixel is white or very light, make it transparent
-            if (r > 240 && g > 240 && b > 240) {
+            // Remove orange/yellow background (make it transparent)
+            // Orange is high R, medium-high G, low B
+            if ((r > 200 && g > 140 && b < 100) || // Orange background
+                (r > 240 && g > 240 && b > 240)) { // White background
               data[i + 3] = 0;
             } else {
               // Apply color based on piece side
               if (piece.side === 'white') {
-                // White hat - invert to white
+                // White moon - invert to white
                 data[i] = 255 - data[i];
                 data[i + 1] = 255 - data[i + 1];
                 data[i + 2] = 255 - data[i + 2];
               } else if (piece.side === 'neutral') {
-                // Purple hat
+                // Purple moon
                 data[i] = Math.min(255, data[i] * 0.6 + 168);
                 data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
                 data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
               }
-              // Black hat - keep as is
+              // Black moon - keep as is
             }
           }
           

@@ -1,7 +1,7 @@
 import type { Piece } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPieceSymbol, PIECE_CHINESE, SIDE_CHINESE, PIECE_DESCRIPTIONS } from '@/lib/gameLogic';
-import wizardHatImg from '@assets/wizard_hat.png';
+import wizardMoonImg from '@assets/wizard_moon.png';
 
 interface PieceInfoPanelProps {
   piece: Piece | null;
@@ -39,8 +39,8 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
         <div className="flex items-center gap-3">
           {piece.type === 'wizard' ? (
             <img 
-              src={wizardHatImg} 
-              alt="巫師帽"
+              src={wizardMoonImg} 
+              alt="巫師月亮"
               className="w-16 h-16"
               style={{
                 filter: piece.side === 'white' 
