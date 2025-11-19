@@ -213,16 +213,15 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
     });
     
-    // Column labels (1-9) at the bottom
-    const widestRow = rows[8]; // Row with 9 nodes
-    const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    const bottomY = rows[16][0].y; // Bottom vertex y position
+    // Column labels (1-9) on the left side, one per row 0-8
+    const colLabels = ['5', '4', '3', '2', '1', '2', '3', '4', '5'];
     
-    widestRow.forEach((node, idx) => {
-      if (idx < colLabels.length) {
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(colLabels[idx], node.x, bottomY + 20);
+    colLabels.forEach((label, rowIdx) => {
+      if (rowIdx < rows.length) {
+        const leftNode = rows[rowIdx][0];
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, leftNode.x - 15, leftNode.y);
       }
     });
 
