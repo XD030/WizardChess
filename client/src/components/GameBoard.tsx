@@ -82,10 +82,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
           ctx.fill();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
       } else if (rowA.length === rowB.length + 1) {
@@ -101,10 +101,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
           ctx.fill();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
       }
