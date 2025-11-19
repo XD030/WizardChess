@@ -191,7 +191,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     // Draw pieces
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 36px serif';
+    ctx.font = 'bold 28px serif';
 
     pieces.forEach((piece, idx) => {
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
@@ -201,56 +201,49 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
       const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
 
-      // Highlight rings (draw behind piece)
-      if (idx === selectedPieceIndex) {
-        // Selection ring (gold)
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      } else if (swapHighlight) {
-        // Swap target ring (blue)
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      } else if (attackHighlight) {
-        // Attack target ring (red)
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
-
       // Chess piece symbol
       const symbol = getPieceSymbol(piece.type, piece.side);
       
-      // Draw piece with appropriate color
-      if (piece.side === 'white') {
-        // White pieces - white with black outline
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
-        ctx.strokeText(symbol, node.x, node.y);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(symbol, node.x, node.y);
-      } else if (piece.side === 'black') {
-        // Black pieces - black with white outline
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeText(symbol, node.x, node.y);
-        ctx.fillStyle = '#000';
-        ctx.fillText(symbol, node.x, node.y);
+      // Determine outline color based on highlight state
+      let outlineColor = '#000';
+      let outlineWidth = 1.2;
+      
+      if (idx === selectedPieceIndex) {
+        // Selected piece - gold outline
+        outlineColor = '#fbbf24';
+        outlineWidth = 2.5;
+      } else if (swapHighlight) {
+        // Swap target - blue outline
+        outlineColor = '#3b82f6';
+        outlineWidth = 2.5;
+      } else if (attackHighlight) {
+        // Attack target - red outline
+        outlineColor = '#ef4444';
+        outlineWidth = 2.5;
       } else {
-        // Neutral (bard) - purple
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
-        ctx.strokeText(symbol, node.x, node.y);
-        ctx.fillStyle = '#a855f7';
-        ctx.fillText(symbol, node.x, node.y);
+        // Normal outline based on piece color
+        if (piece.side === 'white') {
+          outlineColor = '#000';
+        } else if (piece.side === 'black') {
+          outlineColor = '#fff';
+        } else {
+          outlineColor = '#000';
+        }
       }
+      
+      // Draw piece with appropriate color
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = outlineWidth;
+      ctx.strokeText(symbol, node.x, node.y);
+      
+      if (piece.side === 'white') {
+        ctx.fillStyle = '#fff';
+      } else if (piece.side === 'black') {
+        ctx.fillStyle = '#000';
+      } else {
+        ctx.fillStyle = '#a855f7';
+      }
+      ctx.fillText(symbol, node.x, node.y);
     });
   }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode]);
 
