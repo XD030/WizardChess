@@ -26,6 +26,7 @@ export interface Piece {
   side: Side;
   row: number;
   col: number;
+  activated?: boolean; // For bard - whether it's activated to enable jumping
 }
 
 export interface BurnMark {
