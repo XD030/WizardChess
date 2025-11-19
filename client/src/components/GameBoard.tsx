@@ -92,7 +92,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       if (!node) return;
 
       const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
-      const opacity = isHovered ? 0.6 : 0.4;
+      const opacity = isHovered ? 0.7 : 0.5;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
@@ -102,9 +102,17 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       } else if (h.type === 'swap') {
         ctx.fillStyle = `rgba(251, 191, 36, ${opacity})`;
       } else {
-        ctx.fillStyle = `rgba(239, 68, 68, ${opacity})`;
+        // Attack - use brighter red with higher opacity
+        ctx.fillStyle = `rgba(239, 68, 68, ${opacity + 0.1})`;
       }
       ctx.fill();
+      
+      // Add outline for attack targets to make them more visible
+      if (h.type === 'attack') {
+        ctx.strokeStyle = `rgba(239, 68, 68, ${opacity + 0.3})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     });
 
     // Draw pieces
