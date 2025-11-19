@@ -243,7 +243,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       
       if (useImage) {
         // Draw wizard moon image with high quality
-        const displaySize = 36; // Original size
+        const displaySize = 30; // Smaller size for wizard
         const highResSize = 128; // Use higher resolution for better quality
         ctx.save();
         
