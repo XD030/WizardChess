@@ -16,3 +16,36 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Wizard Chess Game Types
+export type PieceType = 'wizard' | 'apprentice' | 'dragon' | 'ranger' | 'paladin' | 'assassin' | 'bard';
+export type Side = 'white' | 'black' | 'neutral';
+
+export interface Piece {
+  type: PieceType;
+  side: Side;
+  row: number;
+  col: number;
+}
+
+export interface GameState {
+  pieces: Piece[];
+  currentPlayer: Side;
+  selectedPieceIndex: number;
+  gameOver: boolean;
+  winner?: Side;
+  moveHistory: string[];
+}
+
+export interface NodePosition {
+  x: number;
+  y: number;
+  row: number;
+  col: number;
+}
+
+export interface MoveHighlight {
+  type: 'move' | 'swap' | 'attack';
+  row: number;
+  col: number;
+}
