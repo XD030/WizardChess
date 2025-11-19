@@ -209,7 +209,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 15, rightNode.y);
+        ctx.fillText(label, rightNode.x + 15, rightNode.y - 8);
       }
     });
     
