@@ -385,100 +385,51 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         
         ctx.restore();
       } else if (useAssassinImage) {
-        // Draw assassin logo image
+        // Draw assassin logo image directly without processing
         const displaySize = 28;
-        const highResSize = 128;
         ctx.save();
         
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = highResSize;
-        tempCanvas.height = highResSize;
-        const tempCtx = tempCanvas.getContext('2d', { alpha: true });
+        // Determine outline color and width
+        let outlineColor = null;
+        let outlineWidth = 0;
         
-        if (tempCtx) {
-          tempCtx.imageSmoothingEnabled = true;
-          tempCtx.imageSmoothingQuality = 'high';
-          
-          tempCtx.drawImage(assassinLogoImage, 0, 0, highResSize, highResSize);
-          
-          const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-          const data = imageData.data;
-          
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const alpha = data[i + 3];
-            
-            if (alpha > 0) {
-              // Only process dark pixels (the actual logo)
-              const brightness = (r + g + b) / 3;
-              
-              // Apply color based on piece side
-              if (piece.side === 'white') {
-                // White assassin - make it white
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-              } else {
-                // Black assassin - keep it black
-                data[i] = 0;
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-              }
-            }
-          }
-          
-          tempCtx.putImageData(imageData, 0, 0);
-          
-          // Determine outline color and width
-          let outlineColor = null;
-          let outlineWidth = 0;
-          
-          if (idx === selectedPieceIndex) {
-            outlineColor = '#fbbf24';
-            outlineWidth = 3;
-          } else if (swapHighlight) {
-            outlineColor = '#3b82f6';
-            outlineWidth = 3;
-          } else if (attackHighlight) {
-            outlineColor = '#ef4444';
-            outlineWidth = 3;
-          } else if (piece.side === 'black') {
-            outlineColor = '#fff';
-            outlineWidth = 1;
-          } else if (piece.side === 'white') {
-            outlineColor = '#000';
-            outlineWidth = 1;
-          }
-          
-          // Draw outline if needed
-          if (outlineColor && outlineWidth > 0) {
-            ctx.save();
-            ctx.shadowColor = outlineColor;
-            ctx.shadowBlur = 0;
-            
-            const offsets = [
-              [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
-              [-0.8, 0],                [0.8, 0],
-              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8]
-            ];
-            
-            offsets.forEach(([dx, dy]) => {
-              ctx.shadowOffsetX = dx;
-              ctx.shadowOffsetY = dy;
-              ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
-            });
-            
-            ctx.restore();
-          }
-          
-          // Draw main image
-          ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+        if (idx === selectedPieceIndex) {
+          outlineColor = '#fbbf24';
+          outlineWidth = 3;
+        } else if (swapHighlight) {
+          outlineColor = '#3b82f6';
+          outlineWidth = 3;
+        } else if (attackHighlight) {
+          outlineColor = '#ef4444';
+          outlineWidth = 3;
         }
+        
+        // Draw outline if needed
+        if (outlineColor && outlineWidth > 0) {
+          ctx.save();
+          ctx.shadowColor = outlineColor;
+          ctx.shadowBlur = 0;
+          
+          const offsets = [
+            [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
+            [-0.8, 0],                [0.8, 0],
+            [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8]
+          ];
+          
+          offsets.forEach(([dx, dy]) => {
+            ctx.shadowOffsetX = dx;
+            ctx.shadowOffsetY = dy;
+            ctx.drawImage(assassinLogoImage, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+          });
+          
+          ctx.restore();
+        }
+        
+        // Draw main image
+        ctx.drawImage(assassinLogoImage, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
         
         ctx.restore();
       } else {
