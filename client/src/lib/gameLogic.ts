@@ -157,17 +157,17 @@ export function getNodeCoordinate(row: number, col: number): string {
 // Black triangles: upward pointing (apex at top)
 // White triangles: downward pointing (apex at bottom)
 export function isBlackTriangle(row: number, col: number): boolean {
-  // In the expanding rows (row 0-4), even columns are black (upward)
-  // In the contracting rows (row 5-8), odd columns are black (upward)
-  // This pattern alternates based on the structure of the hexagonal board
+  // Diamond board has rows 0-16 (2*N where N=8)
+  // The board expands from row 0 to row 8, then contracts from row 8 to row 16
+  // Triangle colors alternate based on position
   
-  const centerRow = 4; // Middle row of the board
+  const centerRow = N; // Middle row of the board (row 8)
   
   if (row <= centerRow) {
-    // Expanding rows: even columns are black
+    // Expanding half (rows 0-8): even columns are black
     return col % 2 === 0;
   } else {
-    // Contracting rows: odd columns are black
+    // Contracting half (rows 9-16): odd columns are black
     return col % 2 === 1;
   }
 }
