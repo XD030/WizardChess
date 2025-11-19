@@ -86,8 +86,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.fill();
     });
 
-    // Draw highlights
+    // Draw move highlights (only for empty squares)
     highlights.forEach((h) => {
+      if (h.type !== 'move') return;
+      
       const node = allNodes.find((n) => n.row === h.row && n.col === h.col);
       if (!node) return;
 
@@ -96,23 +98,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
-      
-      if (h.type === 'move') {
-        ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
-      } else if (h.type === 'swap') {
-        ctx.fillStyle = `rgba(251, 191, 36, ${opacity})`;
-      } else {
-        // Attack - use brighter red with higher opacity
-        ctx.fillStyle = `rgba(239, 68, 68, ${opacity + 0.1})`;
-      }
+      ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
       ctx.fill();
-      
-      // Add outline for attack targets to make them more visible
-      if (h.type === 'attack') {
-        ctx.strokeStyle = `rgba(239, 68, 68, ${opacity + 0.3})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
     });
 
     // Draw pieces
@@ -123,6 +110,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     pieces.forEach((piece, idx) => {
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
       if (!node) return;
+
+      // Check if this piece is a swap or attack target
+      const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
+      const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
 
       // Background circle
       ctx.beginPath();
@@ -136,10 +127,21 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
       ctx.fill();
 
-      // Selection ring
+      // Highlight rings
       if (idx === selectedPieceIndex) {
+        // Selection ring (gold)
         ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (swapHighlight) {
+        // Swap target ring (yellow)
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      } else if (attackHighlight) {
+        // Attack target ring (red)
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
         ctx.stroke();
       }
 
