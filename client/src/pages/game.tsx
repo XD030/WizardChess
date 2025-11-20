@@ -17,7 +17,7 @@ import {
   buildAllNodes,
   buildAdjacency,
   getNodeCoordinate,
-  isBlackTriangle,
+  updateAssassinStealth,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
 
@@ -156,7 +156,10 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
 
     if (highlight.type === 'move') {
-      newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
+      // Update assassin stealth state based on target triangle color
+      const movedPiece = updateAssassinStealth({ ...selectedPiece, row, col }, row, col);
+      
+      newPieces[selectedPieceIndex] = movedPiece;
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       
       // If dragon moves, add burn marks to the path (including starting point, excluding destination)
@@ -197,12 +200,22 @@ export default function Game() {
     } else if (highlight.type === 'swap') {
       const targetIdx = clickedPieceIdx;
       const targetPiece = pieces[targetIdx];
-      newPieces[selectedPieceIndex] = { ...selectedPiece, row, col };
-      newPieces[targetIdx] = {
-        ...targetPiece,
-        row: selectedPiece.row,
-        col: selectedPiece.col,
-      };
+      
+      // Update positions and assassin stealth states
+      const movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row, col },
+        row,
+        col
+      );
+      const swappedPiece = updateAssassinStealth(
+        { ...targetPiece, row: selectedPiece.row, col: selectedPiece.col },
+        selectedPiece.row,
+        selectedPiece.col
+      );
+      
+      newPieces[selectedPieceIndex] = movedPiece;
+      newPieces[targetIdx] = swappedPiece;
+      
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     } else if (highlight.type === 'attack') {
       const targetIdx = clickedPieceIdx;
@@ -214,8 +227,14 @@ export default function Game() {
       // Adjust selectedPieceIndex if needed (if target was before selected piece)
       const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
       
-      // Move the attacking piece to the target position
-      newPieces[adjustedIdx] = { ...selectedPiece, row, col };
+      // Move the attacking piece to the target position and update stealth
+      const movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row, col },
+        row,
+        col
+      );
+      
+      newPieces[adjustedIdx] = movedPiece;
       
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }

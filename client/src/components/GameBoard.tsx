@@ -15,7 +15,10 @@ interface GameBoardProps {
 
 // Helper function to check if a piece should be visible to current player
 function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean {
-  // All pieces are always visible (stealth disabled)
+  // Stealthed assassins are only visible to their own side
+  if (piece.type === 'assassin' && piece.stealthed) {
+    return piece.side === currentPlayer;
+  }
   return true;
 }
 
@@ -400,6 +403,11 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         const displaySize = 28;
         const highResSize = 128;
         ctx.save();
+        
+        // Apply transparency for stealthed assassins (visible to own side only)
+        if (piece.stealthed && piece.side === currentPlayer) {
+          ctx.globalAlpha = 0.5;
+        }
         
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';

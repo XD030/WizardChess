@@ -181,6 +181,17 @@ export function isBlackTriangle(row: number, col: number): boolean {
   return (row + col) % 2 === 0;
 }
 
+// Update assassin stealth state based on triangle color
+// Should be called whenever an assassin moves to a new position
+export function updateAssassinStealth(piece: Piece, row: number, col: number): Piece {
+  if (piece.type !== 'assassin') {
+    return piece;
+  }
+  
+  const isOnBlack = isBlackTriangle(row, col);
+  return { ...piece, stealthed: isOnBlack };
+}
+
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
   const rcToIndex: Record<string, number> = {};
   let idx = 0;

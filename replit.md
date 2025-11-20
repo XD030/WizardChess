@@ -72,7 +72,7 @@ Preferred communication style: Simple, everyday language.
 - Ranger: Cannon-style attack - single-step movement or jump over any piece to attack distant enemies
 - Griffin: Unlimited horizontal movement (y constant, same rank) OR single-step diagonal movement where both file and rank change by ±1 (e.g., G7→F6 or G7→H8, moving to non-adjacent nodes not in the hex adjacency list)
 - Paladin: Diagonal movement pattern
-- Assassin: Parallelogram diagonal moves (stealth feature removed per user request)
+- Assassin: Parallelogram diagonal moves with stealth mechanic (white triangle = visible, black triangle = stealthed and invisible to enemy)
 - Bard: Activation-based jumping ability
 
 **Game State Management**: Centralized state includes pieces array, current player, selected piece, move history, burn marks, and game-over conditions. All mutations flow through event handlers in the main Game component.
