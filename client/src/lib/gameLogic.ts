@@ -432,13 +432,18 @@ export function calculateRangerMoves(
     const adjNode = allNodes[adjIdx];
     const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
 
+    console.log(`检查方向: 游侠(${piece.row},${piece.col})=${getNodeCoordinate(piece.row, piece.col)} -> adj(${adjNode.row},${adjNode.col})=${getNodeCoordinate(adjNode.row, adjNode.col)}, pieceAtAdj=${pieceAtAdj}`);
+
     // If there's a piece at adjacent position, try to jump over it
     // Exception: Cannot jump over unactivated bards
     if (pieceAtAdj !== -1) {
       const adjacentPiece = pieces[pieceAtAdj];
       
+      console.log(`  跳过棋子: type=${adjacentPiece.type}, side=${adjacentPiece.side}`);
+      
       // Skip if it's an unactivated bard
       if (adjacentPiece.type === 'bard' && !adjacentPiece.activated) {
+        console.log(`  ✗ 不能跳过未激活的吟游诗人`);
         continue;
       }
       
@@ -447,14 +452,20 @@ export function calculateRangerMoves(
       let currentIdx = adjIdx;
       let nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       
+      console.log(`  沿直线搜索，nextIdx=${nextIdx}`);
+      
       while (nextIdx !== -1) {
         const nextNode = allNodes[nextIdx];
         const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
         
+        console.log(`    检查(${nextNode.row},${nextNode.col})=${getNodeCoordinate(nextNode.row, nextNode.col)}, piece=${pieceAtNext}`);
+        
         // Found a piece - check if it's an enemy
         if (pieceAtNext !== -1) {
           const targetPiece = pieces[pieceAtNext];
+          console.log(`      找到棋子: type=${targetPiece.type}, side=${targetPiece.side}`);
           if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+            console.log(`      ✓ 可以炮攻击`);
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
           // Stop searching in this direction (found a piece)
