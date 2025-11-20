@@ -453,8 +453,8 @@ export function calculateRangerMoves(
           // Check if jump destination is valid
           const pieceAtJump = getPieceAt(pieces, jumpNode.row, jumpNode.col);
           
-          // Can only land on empty space or enemy piece
-          if (pieceAtJump === -1 || (pieceAtJump !== -1 && pieces[pieceAtJump].side !== piece.side && pieces[pieceAtJump].side !== 'neutral')) {
+          // Can ONLY land on empty space (cannot jump to attack)
+          if (pieceAtJump === -1) {
             if (!visitedPositions.has(posKey)) {
               visitedPositions.add(posKey);
               const newState = {
@@ -469,7 +469,7 @@ export function calculateRangerMoves(
               }
 
               // If we can still jump (less than 2 jumps), continue exploring
-              if (newState.jumpsCount < 2 && pieceAtJump === -1) {
+              if (newState.jumpsCount < 2) {
                 queue.push(newState);
               }
             }
@@ -479,17 +479,10 @@ export function calculateRangerMoves(
     }
   }
 
-  // Add jump destinations to highlights
+  // Add jump destinations to highlights (all jumps are to empty spaces)
   Array.from(jumpDestinations.entries()).forEach(([posKey, state]) => {
     const [row, col] = posKey.split(',').map(Number);
-    const pieceAtDest = getPieceAt(pieces, row, col);
-    
-    if (pieceAtDest === -1) {
-      highlights.push({ type: 'move', row, col });
-    } else {
-      // Enemy piece - can attack
-      highlights.push({ type: 'attack', row, col });
-    }
+    highlights.push({ type: 'move', row, col });
   });
 
   // Ranger can also move 1 step to adjacent nodes (in addition to jumping)
