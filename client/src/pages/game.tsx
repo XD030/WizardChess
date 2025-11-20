@@ -487,6 +487,23 @@ export default function Game() {
       newPieces[selectedPieceIndex] = movedPiece;
       newPieces[targetIdx] = swappedPiece;
       
+      // If a paladin was involved in the swap, reveal assassins in its new protection zone
+      if (movedPiece.type === 'paladin') {
+        const zones = calculatePaladinProtectionZone(movedPiece, newPieces, adjacency, allNodes);
+        const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPiece.side);
+        for (let i = 0; i < newPieces.length; i++) {
+          newPieces[i] = revealedPieces[i];
+        }
+      }
+      
+      if (swappedPiece.type === 'paladin') {
+        const zones = calculatePaladinProtectionZone(swappedPiece, newPieces, adjacency, allNodes);
+        const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, swappedPiece.side);
+        for (let i = 0; i < newPieces.length; i++) {
+          newPieces[i] = revealedPieces[i];
+        }
+      }
+      
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     } else if (highlight.type === 'attack') {
       const targetIdx = clickedPieceIdx;
