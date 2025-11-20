@@ -74,7 +74,7 @@ Preferred communication style: Simple, everyday language.
 - Ranger: Cannon-style attack - single-step movement or jump over any piece to attack distant enemies
 - Griffin: Unlimited horizontal movement (y constant, same rank) OR single-step diagonal movement where both file and rank change by ±1 (e.g., G7→F6 or G7→H8, moving to non-adjacent nodes not in the hex adjacency list)
 - Paladin: Diagonal movement pattern with guard mechanism:
-  - Protection Zone: Adjacent nodes with friendly pieces, excluding nodes forming triangles with enemy pieces
+  - Protection Zone: All adjacent nodes with friendly pieces (simplified rule)
   - Guard Trigger: When an enemy attacks a piece in the protection zone, a dialog appears offering guard options
   - Guard Effect: Selected paladin swaps position with the attacked piece, then dies at its original position, leaving a golden holy light marker
   - Visual: Protected pieces show cyan border (#06b6d4) when paladin selected; holy light markers display golden glow with cross symbol
