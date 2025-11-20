@@ -314,10 +314,10 @@ export default function Game() {
     if (selectedPieceIndex === -1) {
       if (clickedPieceIdx !== -1) {
         const piece = pieces[clickedPieceIdx];
-        // Allow selecting any piece for viewing info, but only calculate moves for own pieces
+        // Allow selecting any piece for viewing info, but only calculate moves for own pieces or neutral pieces
         setSelectedPieceIndex(clickedPieceIdx);
         
-        if (piece.side === currentPlayer) {
+        if (piece.side === currentPlayer || piece.side === 'neutral') {
           
           // Calculate moves based on piece type
           if (allNodes.length > 0) {
@@ -399,10 +399,10 @@ export default function Game() {
       // Try selecting a different piece
       if (clickedPieceIdx !== -1) {
         const piece = pieces[clickedPieceIdx];
-        // Allow selecting any piece for viewing info, but only calculate moves for own pieces
+        // Allow selecting any piece for viewing info, but only calculate moves for own pieces or neutral pieces
         setSelectedPieceIndex(clickedPieceIdx);
         
-        if (piece.side === currentPlayer) {
+        if (piece.side === currentPlayer || piece.side === 'neutral') {
           
           // Calculate moves based on piece type
           if (allNodes.length > 0) {
