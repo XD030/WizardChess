@@ -394,29 +394,46 @@ export default function Game() {
       const actualTargetIdx = getPieceAt(pieces, row, col);
       
       if (actualTargetIdx !== -1) {
-        // There's a piece here (probably a stealthed assassin), kill it
+        // There's a piece here (probably a stealthed assassin), kill it (unless it's a bard)
         const targetPiece = pieces[actualTargetIdx];
-        newPieces.splice(actualTargetIdx, 1);
         
-        // Adjust selectedPieceIndex if needed
-        const adjustedIdx = actualTargetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
-        
-        // Update assassin stealth state based on movement direction
-        let movedPiece = updateAssassinStealth(
-          { ...selectedPiece, row, col },
-          selectedPiece.row,
-          selectedPiece.col,
-          row,
-          col
-        );
-        
-        // Assassin reveals itself after killing
-        if (movedPiece.type === 'assassin') {
-          movedPiece = { ...movedPiece, stealthed: false };
+        if (targetPiece.type !== 'bard') {
+          newPieces.splice(actualTargetIdx, 1);
+          
+          // Activate all bards when any piece is captured
+          for (let i = 0; i < newPieces.length; i++) {
+            if (newPieces[i].type === 'bard') {
+              newPieces[i] = { ...newPieces[i], activated: true };
+            }
+          }
+          
+          // Adjust selectedPieceIndex if needed
+          const adjustedIdx = actualTargetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+          
+          // Update assassin stealth state based on movement direction
+          let movedPiece = updateAssassinStealth(
+            { ...selectedPiece, row, col },
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col
+          );
+          
+          // Assassin reveals itself after killing
+          if (movedPiece.type === 'assassin') {
+            movedPiece = { ...movedPiece, stealthed: false };
+          }
+          
+          newPieces[adjustedIdx] = movedPiece;
+          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+        } else {
+          // Cannot kill bard, move fails - just reset selection
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          return;
         }
-        
-        newPieces[adjustedIdx] = movedPiece;
-        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       } else {
         // Normal move to empty space
         // Update assassin stealth state based on movement direction
@@ -565,29 +582,44 @@ export default function Game() {
       }
       
       // No guard available, proceed with normal attack
-      // Remove the attacked piece first
-      newPieces.splice(targetIdx, 1);
-      
-      // Adjust selectedPieceIndex if needed (if target was before selected piece)
-      const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
-      
-      // Move the attacking piece to the target position and update stealth
-      let movedPiece = updateAssassinStealth(
-        { ...selectedPiece, row, col },
-        selectedPiece.row,
-        selectedPiece.col,
-        row,
-        col
-      );
-      
-      // If the attacking piece is an assassin, it reveals itself after killing
-      if (movedPiece.type === 'assassin') {
-        movedPiece = { ...movedPiece, stealthed: false };
+      // Remove the attacked piece first (unless it's a bard - bards cannot be killed)
+      if (targetPiece.type !== 'bard') {
+        newPieces.splice(targetIdx, 1);
+        
+        // Activate all bards when any piece is captured
+        for (let i = 0; i < newPieces.length; i++) {
+          if (newPieces[i].type === 'bard') {
+            newPieces[i] = { ...newPieces[i], activated: true };
+          }
+        }
       }
       
-      newPieces[adjustedIdx] = movedPiece;
+      // Adjust selectedPieceIndex if needed (if target was before selected piece and was actually removed)
+      const adjustedIdx = (targetPiece.type !== 'bard' && targetIdx < selectedPieceIndex) 
+        ? selectedPieceIndex - 1 
+        : selectedPieceIndex;
       
-      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+      // Move the attacking piece to the target position and update stealth (only if target wasn't a bard)
+      if (targetPiece.type !== 'bard') {
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row, col },
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col
+        );
+        
+        // If the attacking piece is an assassin, it reveals itself after killing
+        if (movedPiece.type === 'assassin') {
+          movedPiece = { ...movedPiece, stealthed: false };
+        }
+        
+        newPieces[adjustedIdx] = movedPiece;
+      }
+      
+      moveDesc = targetPiece.type === 'bard'
+        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
+        : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
     
     // If a paladin just moved, reveal any stealthed enemy assassins in its new protection zone
