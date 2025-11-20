@@ -181,12 +181,13 @@ export function isBlackTriangle(row: number, col: number): boolean {
   return (row + col) % 2 === 1;
 }
 
-// Update assassin stealth state based on movement direction
+// Update assassin stealth state based on movement direction only
 // Should be called whenever an assassin moves to a new position
 // Rule: Use rotated coordinate system (file x, rank y)
 // - If Δx + Δy = 1: Enter stealth (moving into black triangle)
 // - If Δx + Δy = -1: Reveal (moving into white triangle)
 // - Otherwise: Maintain current state
+// Note: Protection zone reveals are handled separately via revealAssassinsInProtectionZones
 export function updateAssassinStealth(
   piece: Piece,
   fromRow: number,
@@ -219,6 +220,24 @@ export function updateAssassinStealth(
   
   // Otherwise: Maintain current state
   return piece;
+}
+
+// Check and reveal all stealthed assassins in protection zones
+// Should be called after any piece movement to check if stealthed assassins are in protection zones
+export function revealAssassinsInProtectionZones(
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): Piece[] {
+  return pieces.map((piece) => {
+    if (piece.type === 'assassin' && piece.stealthed) {
+      const enemySide = piece.side === 'white' ? 'black' : 'white';
+      if (isInProtectionZone(piece.row, piece.col, pieces, enemySide, adjacency, allNodes)) {
+        return { ...piece, stealthed: false };
+      }
+    }
+    return piece;
+  });
 }
 
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
@@ -745,6 +764,119 @@ export function calculatePaladinMoves(
   }
 
   return highlights;
+}
+
+// Calculate paladin protection zones for a given paladin
+// Protection zone: adjacent nodes that are:
+// 1. On the same color triangle as the paladin
+// 2. Have friendly pieces
+// 3. Don't form a triangle with enemy pieces
+export function calculatePaladinProtectionZone(
+  paladin: Piece,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): { row: number; col: number }[] {
+  const protectionZone: { row: number; col: number }[] = [];
+  
+  const paladinIdx = allNodes.findIndex((n) => n.row === paladin.row && n.col === paladin.col);
+  if (paladinIdx === -1) return protectionZone;
+  
+  // Determine paladin's triangle color
+  const paladinIsBlack = isBlackTriangle(paladin.row, paladin.col);
+  
+  // Check all adjacent nodes
+  for (const adjIdx of adjacency[paladinIdx]) {
+    const adjNode = allNodes[adjIdx];
+    
+    // Check if adjacent node is same color triangle
+    const adjIsBlack = isBlackTriangle(adjNode.row, adjNode.col);
+    if (adjIsBlack !== paladinIsBlack) {
+      continue; // Different color, skip
+    }
+    
+    // Check if there's a friendly piece at this node
+    const pieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    if (pieceIdx === -1) {
+      continue; // No piece, skip
+    }
+    
+    const pieceAtNode = pieces[pieceIdx];
+    if (pieceAtNode.side !== paladin.side) {
+      continue; // Not friendly, skip
+    }
+    
+    // Check if this node forms a triangle with any enemy piece
+    // A triangle is formed when the paladin, the friendly piece, and an enemy piece
+    // are all mutually adjacent
+    let formsTriangleWithEnemy = false;
+    
+    for (const otherAdjIdx of adjacency[paladinIdx]) {
+      if (otherAdjIdx === adjIdx) continue;
+      
+      const otherNode = allNodes[otherAdjIdx];
+      const otherPieceIdx = getPieceAt(pieces, otherNode.row, otherNode.col);
+      
+      if (otherPieceIdx === -1) continue;
+      
+      const otherPiece = pieces[otherPieceIdx];
+      if (otherPiece.side === paladin.side || otherPiece.side === 'neutral') {
+        continue; // Not enemy
+      }
+      
+      // Check if adjNode and otherNode are adjacent to each other
+      // If yes, they form a triangle with the paladin
+      if (adjacency[adjIdx].includes(otherAdjIdx)) {
+        formsTriangleWithEnemy = true;
+        break;
+      }
+    }
+    
+    if (!formsTriangleWithEnemy) {
+      protectionZone.push({ row: adjNode.row, col: adjNode.col });
+    }
+  }
+  
+  return protectionZone;
+}
+
+// Get all protection zones from all paladins of a given side
+export function getAllProtectionZones(
+  pieces: Piece[],
+  side: 'white' | 'black',
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): { row: number; col: number }[] {
+  const allZones: { row: number; col: number }[] = [];
+  const zoneSet = new Set<string>();
+  
+  pieces.forEach((piece) => {
+    if (piece.type === 'paladin' && piece.side === side) {
+      const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
+      zones.forEach((zone) => {
+        const key = `${zone.row},${zone.col}`;
+        if (!zoneSet.has(key)) {
+          zoneSet.add(key);
+          allZones.push(zone);
+        }
+      });
+    }
+  });
+  
+  return allZones;
+}
+
+// Check if a position is in any protection zone
+export function isInProtectionZone(
+  row: number,
+  col: number,
+  pieces: Piece[],
+  protectingSide: 'white' | 'black',
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): boolean {
+  const zones = getAllProtectionZones(pieces, protectingSide, adjacency, allNodes);
+  return zones.some(zone => zone.row === row && zone.col === col);
 }
 
 // Helper function to find jump target node

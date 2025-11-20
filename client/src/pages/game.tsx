@@ -19,6 +19,7 @@ import {
   buildAdjacency,
   getNodeCoordinate,
   updateAssassinStealth,
+  revealAssassinsInProtectionZones,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
 
@@ -261,7 +262,10 @@ export default function Game() {
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
 
-    setPieces(newPieces);
+    // Reveal any assassins in protection zones after the move
+    const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
+    
+    setPieces(revealedPieces);
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
     setHighlights([]);
