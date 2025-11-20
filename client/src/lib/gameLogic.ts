@@ -97,7 +97,8 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
     name: '《獅鷲》',
     move: [
       '往正前後的點移動 1 節點。',
-      '或者只沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '或者沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '或者沿對角線方向（x=y 方向）前進，距離不限，不可轉換方向或穿越其他棋子。',
     ],
     ability: ['碰到潛行刺客會擊殺。'],
   },
@@ -511,8 +512,25 @@ export function calculateRangerMoves(
   return highlights;
 }
 
+// Helper function to get rotated square coordinates
+function getRotatedCoords(row: number, col: number): { x: number; y: number } {
+  let x: number;
+  let y: number;
+  
+  if (row <= 8) {
+    x = col;
+    y = row - col;
+  } else {
+    const offset = row - 8;
+    x = col + offset;
+    y = 8 - col;
+  }
+  
+  return { x, y };
+}
+
 // Calculate griffin moves
-// Can move 1 step forward/backward OR move unlimited distance horizontally
+// Can move 1 step forward/backward OR move unlimited distance along two diagonal directions
 export function calculateGriffinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -524,6 +542,9 @@ export function calculateGriffinMoves(
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   
   if (nodeIdx === -1) return highlights;
+
+  // Get rotated coordinates of current position
+  const currentCoords = getRotatedCoords(piece.row, piece.col);
 
   // Part 1: Single step forward or backward
   // For white (bottom), forward means row decreases (towards top)
@@ -552,12 +573,11 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 2: Unlimited horizontal movement (same row, left or right)
-  // Follow straight lines in directions that keep the same row
+  // Part 2: Unlimited horizontal movement (same row, x+y constant)
   for (const firstAdjIdx of adjacency[nodeIdx]) {
     const firstAdjNode = allNodes[firstAdjIdx];
     
-    // Only consider directions that stay on the same row
+    // Only consider horizontal direction (same row)
     if (firstAdjNode.row !== piece.row) {
       continue;
     }
@@ -574,25 +594,61 @@ export function calculateGriffinMoves(
       const nextNode = allNodes[nextIdx];
       const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
       
-      // If there's a piece at this position
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
-        
-        // Can attack enemy pieces (including stealthed assassins)
         if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
           highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
         }
-        
-        // Stop - cannot pass through pieces
         break;
       }
       
-      // Empty node - can move here
       highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
-      
-      // Continue in the same direction
       currentIdx = nextIdx;
       nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
+    }
+  }
+
+  // Part 3: Unlimited diagonal movement along x=y direction
+  // This direction may not follow adjacency connections, so we iterate through all nodes
+  const targetXY = currentCoords.x;  // For x=y diagonal, x and y should remain equal
+  
+  for (let deltaSign of [-1, 1]) {
+    // Try both directions along x=y diagonal
+    let distance = 1;
+    let foundBlocker = false;
+    
+    while (!foundBlocker && distance < 17) {
+      const targetX = currentCoords.x + (distance * deltaSign);
+      const targetY = currentCoords.y + (distance * deltaSign);
+      
+      // Find the node with these rotated coordinates
+      let targetNode = null;
+      for (const node of allNodes) {
+        const nodeCoords = getRotatedCoords(node.row, node.col);
+        if (nodeCoords.x === targetX && nodeCoords.y === targetY) {
+          targetNode = node;
+          break;
+        }
+      }
+      
+      if (!targetNode) {
+        // No such node exists on the board
+        break;
+      }
+      
+      const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
+      
+      if (targetPieceIdx !== -1) {
+        const targetPiece = pieces[targetPieceIdx];
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+          highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
+        }
+        foundBlocker = true;
+      } else {
+        highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
+      }
+      
+      distance++;
     }
   }
 

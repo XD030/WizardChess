@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a strategic wizard chess game featuring unique piece abilities and line-of-sight attacks on a diamond-shaped board. The game is built as a single-page web application with a dark fantasy aesthetic, supporting both English and Traditional Chinese (繁體中文) content. Players take turns moving specialized chess pieces (wizards, apprentices, dragons, rangers, paladins, assassins, and bards) across a non-traditional board layout, utilizing special abilities like stealth, teleportation, and line-of-sight attacks.
+This is a strategic wizard chess game featuring unique piece abilities and line-of-sight attacks on a diamond-shaped board. The game is built as a single-page web application with a dark fantasy aesthetic, supporting both English and Traditional Chinese (繁體中文) content. Players take turns moving specialized chess pieces (wizards, apprentices, dragons, rangers, paladins, assassins, griffins, and bards) across a non-traditional board layout, utilizing special abilities like stealth, teleportation, and line-of-sight attacks.
 
 ## User Preferences
 
@@ -69,9 +69,10 @@ Preferred communication style: Simple, everyday language.
 - Wizard: Single-node movement plus line-of-sight attacks through apprentices/bards
 - Apprentice: Forward-only movement with position swapping ability
 - Dragon: Straight-line movement with burn marks (persistent hazards)
-- Ranger: Jumping movement ignoring obstacles
+- Ranger: Cannon-style attack - single-step movement or jump over any piece to attack distant enemies
+- Griffin: Forward/backward single-step movement OR unlimited straight-line movement along two diagonal directions (horizontal: x+y constant, and x=y diagonal)
 - Paladin: Diagonal movement pattern
-- Assassin: Stealth mechanic hiding piece from opponents
+- Assassin: Parallelogram diagonal moves (stealth feature removed per user request)
 - Bard: Activation-based jumping ability
 
 **Game State Management**: Centralized state includes pieces array, current player, selected piece, move history, burn marks, and game-over conditions. All mutations flow through event handlers in the main Game component.
