@@ -181,15 +181,36 @@ export function isBlackTriangle(row: number, col: number): boolean {
   return (row + col) % 2 === 0;
 }
 
-// Update assassin stealth state based on triangle color
+// Update assassin stealth state based on movement direction
 // Should be called whenever an assassin moves to a new position
-export function updateAssassinStealth(piece: Piece, row: number, col: number): Piece {
+// 白→黑：進入潛行 (white to black: enter stealth)
+// 黑→白：現形 (black to white: reveal)
+export function updateAssassinStealth(
+  piece: Piece,
+  fromRow: number,
+  fromCol: number,
+  toRow: number,
+  toCol: number
+): Piece {
   if (piece.type !== 'assassin') {
     return piece;
   }
   
-  const isOnBlack = isBlackTriangle(row, col);
-  return { ...piece, stealthed: isOnBlack };
+  const fromBlack = isBlackTriangle(fromRow, fromCol);
+  const toBlack = isBlackTriangle(toRow, toCol);
+  
+  // 白→黑：進入潛行
+  if (!fromBlack && toBlack) {
+    return { ...piece, stealthed: true };
+  }
+  
+  // 黑→白：現形
+  if (fromBlack && !toBlack) {
+    return { ...piece, stealthed: false };
+  }
+  
+  // 白→白 或 黑→黑：保持原狀態
+  return piece;
 }
 
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {

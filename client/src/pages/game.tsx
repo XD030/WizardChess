@@ -156,8 +156,14 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
 
     if (highlight.type === 'move') {
-      // Update assassin stealth state based on target triangle color
-      const movedPiece = updateAssassinStealth({ ...selectedPiece, row, col }, row, col);
+      // Update assassin stealth state based on movement direction
+      const movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row, col },
+        selectedPiece.row,
+        selectedPiece.col,
+        row,
+        col
+      );
       
       newPieces[selectedPieceIndex] = movedPiece;
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
@@ -204,11 +210,15 @@ export default function Game() {
       // Update positions and assassin stealth states
       const movedPiece = updateAssassinStealth(
         { ...selectedPiece, row, col },
+        selectedPiece.row,
+        selectedPiece.col,
         row,
         col
       );
       const swappedPiece = updateAssassinStealth(
         { ...targetPiece, row: selectedPiece.row, col: selectedPiece.col },
+        targetPiece.row,
+        targetPiece.col,
         selectedPiece.row,
         selectedPiece.col
       );
@@ -230,6 +240,8 @@ export default function Game() {
       // Move the attacking piece to the target position and update stealth
       const movedPiece = updateAssassinStealth(
         { ...selectedPiece, row, col },
+        selectedPiece.row,
+        selectedPiece.col,
         row,
         col
       );
