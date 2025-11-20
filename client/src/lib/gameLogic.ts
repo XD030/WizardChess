@@ -1105,6 +1105,96 @@ export function calculateDragonPath(
   return path;
 }
 
+// Calculate bard moves - checker-style jumping
+export function calculateBardMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
+): MoveHighlight[] {
+  const highlights: MoveHighlight[] = [];
+  
+  // Bard can only move when activated
+  if (!piece.activated) {
+    return highlights;
+  }
+  
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  if (nodeIdx === -1) return highlights;
+  
+  // BFS to find all reachable positions via jumping and single-step moves
+  const visited = new Set<number>();
+  const queue: { idx: number; jumped: boolean }[] = [{ idx: nodeIdx, jumped: false }];
+  visited.add(nodeIdx);
+  
+  while (queue.length > 0) {
+    const { idx: currentIdx, jumped } = queue.shift()!;
+    
+    // Try single-step adjacent moves (only if we haven't jumped yet)
+    if (!jumped) {
+      for (const adjIdx of adjacency[currentIdx]) {
+        if (visited.has(adjIdx)) continue;
+        
+        const adjNode = allNodes[adjIdx];
+        
+        // Cannot pass through enemy holy light
+        if (!canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
+          continue;
+        }
+        
+        const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+        
+        // Landing spot must be empty
+        if (targetPieceIdx === -1) {
+          visited.add(adjIdx);
+          highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+          // Don't add to queue - single step moves don't continue
+        }
+      }
+    }
+    
+    // Try jumping over adjacent pieces
+    for (const adjIdx of adjacency[currentIdx]) {
+      const adjNode = allNodes[adjIdx];
+      const overPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+      
+      // Must have a piece to jump over (activated bards can be jumped)
+      if (overPieceIdx === -1) continue;
+      
+      const overPiece = pieces[overPieceIdx];
+      
+      // Can jump over any piece (if activated bard) or non-bard pieces
+      if (overPiece.type !== 'bard' || overPiece.activated) {
+        // Calculate landing position
+        const landingIdx = findJumpTarget(currentIdx, adjIdx, adjacency, allNodes);
+        
+        if (landingIdx !== -1 && !visited.has(landingIdx)) {
+          const landingNode = allNodes[landingIdx];
+          
+          // Cannot pass through enemy holy light
+          if (!canOccupyNode(landingNode.row, landingNode.col, piece.side, holyLights)) {
+            continue;
+          }
+          
+          const landingPieceIdx = getPieceAt(pieces, landingNode.row, landingNode.col);
+          
+          // Landing spot must be empty
+          if (landingPieceIdx === -1) {
+            visited.add(landingIdx);
+            highlights.push({ type: 'move', row: landingNode.row, col: landingNode.col });
+            // Continue jumping from this position
+            queue.push({ idx: landingIdx, jumped: true });
+          }
+        }
+      }
+    }
+  }
+  
+  return highlights;
+}
+
 // Convert (row, col) to rotated square coordinates (x, y)
 function toRotatedSquare(row: number, col: number): { x: number; y: number } {
   if (row <= 8) {
