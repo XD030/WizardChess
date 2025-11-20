@@ -548,6 +548,23 @@ export default function Game() {
       
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
+    
+    // If a paladin just moved, reveal any stealthed enemy assassins in its new protection zone
+    if (selectedPiece.type === 'paladin') {
+      const movedPaladin = newPieces[highlight.type === 'attack' 
+        ? (clickedPieceIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex)
+        : selectedPieceIndex];
+      
+      if (movedPaladin) {
+        const zones = calculatePaladinProtectionZone(movedPaladin, newPieces, adjacency, allNodes);
+        const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPaladin.side);
+        
+        // Update newPieces with revealed assassins
+        for (let i = 0; i < newPieces.length; i++) {
+          newPieces[i] = revealedPieces[i];
+        }
+      }
+    }
 
     setPieces(newPieces);
     setMoveHistory([...moveHistory, moveDesc]);
