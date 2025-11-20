@@ -183,8 +183,8 @@ export function isBlackTriangle(row: number, col: number): boolean {
 
 // Update assassin stealth state based on movement direction
 // Should be called whenever an assassin moves to a new position
-// 白→黑：進入潛行 (white to black: enter stealth)
-// 黑→白：現形 (black to white: reveal)
+// 黑→白：進入潛行 (black triangle to white triangle: enter stealth)
+// 白→黑：現形 (white triangle to black triangle: reveal)
 export function updateAssassinStealth(
   piece: Piece,
   fromRow: number,
@@ -199,13 +199,13 @@ export function updateAssassinStealth(
   const fromBlack = isBlackTriangle(fromRow, fromCol);
   const toBlack = isBlackTriangle(toRow, toCol);
   
-  // 白→黑：進入潛行
-  if (!fromBlack && toBlack) {
+  // 黑→白：進入潛行
+  if (fromBlack && !toBlack) {
     return { ...piece, stealthed: true };
   }
   
-  // 黑→白：現形
-  if (fromBlack && !toBlack) {
+  // 白→黑：現形
+  if (!fromBlack && toBlack) {
     return { ...piece, stealthed: false };
   }
   
