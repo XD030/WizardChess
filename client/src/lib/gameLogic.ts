@@ -447,14 +447,20 @@ export function calculateRangerMoves(
       let currentIdx = adjIdx;
       let nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       
+      console.log(`  跳过(${adjNode.row},${adjNode.col})后沿直线搜索，nextIdx=${nextIdx}`);
+      
       while (nextIdx !== -1) {
         const nextNode = allNodes[nextIdx];
         const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
         
+        console.log(`    位置(${nextNode.row},${nextNode.col}): pieceAtNext=${pieceAtNext}`);
+        
         // Found a piece - check if it's an enemy
         if (pieceAtNext !== -1) {
           const targetPiece = pieces[pieceAtNext];
+          console.log(`      棋子: type=${targetPiece.type}, side=${targetPiece.side}`);
           if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+            console.log(`      ✓ 添加炮攻击`);
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
           // Stop searching in this direction (found a piece)
@@ -464,6 +470,11 @@ export function calculateRangerMoves(
         // Continue searching in the same direction
         currentIdx = nextIdx;
         nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
+        console.log(`    继续搜索，nextIdx=${nextIdx}`);
+      }
+      
+      if (nextIdx === -1) {
+        console.log(`    搜索结束（到达边界或无下一个节点）`);
       }
     }
   }
