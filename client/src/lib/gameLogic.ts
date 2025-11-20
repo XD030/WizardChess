@@ -870,6 +870,30 @@ export function isInProtectionZone(
   return zones.some(zone => zone.row === row && zone.col === col);
 }
 
+// Find all paladins that can guard a specific position
+export function findGuardingPaladins(
+  targetRow: number,
+  targetCol: number,
+  pieces: Piece[],
+  side: 'white' | 'black',
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): number[] {
+  const guardingPaladinIndices: number[] = [];
+  
+  pieces.forEach((piece, idx) => {
+    if (piece.type === 'paladin' && piece.side === side) {
+      const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
+      const canGuard = zones.some(zone => zone.row === targetRow && zone.col === targetCol);
+      if (canGuard) {
+        guardingPaladinIndices.push(idx);
+      }
+    }
+  });
+  
+  return guardingPaladinIndices;
+}
+
 // Helper function to find jump target node
 function findJumpTarget(
   fromIdx: number,

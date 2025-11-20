@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Piece, Side, MoveHighlight, NodePosition, BurnMark, HolyLight } from '@shared/schema';
+import type { Piece, Side, MoveHighlight, NodePosition, BurnMark, HolyLight, GuardOption } from '@shared/schema';
 import GameBoard from '@/components/GameBoard';
 import PieceInfoPanel from '@/components/PieceInfoPanel';
 import TurnHistoryPanel from '@/components/TurnHistoryPanel';
+import GuardDialog from '@/components/GuardDialog';
 import {
   getInitialPieces,
   getPieceAt,
@@ -21,6 +22,7 @@ import {
   getNodeCoordinate,
   updateAssassinStealth,
   revealAssassinsInProtectionZones,
+  findGuardingPaladins,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
 
@@ -36,6 +38,13 @@ export default function Game() {
   const [holyLights, setHolyLights] = useState<HolyLight[]>([]);
   const [dragonPathNodes, setDragonPathNodes] = useState<{ row: number; col: number }[]>([]);
   const [protectionZones, setProtectionZones] = useState<{ row: number; col: number }[]>([]);
+  const [guardDialogOpen, setGuardDialogOpen] = useState(false);
+  const [guardOptions, setGuardOptions] = useState<GuardOption[]>([]);
+  const [pendingAttack, setPendingAttack] = useState<{
+    targetRow: number;
+    targetCol: number;
+    targetPieceIndex: number;
+  } | null>(null);
 
   useEffect(() => {
     const rows = buildRows(700, 700);
@@ -44,6 +53,140 @@ export default function Game() {
     setAllNodes(nodes);
     setAdjacency(adj);
   }, []);
+
+  const handleGuardSelect = (paladinIndex: number) => {
+    if (!pendingAttack || selectedPieceIndex === -1) return;
+    
+    const newPieces = [...pieces];
+    const selectedPiece = pieces[selectedPieceIndex];
+    const targetPiece = pieces[pendingAttack.targetPieceIndex];
+    const paladin = pieces[paladinIndex];
+    
+    // Swap paladin and target positions
+    const targetRow = pendingAttack.targetRow;
+    const targetCol = pendingAttack.targetCol;
+    const paladinRow = paladin.row;
+    const paladinCol = paladin.col;
+    
+    // Move target to paladin's position
+    const movedTarget = updateAssassinStealth(
+      { ...targetPiece, row: paladinRow, col: paladinCol },
+      targetPiece.row,
+      targetPiece.col,
+      paladinRow,
+      paladinCol
+    );
+    newPieces[pendingAttack.targetPieceIndex] = movedTarget;
+    
+    // Remove paladin (it dies)
+    newPieces.splice(paladinIndex, 1);
+    
+    // Adjust indices after removal
+    const adjustedTargetIdx = paladinIndex < pendingAttack.targetPieceIndex 
+      ? pendingAttack.targetPieceIndex - 1 
+      : pendingAttack.targetPieceIndex;
+    const adjustedSelectedIdx = paladinIndex < selectedPieceIndex 
+      ? selectedPieceIndex - 1 
+      : selectedPieceIndex;
+    
+    // Move attacking piece to target's original position
+    const movedAttacker = updateAssassinStealth(
+      { ...selectedPiece, row: targetRow, col: targetCol },
+      selectedPiece.row,
+      selectedPiece.col,
+      targetRow,
+      targetCol
+    );
+    newPieces[adjustedSelectedIdx] = movedAttacker;
+    
+    // Add holy light at paladin's sacrificed position
+    const newHolyLights = [...holyLights, {
+      row: targetRow,
+      col: targetCol,
+      createdBy: paladin.side,
+    }];
+    
+    // Update history
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
+    const targetCoord = getNodeCoordinate(targetRow, targetCol);
+    const paladinCoord = getNodeCoordinate(paladinRow, paladinCol);
+    const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${targetCoord} (聖騎士 ${paladinCoord} 守護)`;
+    
+    // Reveal any assassins in protection zones after the move
+    const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
+    
+    setPieces(revealedPieces);
+    setHolyLights(newHolyLights);
+    setMoveHistory([...moveHistory, moveDesc]);
+    setSelectedPieceIndex(-1);
+    setHighlights([]);
+    setDragonPathNodes([]);
+    setProtectionZones([]);
+    setGuardDialogOpen(false);
+    setPendingAttack(null);
+    
+    // Switch to next player
+    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
+    setCurrentPlayer(nextPlayer);
+    
+    // Clean up burn marks created by the next player
+    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    setBurnMarks(remainingBurnMarks);
+  };
+
+  const handleGuardDecline = () => {
+    if (!pendingAttack || selectedPieceIndex === -1) return;
+    
+    const newPieces = [...pieces];
+    const selectedPiece = pieces[selectedPieceIndex];
+    const targetPiece = pieces[pendingAttack.targetPieceIndex];
+    
+    // Execute normal attack
+    const targetRow = pendingAttack.targetRow;
+    const targetCol = pendingAttack.targetCol;
+    const targetIdx = pendingAttack.targetPieceIndex;
+    
+    // Remove the attacked piece first
+    newPieces.splice(targetIdx, 1);
+    
+    // Adjust selectedPieceIndex if needed
+    const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+    
+    // Move the attacking piece to the target position
+    const movedPiece = updateAssassinStealth(
+      { ...selectedPiece, row: targetRow, col: targetCol },
+      selectedPiece.row,
+      selectedPiece.col,
+      targetRow,
+      targetCol
+    );
+    
+    newPieces[adjustedIdx] = movedPiece;
+    
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
+    const toCoord = getNodeCoordinate(targetRow, targetCol);
+    const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+    
+    // Reveal any assassins in protection zones after the move
+    const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
+    
+    setPieces(revealedPieces);
+    setMoveHistory([...moveHistory, moveDesc]);
+    setSelectedPieceIndex(-1);
+    setHighlights([]);
+    setDragonPathNodes([]);
+    setProtectionZones([]);
+    setGuardDialogOpen(false);
+    setPendingAttack(null);
+    
+    // Switch to next player
+    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
+    setCurrentPlayer(nextPlayer);
+    
+    // Clean up burn marks created by the next player
+    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    setBurnMarks(remainingBurnMarks);
+  };
 
   const handleNodeClick = (row: number, col: number) => {
     const clickedPieceIdx = getPieceAt(pieces, row, col);
@@ -265,6 +408,32 @@ export default function Game() {
       const targetIdx = clickedPieceIdx;
       const targetPiece = pieces[targetIdx];
       
+      // Check if target is in a protection zone
+      const guardingPaladinIndices = findGuardingPaladins(
+        row,
+        col,
+        pieces,
+        targetPiece.side,
+        adjacency,
+        allNodes
+      );
+      
+      if (guardingPaladinIndices.length > 0) {
+        // There are paladins that can guard this piece
+        const options: GuardOption[] = guardingPaladinIndices.map(idx => ({
+          paladinIndex: idx,
+          paladinRow: pieces[idx].row,
+          paladinCol: pieces[idx].col,
+          coordinate: getNodeCoordinate(pieces[idx].row, pieces[idx].col),
+        }));
+        
+        setGuardOptions(options);
+        setPendingAttack({ targetRow: row, targetCol: col, targetPieceIndex: targetIdx });
+        setGuardDialogOpen(true);
+        return; // Stop here, wait for user's decision
+      }
+      
+      // No guard available, proceed with normal attack
       // Remove the attacked piece first
       newPieces.splice(targetIdx, 1);
       
@@ -346,6 +515,14 @@ export default function Game() {
           </div>
         </div>
       </div>
+
+      <GuardDialog
+        isOpen={guardDialogOpen}
+        guardOptions={guardOptions}
+        targetCoordinate={pendingAttack ? getNodeCoordinate(pendingAttack.targetRow, pendingAttack.targetCol) : ''}
+        onSelectGuard={handleGuardSelect}
+        onDecline={handleGuardDecline}
+      />
     </div>
   );
 }
