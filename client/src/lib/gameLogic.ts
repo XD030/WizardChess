@@ -1114,7 +1114,29 @@ export function calculateDragonPath(
   return path;
 }
 
-// Calculate bard moves - checker-style jumping
+// Helper to find next node in a direction based on (dRow, dCol)
+function findNodeInDirection(
+  fromIdx: number,
+  dRow: number,
+  dCol: number,
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): number {
+  const fromNode = allNodes[fromIdx];
+  const targetRow = fromNode.row + dRow;
+  const targetCol = fromNode.col + dCol;
+  
+  for (const adjIdx of adjacency[fromIdx]) {
+    const adjNode = allNodes[adjIdx];
+    if (adjNode.row === targetRow && adjNode.col === targetCol) {
+      return adjIdx;
+    }
+  }
+  
+  return -1;
+}
+
+// Calculate bard moves - straight-line jumping
 export function calculateBardMoves(
   piece: Piece,
   pieceIndex: number,
@@ -1133,69 +1155,84 @@ export function calculateBardMoves(
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   if (nodeIdx === -1) return highlights;
   
-  // BFS to find all reachable positions via jumping and single-step moves
-  const visited = new Set<number>();
-  const queue: { idx: number; jumped: boolean }[] = [{ idx: nodeIdx, jumped: false }];
-  visited.add(nodeIdx);
-  
-  while (queue.length > 0) {
-    const { idx: currentIdx, jumped } = queue.shift()!;
+  // Single-step adjacent moves
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
     
-    // Try single-step adjacent moves (only if we haven't jumped yet)
-    if (!jumped) {
-      for (const adjIdx of adjacency[currentIdx]) {
-        if (visited.has(adjIdx)) continue;
-        
-        const adjNode = allNodes[adjIdx];
-        
-        // Cannot pass through enemy holy light
-        if (!canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
-          continue;
-        }
-        
-        const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
-        
-        // Landing spot must be empty
-        if (targetPieceIdx === -1) {
-          visited.add(adjIdx);
-          highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-          // Don't add to queue - single step moves don't continue
-        }
-      }
+    // Cannot pass through enemy holy light
+    if (!canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
+      continue;
     }
     
-    // Try jumping over adjacent pieces
-    for (const adjIdx of adjacency[currentIdx]) {
-      const adjNode = allNodes[adjIdx];
-      const overPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    
+    // Landing spot must be empty
+    if (targetPieceIdx === -1) {
+      highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+    }
+  }
+  
+  // Straight-line jumping: explore each direction independently
+  for (const firstJumpIdx of adjacency[nodeIdx]) {
+    const firstJumpNode = allNodes[firstJumpIdx];
+    const overPieceIdx = getPieceAt(pieces, firstJumpNode.row, firstJumpNode.col);
+    
+    // Must have a piece to jump over
+    if (overPieceIdx === -1) continue;
+    
+    const overPiece = pieces[overPieceIdx];
+    
+    // Can jump over any piece (non-bard or activated bard)
+    if (overPiece.type !== 'bard' || overPiece.activated) {
+      // Calculate direction vector from start to first jumped piece
+      const dRow = firstJumpNode.row - piece.row;
+      const dCol = firstJumpNode.col - piece.col;
       
-      // Must have a piece to jump over (activated bards can be jumped)
-      if (overPieceIdx === -1) continue;
+      // Continue jumping in this straight line direction
+      let currentIdx = nodeIdx;
+      const visited = new Set<number>([nodeIdx]);
       
-      const overPiece = pieces[overPieceIdx];
-      
-      // Can jump over any piece (if activated bard) or non-bard pieces
-      if (overPiece.type !== 'bard' || overPiece.activated) {
-        // Calculate landing position
-        const landingIdx = findJumpTarget(currentIdx, adjIdx, adjacency, allNodes);
+      while (true) {
+        // Find next piece in the same direction (piece to jump over)
+        const nextOverIdx = findNodeInDirection(currentIdx, dRow, dCol, adjacency, allNodes);
         
-        if (landingIdx !== -1 && !visited.has(landingIdx)) {
-          const landingNode = allNodes[landingIdx];
-          
-          // Cannot pass through enemy holy light
-          if (!canOccupyNode(landingNode.row, landingNode.col, piece.side, holyLights)) {
-            continue;
-          }
-          
-          const landingPieceIdx = getPieceAt(pieces, landingNode.row, landingNode.col);
-          
-          // Landing spot must be empty
-          if (landingPieceIdx === -1) {
-            visited.add(landingIdx);
-            highlights.push({ type: 'move', row: landingNode.row, col: landingNode.col });
-            // Continue jumping from this position
-            queue.push({ idx: landingIdx, jumped: true });
-          }
+        if (nextOverIdx === -1) break;
+        if (visited.has(nextOverIdx)) break;
+        
+        const nextOverNode = allNodes[nextOverIdx];
+        const nextOverPieceIdx = getPieceAt(pieces, nextOverNode.row, nextOverNode.col);
+        
+        // Must have a piece to jump over
+        if (nextOverPieceIdx === -1) break;
+        
+        const nextOverPiece = pieces[nextOverPieceIdx];
+        
+        // Can only jump over non-bards or activated bards
+        if (nextOverPiece.type === 'bard' && !nextOverPiece.activated) break;
+        
+        // Calculate landing position (one step further in same direction)
+        const landingIdx = findNodeInDirection(nextOverIdx, dRow, dCol, adjacency, allNodes);
+        
+        if (landingIdx === -1) break;
+        if (visited.has(landingIdx)) break;
+        
+        const landingNode = allNodes[landingIdx];
+        
+        // Cannot pass through enemy holy light
+        if (!canOccupyNode(landingNode.row, landingNode.col, piece.side, holyLights)) {
+          break;
+        }
+        
+        const landingPieceIdx = getPieceAt(pieces, landingNode.row, landingNode.col);
+        
+        // Landing spot must be empty
+        if (landingPieceIdx === -1) {
+          highlights.push({ type: 'move', row: landingNode.row, col: landingNode.col });
+          visited.add(nextOverIdx);
+          visited.add(landingIdx);
+          currentIdx = landingIdx;
+        } else {
+          break;
         }
       }
     }
