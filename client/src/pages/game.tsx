@@ -222,22 +222,29 @@ export default function Game() {
       ? selectedPieceIndex - 1 
       : selectedPieceIndex;
     
-    // Move the attacking piece to the target position and update stealth (only if target wasn't a bard)
+    // Move the attacking piece to the target position (only if target wasn't a bard)
+    // Exception: Wizards stay in place for line-of-sight attacks
     if (targetPiece.type !== 'bard') {
-      let movedPiece = updateAssassinStealth(
-        { ...selectedPiece, row: targetRow, col: targetCol },
-        selectedPiece.row,
-        selectedPiece.col,
-        targetRow,
-        targetCol
-      );
-      
-      // If the attacking piece is an assassin, it reveals itself after killing
-      if (movedPiece.type === 'assassin') {
-        movedPiece = { ...movedPiece, stealthed: false };
+      if (selectedPiece.type === 'wizard') {
+        // Wizard stays in place for line-of-sight attack - no position change needed
+        // Wizard already at correct position in newPieces[adjustedIdx]
+      } else {
+        // Other pieces move to target position after attacking
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row: targetRow, col: targetCol },
+          selectedPiece.row,
+          selectedPiece.col,
+          targetRow,
+          targetCol
+        );
+        
+        // If the attacking piece is an assassin, it reveals itself after killing
+        if (movedPiece.type === 'assassin') {
+          movedPiece = { ...movedPiece, stealthed: false };
+        }
+        
+        newPieces[adjustedIdx] = movedPiece;
       }
-      
-      newPieces[adjustedIdx] = movedPiece;
     }
     
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
@@ -675,22 +682,29 @@ export default function Game() {
         ? selectedPieceIndex - 1 
         : selectedPieceIndex;
       
-      // Move the attacking piece to the target position and update stealth (only if target wasn't a bard)
+      // Move the attacking piece to the target position (only if target wasn't a bard)
+      // Exception: Wizards stay in place for line-of-sight attacks
       if (targetPiece.type !== 'bard') {
-        let movedPiece = updateAssassinStealth(
-          { ...selectedPiece, row, col },
-          selectedPiece.row,
-          selectedPiece.col,
-          row,
-          col
-        );
-        
-        // If the attacking piece is an assassin, it reveals itself after killing
-        if (movedPiece.type === 'assassin') {
-          movedPiece = { ...movedPiece, stealthed: false };
+        if (selectedPiece.type === 'wizard') {
+          // Wizard stays in place for line-of-sight attack - no position change needed
+          // Wizard already at correct position in newPieces[adjustedIdx]
+        } else {
+          // Other pieces move to target position after attacking
+          let movedPiece = updateAssassinStealth(
+            { ...selectedPiece, row, col },
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col
+          );
+          
+          // If the attacking piece is an assassin, it reveals itself after killing
+          if (movedPiece.type === 'assassin') {
+            movedPiece = { ...movedPiece, stealthed: false };
+          }
+          
+          newPieces[adjustedIdx] = movedPiece;
         }
-        
-        newPieces[adjustedIdx] = movedPiece;
       }
       
       moveDesc = targetPiece.type === 'bard'
