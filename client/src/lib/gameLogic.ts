@@ -770,8 +770,14 @@ export function calculateAssassinMoves(
           if (adjacency[adj1Idx].includes(targetIdx) && adjacency[adj2Idx].includes(targetIdx)) {
             const targetNode = allNodes[targetIdx];
             
-            // Check if can occupy this node (not blocked by enemy holy light)
-            if (canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights)) {
+            // Check intermediate nodes (adj1 and adj2) for enemy holy lights
+            // Assassin must traverse these nodes to reach the target
+            const adj1Blocked = hasEnemyHolyLight(adj1.row, adj1.col, piece.side, holyLights);
+            const adj2Blocked = hasEnemyHolyLight(adj2.row, adj2.col, piece.side, holyLights);
+            const targetBlocked = hasEnemyHolyLight(targetNode.row, targetNode.col, piece.side, holyLights);
+            
+            // Can only move if no enemy holy lights block the path or destination
+            if (!adj1Blocked && !adj2Blocked && !targetBlocked) {
               const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
               
               if (targetPieceIdx === -1) {
