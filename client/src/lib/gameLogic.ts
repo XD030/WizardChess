@@ -432,18 +432,25 @@ export function calculateRangerMoves(
       const adjNode = allNodes[adjIdx];
       const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
 
+      console.log(`游侠跳跃检测: current(${currentNode.row},${currentNode.col}) -> adj(${adjNode.row},${adjNode.col}), pieceAtAdj=${pieceAtAdj}`);
+
       // If there's a piece at adjacent position, try to jump over it
       // Exception: Cannot jump over unactivated bards
       if (pieceAtAdj !== -1) {
         const adjacentPiece = pieces[pieceAtAdj];
         
+        console.log(`  相邻棋子: type=${adjacentPiece.type}, side=${adjacentPiece.side}, activated=${adjacentPiece.activated}`);
+        
         // Skip if it's an unactivated bard
         if (adjacentPiece.type === 'bard' && !adjacentPiece.activated) {
+          console.log(`  ✗ 跳过未激活的吟游诗人`);
           continue;
         }
         
         // Find the node in the same direction after jumping
         const jumpTarget = findJumpTarget(current.nodeIdx, adjIdx, adjacency, allNodes);
+        
+        console.log(`  跳跃目标: jumpTarget=${jumpTarget}`);
         
         if (jumpTarget !== -1) {
           const jumpNode = allNodes[jumpTarget];
@@ -451,6 +458,8 @@ export function calculateRangerMoves(
           
           // Check if jump destination is valid
           const pieceAtJump = getPieceAt(pieces, jumpNode.row, jumpNode.col);
+          
+          console.log(`  跳跃目标位置(${jumpNode.row},${jumpNode.col}): pieceAtJump=${pieceAtJump}`);
           
           // Can only land on empty space or enemy piece
           if (pieceAtJump === -1 || (pieceAtJump !== -1 && pieces[pieceAtJump].side !== piece.side && pieces[pieceAtJump].side !== 'neutral')) {
@@ -462,6 +471,8 @@ export function calculateRangerMoves(
                 path: [...current.path, jumpTarget]
               };
 
+              console.log(`  ✓ 添加跳跃目标(${jumpNode.row},${jumpNode.col})`);
+
               // Record this as a valid jump destination
               if (!jumpDestinations.has(posKey) || jumpDestinations.get(posKey)!.jumpsCount > newState.jumpsCount) {
                 jumpDestinations.set(posKey, newState);
@@ -472,6 +483,8 @@ export function calculateRangerMoves(
                 queue.push(newState);
               }
             }
+          } else {
+            console.log(`  ✗ 跳跃目标无效（己方棋子或中立棋子）`);
           }
         }
       }
