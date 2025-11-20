@@ -580,25 +580,14 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 2: Single-step diagonal movement along x+y constant direction
-  // Check adjacent nodes for diagonal moves (where x and y change by opposite amounts)
-  // IMPORTANT: Exclude nodes in the same row (horizontal moves are handled in Part 1)
-  console.log(`Griffin at row=${piece.row}, col=${piece.col}, x=${currentCoords.x}, y=${currentCoords.y}`);
-  
+  // Part 2: Single-step diagonal movement along file direction (x constant)
+  // Check adjacent nodes where x remains constant (same file)
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const adjCoords = getRotatedCoords(adjNode.row, adjNode.col);
     
-    // Check if this is a diagonal move (x and y change by opposite amounts)
-    const dx = adjCoords.x - currentCoords.x;
-    const dy = adjCoords.y - currentCoords.y;
-    
-    console.log(`  Adj row=${adjNode.row}, col=${adjNode.col}: dx=${dx}, dy=${dy}, dx+dy=${dx+dy}, same row? ${adjNode.row === piece.row}`);
-    
-    // Diagonal: x and y must change by opposite amounts (dx = -dy)
-    // AND must not be in the same row (exclude horizontal moves)
-    if (dx + dy === 0 && dx !== 0 && adjNode.row !== piece.row) {
-      console.log(`    -> DIAGONAL FOUND! Adding highlight`);
+    // Diagonal: x must remain constant (same file), y changes
+    if (adjCoords.x === currentCoords.x && adjCoords.y !== currentCoords.y) {
       const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
       
       if (targetPieceIdx === -1) {
@@ -611,8 +600,6 @@ export function calculateGriffinMoves(
       }
     }
   }
-  
-  console.log(`Total highlights: ${highlights.length}`);
 
   return highlights;
 }
