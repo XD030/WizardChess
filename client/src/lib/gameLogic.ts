@@ -257,24 +257,6 @@ export function filterHighlightsForHolyLight(
   return highlights.filter(h => canOccupyNode(h.row, h.col, piece.side, holyLights));
 }
 
-// Check and reveal all stealthed assassins in protection zones
-// Should be called after any piece movement to check if stealthed assassins are in protection zones
-export function revealAssassinsInProtectionZones(
-  pieces: Piece[],
-  adjacency: number[][],
-  allNodes: NodePosition[]
-): Piece[] {
-  return pieces.map((piece) => {
-    if (piece.type === 'assassin' && piece.stealthed) {
-      const enemySide = piece.side === 'white' ? 'black' : 'white';
-      if (isInProtectionZone(piece.row, piece.col, pieces, enemySide, adjacency, allNodes)) {
-        return { ...piece, stealthed: false };
-      }
-    }
-    return piece;
-  });
-}
-
 // Reveal stealthed assassins in a specific protection zone
 // Used when a paladin is selected to reveal only the enemy assassins in that paladin's protection zone
 export function revealAssassinsInSpecificZone(
@@ -852,7 +834,8 @@ export function calculatePaladinMoves(
 }
 
 // Calculate paladin protection zones for a given paladin
-// Protection zone: all adjacent nodes that have friendly pieces
+// Protection zone: paladin's own position + all adjacent nodes (empty or occupied)
+// Stealthed assassins are revealed when they move into any of these nodes
 export function calculatePaladinProtectionZone(
   paladin: Piece,
   pieces: Piece[],
@@ -864,22 +847,14 @@ export function calculatePaladinProtectionZone(
   const paladinIdx = allNodes.findIndex((n) => n.row === paladin.row && n.col === paladin.col);
   if (paladinIdx === -1) return protectionZone;
   
-  // Check all adjacent nodes (where paladin can move in 1 step)
+  // Protection zone includes the paladin's own position
+  // This is important for guard scenarios where the guarded piece swaps into the paladin's position
+  protectionZone.push({ row: paladin.row, col: paladin.col });
+  
+  // Protection zone also includes ALL adjacent nodes (empty or occupied)
+  // When stealthed assassins move into any of these nodes, they are revealed
   for (const adjIdx of adjacency[paladinIdx]) {
     const adjNode = allNodes[adjIdx];
-    
-    // Check if there's a friendly piece at this node
-    const pieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
-    if (pieceIdx === -1) {
-      continue; // No piece, skip
-    }
-    
-    const pieceAtNode = pieces[pieceIdx];
-    if (pieceAtNode.side !== paladin.side) {
-      continue; // Not friendly, skip
-    }
-    
-    // Add all adjacent friendly pieces to protection zone
     protectionZone.push({ row: adjNode.row, col: adjNode.col });
   }
   

@@ -21,8 +21,8 @@ import {
   buildAdjacency,
   getNodeCoordinate,
   updateAssassinStealth,
-  revealAssassinsInProtectionZones,
   revealAssassinsInSpecificZone,
+  isInProtectionZone,
   findGuardingPaladins,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
@@ -58,10 +58,27 @@ export default function Game() {
   const handleGuardSelect = (paladinIndex: number) => {
     if (!pendingAttack || selectedPieceIndex === -1) return;
     
-    const newPieces = [...pieces];
+    // Validate that all indices are still valid
+    if (selectedPieceIndex >= pieces.length || 
+        pendingAttack.targetPieceIndex >= pieces.length || 
+        paladinIndex >= pieces.length) {
+      console.error('Invalid piece indices in guard select');
+      return;
+    }
+    
     const selectedPiece = pieces[selectedPieceIndex];
     const targetPiece = pieces[pendingAttack.targetPieceIndex];
     const paladin = pieces[paladinIndex];
+    
+    // Additional validation: verify pieces exist and coordinates match
+    if (!selectedPiece || !targetPiece || !paladin) {
+      console.error('Pieces not found at specified indices');
+      return;
+    }
+    if (targetPiece.row !== pendingAttack.targetRow || targetPiece.col !== pendingAttack.targetCol) {
+      console.error('Target piece has moved since attack was initiated');
+      return;
+    }
     
     // Save positions before modifications
     const targetRow = pendingAttack.targetRow;
@@ -69,43 +86,71 @@ export default function Game() {
     const paladinRow = paladin.row;
     const paladinCol = paladin.col;
     
-    // Move target to paladin's position (swap)
-    const movedTarget = updateAssassinStealth(
+    // Calculate the protection zone of the paladin BEFORE making any changes
+    const paladinProtectionZone = calculatePaladinProtectionZone(paladin, pieces, adjacency, allNodes);
+    
+    // Create moved target piece at paladin's position
+    let movedTarget = updateAssassinStealth(
       { ...targetPiece, row: paladinRow, col: paladinCol },
       targetPiece.row,
       targetPiece.col,
       paladinRow,
       paladinCol
     );
-    newPieces[pendingAttack.targetPieceIndex] = movedTarget;
     
-    // Remove paladin (it dies at its original position after swap)
-    newPieces.splice(paladinIndex, 1);
-    
-    // Recompute indices after paladin removal
-    let adjustedSelectedIdx = selectedPieceIndex;
-    if (paladinIndex < selectedPieceIndex) {
-      adjustedSelectedIdx = selectedPieceIndex - 1;
+    // Check if target is a stealthed assassin entering the paladin's protection zone
+    if (movedTarget.type === 'assassin' && movedTarget.stealthed) {
+      const inPaladinZone = paladinProtectionZone.some(z => z.row === movedTarget.row && z.col === movedTarget.col);
+      if (inPaladinZone) {
+        movedTarget = { ...movedTarget, stealthed: false };
+      }
     }
     
-    // Move attacking piece to target's original position
-    const movedAttacker = updateAssassinStealth(
+    // Create moved attacker piece at target's original position
+    let movedAttacker = updateAssassinStealth(
       { ...selectedPiece, row: targetRow, col: targetCol },
       selectedPiece.row,
       selectedPiece.col,
       targetRow,
       targetCol
     );
-    newPieces[adjustedSelectedIdx] = movedAttacker;
+    
+    // Check if attacker is a stealthed assassin entering protection zones
+    if (movedAttacker.type === 'assassin' && movedAttacker.stealthed) {
+      const inPaladinZone = paladinProtectionZone.some(z => z.row === targetRow && z.col === targetCol);
+      if (inPaladinZone) {
+        movedAttacker = { ...movedAttacker, stealthed: false };
+      }
+    }
+    
+    // Build new pieces array: exclude paladin, attacker, and target; add moved versions
+    const newPieces = pieces
+      .filter((_, idx) => idx !== paladinIndex && idx !== selectedPieceIndex && idx !== pendingAttack.targetPieceIndex)
+      .concat([movedTarget, movedAttacker]);
+    
+    // Now check moved pieces against other remaining paladins (now in newPieces)
+    const targetIdx = newPieces.findIndex(p => p.row === movedTarget.row && p.col === movedTarget.col);
+    const attackerIdx = newPieces.findIndex(p => p.row === movedAttacker.row && p.col === movedAttacker.col);
+    
+    if (newPieces[targetIdx].type === 'assassin' && newPieces[targetIdx].stealthed) {
+      const enemySide = newPieces[targetIdx].side === 'white' ? 'black' : 'white';
+      if (isInProtectionZone(newPieces[targetIdx].row, newPieces[targetIdx].col, newPieces, enemySide, adjacency, allNodes)) {
+        newPieces[targetIdx] = { ...newPieces[targetIdx], stealthed: false };
+      }
+    }
+    
+    if (newPieces[attackerIdx].type === 'assassin' && newPieces[attackerIdx].stealthed) {
+      const enemySide = newPieces[attackerIdx].side === 'white' ? 'black' : 'white';
+      if (isInProtectionZone(newPieces[attackerIdx].row, newPieces[attackerIdx].col, newPieces, enemySide, adjacency, allNodes)) {
+        newPieces[attackerIdx] = { ...newPieces[attackerIdx], stealthed: false };
+      }
+    }
     
     // Update history
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const targetCoord = getNodeCoordinate(targetRow, targetCol);
     const paladinCoord = getNodeCoordinate(paladinRow, paladinCol);
-    const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${targetCoord} (聖騎士 ${paladinCoord} 守護)`;
-    
-    // Reveal any assassins in protection zones after the move
-    const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
+    const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${targetCoord} (聖騎士 ${paladinCoord} 守護 ${PIECE_CHINESE[targetPiece.type]})`;
     
     // Switch to next player
     const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
@@ -121,7 +166,7 @@ export default function Game() {
       createdBy: paladin.side,
     }];
     
-    setPieces(revealedPieces);
+    setPieces(newPieces);
     setHolyLights(updatedHolyLights);
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
@@ -153,7 +198,7 @@ export default function Game() {
     const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
     
     // Move the attacking piece to the target position
-    const movedPiece = updateAssassinStealth(
+    let movedPiece = updateAssassinStealth(
       { ...selectedPiece, row: targetRow, col: targetCol },
       selectedPiece.row,
       selectedPiece.col,
@@ -161,16 +206,21 @@ export default function Game() {
       targetCol
     );
     
+    // If the moved piece is a stealthed assassin, check if it entered a protection zone
+    if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
+      const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
+      if (isInProtectionZone(targetRow, targetCol, newPieces, enemySide, adjacency, allNodes)) {
+        movedPiece = { ...movedPiece, stealthed: false };
+      }
+    }
+    
     newPieces[adjustedIdx] = movedPiece;
     
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(targetRow, targetCol);
     const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     
-    // Reveal any assassins in protection zones after the move
-    const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
-    
-    setPieces(revealedPieces);
+    setPieces(newPieces);
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
     setHighlights([]);
@@ -344,13 +394,21 @@ export default function Game() {
 
     if (highlight.type === 'move') {
       // Update assassin stealth state based on movement direction
-      const movedPiece = updateAssassinStealth(
+      let movedPiece = updateAssassinStealth(
         { ...selectedPiece, row, col },
         selectedPiece.row,
         selectedPiece.col,
         row,
         col
       );
+      
+      // If the moved piece is a stealthed assassin, check if it entered a protection zone
+      if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
+        const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
+        if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
+          movedPiece = { ...movedPiece, stealthed: false };
+        }
+      }
       
       newPieces[selectedPieceIndex] = movedPiece;
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
@@ -395,20 +453,36 @@ export default function Game() {
       const targetPiece = pieces[targetIdx];
       
       // Update positions and assassin stealth states
-      const movedPiece = updateAssassinStealth(
+      let movedPiece = updateAssassinStealth(
         { ...selectedPiece, row, col },
         selectedPiece.row,
         selectedPiece.col,
         row,
         col
       );
-      const swappedPiece = updateAssassinStealth(
+      let swappedPiece = updateAssassinStealth(
         { ...targetPiece, row: selectedPiece.row, col: selectedPiece.col },
         targetPiece.row,
         targetPiece.col,
         selectedPiece.row,
         selectedPiece.col
       );
+      
+      // Check if moved piece (apprentice) is a stealthed assassin entering protection zone
+      if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
+        const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
+        if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
+          movedPiece = { ...movedPiece, stealthed: false };
+        }
+      }
+      
+      // Check if swapped piece is a stealthed assassin entering protection zone
+      if (swappedPiece.type === 'assassin' && swappedPiece.stealthed) {
+        const enemySide = swappedPiece.side === 'white' ? 'black' : 'white';
+        if (isInProtectionZone(selectedPiece.row, selectedPiece.col, newPieces, enemySide, adjacency, allNodes)) {
+          swappedPiece = { ...swappedPiece, stealthed: false };
+        }
+      }
       
       newPieces[selectedPieceIndex] = movedPiece;
       newPieces[targetIdx] = swappedPiece;
@@ -454,7 +528,7 @@ export default function Game() {
       const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
       
       // Move the attacking piece to the target position and update stealth
-      const movedPiece = updateAssassinStealth(
+      let movedPiece = updateAssassinStealth(
         { ...selectedPiece, row, col },
         selectedPiece.row,
         selectedPiece.col,
@@ -462,15 +536,20 @@ export default function Game() {
         col
       );
       
+      // If the moved piece is a stealthed assassin, check if it entered a protection zone
+      if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
+        const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
+        if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
+          movedPiece = { ...movedPiece, stealthed: false };
+        }
+      }
+      
       newPieces[adjustedIdx] = movedPiece;
       
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
 
-    // Reveal any assassins in protection zones after the move
-    const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
-    
-    setPieces(revealedPieces);
+    setPieces(newPieces);
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
     setHighlights([]);
