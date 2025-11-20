@@ -276,7 +276,10 @@ export function canOccupyNode(
 ): boolean {
   // Cannot occupy positions with burn marks
   const hasBurnMark = burnMarks.some(b => b.row === row && b.col === col);
-  if (hasBurnMark) return false;
+  if (hasBurnMark) {
+    console.log(`🔥 Burn mark blocking position (${row}, ${col}). BurnMarks:`, burnMarks);
+    return false;
+  }
   
   return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
 }
@@ -1024,6 +1027,7 @@ export function calculateDragonMoves(
   burnMarks: { row: number; col: number }[],
   holyLights: HolyLight[] = []
 ): { highlights: MoveHighlight[]; pathNodes: { row: number; col: number }[] } {
+  console.log(`🐉 Dragon calculateMoves called with burnMarks:`, burnMarks);
   const highlights: MoveHighlight[] = [];
   // Don't record path nodes during move calculation - we'll calculate them when a move is selected
   const pathNodes: { row: number; col: number }[] = [];
