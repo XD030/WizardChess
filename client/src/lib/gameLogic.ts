@@ -415,6 +415,21 @@ export function getPieceAt(pieces: Piece[], row: number, col: number): number {
   return pieces.findIndex((p) => p.row === row && p.col === col);
 }
 
+// Get visible piece at position (ignoring stealthed enemy assassins)
+// currentPieceSide: the side of the piece that is looking
+export function getVisiblePieceAt(pieces: Piece[], row: number, col: number, currentPieceSide: Side): number {
+  return pieces.findIndex((p) => {
+    if (p.row !== row || p.col !== col) return false;
+    
+    // If it's a stealthed assassin from the enemy side, it's not visible
+    if (p.type === 'assassin' && p.stealthed && p.side !== currentPieceSide && p.side !== 'neutral') {
+      return false;
+    }
+    
+    return true;
+  });
+}
+
 export function calculateWizardMoves(
   piece: Piece,
   pieceIndex: number,
@@ -431,7 +446,7 @@ export function calculateWizardMoves(
   // 1-step moves
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
-    const targetPiece = getPieceAt(pieces, adjNode.row, adjNode.col);
+    const targetPiece = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
     // Cannot move to positions with enemy holy light
     if (targetPiece === -1 && !hasEnemyHolyLight(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
@@ -458,7 +473,7 @@ export function calculateWizardMoves(
       if (visited.has(adjIdx)) continue;
 
       const adjNode = allNodes[adjIdx];
-      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+      const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
       if (targetPieceIdx === -1) continue;
 
@@ -507,7 +522,7 @@ export function calculateApprenticeMoves(
     
     if (!isValidDirection) continue;
     
-    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
     if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
@@ -521,9 +536,10 @@ export function calculateApprenticeMoves(
   }
 
   // Swap with adjacent friendly pieces (holy light doesn't affect swapping)
+  // For swapping, we need to see ALL pieces including stealthed assassins
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
-    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
     
     if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -554,7 +570,7 @@ export function calculateRangerMoves(
   // Ranger can move 1 step to adjacent empty nodes
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
-    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
     
     if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
@@ -583,7 +599,7 @@ export function calculateRangerMoves(
     
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
-      const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
+      const pieceAtNext = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
       
       // Found the first piece in this direction
       if (pieceAtNext !== -1) {
@@ -613,7 +629,7 @@ export function calculateRangerMoves(
       
       while (nextIdx !== -1) {
         const nextNode = allNodes[nextIdx];
-        const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
+        const pieceAtNext = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
         
         // Found a piece - check if it's an enemy (and not on enemy holy light)
         if (pieceAtNext !== -1) {
@@ -696,7 +712,7 @@ export function calculateGriffinMoves(
         break;
       }
       
-      const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
+      const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
       
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
@@ -729,7 +745,7 @@ export function calculateGriffinMoves(
     }
     
     if (targetNode && canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights)) {
-      const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
+      const targetPieceIdx = getVisiblePieceAt(pieces, targetNode.row, targetNode.col, piece.side);
       
       if (targetPieceIdx === -1) {
         highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
@@ -799,7 +815,7 @@ export function calculateAssassinMoves(
             
             // Can only move if no enemy holy lights block the path or destination
             if (!adj1Blocked && !adj2Blocked && !targetBlocked) {
-              const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
+              const targetPieceIdx = getVisiblePieceAt(pieces, targetNode.row, targetNode.col, piece.side);
               
               if (targetPieceIdx === -1) {
                 highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
@@ -836,7 +852,7 @@ export function calculatePaladinMoves(
   // Paladin moves 1 step along connections
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
-    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
     
     if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
@@ -1007,7 +1023,7 @@ export function calculateDragonMoves(
         break;
       }
       
-      const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
+      const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
       const hasBurnMark = burnMarks.some(b => b.row === nextNode.row && b.col === nextNode.col);
       
       // If there's a piece at this position
