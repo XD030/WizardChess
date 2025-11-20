@@ -580,18 +580,18 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 2: Single-step diagonal movement along x-y constant direction
-  // Check adjacent nodes for diagonal moves (where x and y change by the same amount)
+  // Part 2: Single-step diagonal movement along x+y constant direction
+  // Check adjacent nodes for diagonal moves (where x and y change by opposite amounts)
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const adjCoords = getRotatedCoords(adjNode.row, adjNode.col);
     
-    // Check if this is a diagonal move (x and y change by the same amount)
+    // Check if this is a diagonal move (x and y change by opposite amounts)
     const dx = adjCoords.x - currentCoords.x;
     const dy = adjCoords.y - currentCoords.y;
     
-    // Diagonal: x and y must change by the same amount (both +1 or both -1)
-    if (dx === dy && dx !== 0) {
+    // Diagonal: x and y must change by opposite amounts (dx = -dy)
+    if (dx + dy === 0 && dx !== 0) {
       const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
       
       if (targetPieceIdx === -1) {
