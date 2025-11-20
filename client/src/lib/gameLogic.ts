@@ -275,6 +275,26 @@ export function revealAssassinsInProtectionZones(
   });
 }
 
+// Reveal stealthed assassins in a specific protection zone
+// Used when a paladin is selected to reveal only the enemy assassins in that paladin's protection zone
+export function revealAssassinsInSpecificZone(
+  pieces: Piece[],
+  protectionZone: { row: number; col: number }[],
+  paladinSide: Side
+): Piece[] {
+  const enemySide = paladinSide === 'white' ? 'black' : 'white';
+  
+  return pieces.map((piece) => {
+    if (piece.type === 'assassin' && piece.stealthed && piece.side === enemySide) {
+      const isInZone = protectionZone.some(zone => zone.row === piece.row && zone.col === piece.col);
+      if (isInZone) {
+        return { ...piece, stealthed: false };
+      }
+    }
+    return piece;
+  });
+}
+
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
   const rcToIndex: Record<string, number> = {};
   let idx = 0;

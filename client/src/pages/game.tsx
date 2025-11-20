@@ -22,6 +22,7 @@ import {
   getNodeCoordinate,
   updateAssassinStealth,
   revealAssassinsInProtectionZones,
+  revealAssassinsInSpecificZone,
   findGuardingPaladins,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
@@ -238,8 +239,8 @@ export default function Game() {
               setDragonPathNodes([]);
               setProtectionZones(zones);
               
-              // Reveal any stealthed assassins in protection zones
-              const revealedPieces = revealAssassinsInProtectionZones(pieces, adjacency, allNodes);
+              // Reveal any stealthed enemy assassins in THIS paladin's protection zone
+              const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
               setPieces(revealedPieces);
             } else {
               setHighlights([]);
@@ -316,8 +317,8 @@ export default function Game() {
               setDragonPathNodes([]);
               setProtectionZones(zones);
               
-              // Reveal any stealthed assassins in protection zones
-              const revealedPieces = revealAssassinsInProtectionZones(pieces, adjacency, allNodes);
+              // Reveal any stealthed enemy assassins in THIS paladin's protection zone
+              const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
               setPieces(revealedPieces);
             } else {
               setHighlights([]);
