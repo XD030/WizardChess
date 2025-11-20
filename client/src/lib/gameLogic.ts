@@ -96,7 +96,7 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   griffin: {
     name: '《獅鷲》',
     move: [
-      '沿橫向直線方向（rank）前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '沿橫向直線方向（rank 恆定）前進，距離不限，不可轉換方向或穿越其他棋子。',
       '或者沿對角線方向（file 和 rank 同時增減）移動 1 節點。',
     ],
     ability: ['碰到潛行刺客會擊殺。'],

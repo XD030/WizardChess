@@ -70,7 +70,7 @@ Preferred communication style: Simple, everyday language.
 - Apprentice: Forward-only movement with position swapping ability
 - Dragon: Straight-line movement with burn marks (persistent hazards)
 - Ranger: Cannon-style attack - single-step movement or jump over any piece to attack distant enemies
-- Griffin: Forward/backward single-step movement OR unlimited straight-line movement along two diagonal directions (horizontal: x+y constant, and x=y diagonal)
+- Griffin: Unlimited horizontal movement (y constant, same rank) OR single-step diagonal movement where both file and rank change by ±1 (e.g., G7→F6 or G7→H8, moving to non-adjacent nodes not in the hex adjacency list)
 - Paladin: Diagonal movement pattern
 - Assassin: Parallelogram diagonal moves (stealth feature removed per user request)
 - Bard: Activation-based jumping ability
