@@ -390,25 +390,55 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
 
     if (highlight.type === 'move') {
-      // Update assassin stealth state based on movement direction
-      let movedPiece = updateAssassinStealth(
-        { ...selectedPiece, row, col },
-        selectedPiece.row,
-        selectedPiece.col,
-        row,
-        col
-      );
+      // Check if there's actually a piece at the destination (e.g., stealthed assassin)
+      const actualTargetIdx = getPieceAt(pieces, row, col);
       
-      // If the moved piece is a stealthed assassin, check if it entered a protection zone
-      if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
-        const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
-        if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
+      if (actualTargetIdx !== -1) {
+        // There's a piece here (probably a stealthed assassin), kill it
+        const targetPiece = pieces[actualTargetIdx];
+        newPieces.splice(actualTargetIdx, 1);
+        
+        // Adjust selectedPieceIndex if needed
+        const adjustedIdx = actualTargetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+        
+        // Update assassin stealth state based on movement direction
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row, col },
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col
+        );
+        
+        // Assassin reveals itself after killing
+        if (movedPiece.type === 'assassin') {
           movedPiece = { ...movedPiece, stealthed: false };
         }
+        
+        newPieces[adjustedIdx] = movedPiece;
+        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+      } else {
+        // Normal move to empty space
+        // Update assassin stealth state based on movement direction
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row, col },
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col
+        );
+        
+        // If the moved piece is a stealthed assassin, check if it entered a protection zone
+        if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
+          const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
+          if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
+            movedPiece = { ...movedPiece, stealthed: false };
+          }
+        }
+        
+        newPieces[selectedPieceIndex] = movedPiece;
+        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       }
-      
-      newPieces[selectedPieceIndex] = movedPiece;
-      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       
       // If dragon moves, add burn marks to the path (including starting point, excluding destination)
       if (selectedPiece.type === 'dragon') {
