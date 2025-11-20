@@ -98,7 +98,7 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
     move: [
       '往正前後的點移動 1 節點。',
       '或者沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
-      '或者沿對角線方向（x=y 方向）前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '或者沿對角線方向（file 和 rank 同時增減的方向）前進，距離不限，不可轉換方向或穿越其他棋子。',
     ],
     ability: ['碰到潛行刺客會擊殺。'],
   },
@@ -608,12 +608,12 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 3: Unlimited diagonal movement along x=y direction
+  // Part 3: Unlimited diagonal movement along x-y constant direction
   // This direction may not follow adjacency connections, so we iterate through all nodes
-  const targetXY = currentCoords.x;  // For x=y diagonal, x and y should remain equal
+  const targetDiff = currentCoords.x - currentCoords.y;  // For diagonal, x-y should remain constant
   
   for (let deltaSign of [-1, 1]) {
-    // Try both directions along x=y diagonal
+    // Try both directions along x-y diagonal
     let distance = 1;
     let foundBlocker = false;
     
