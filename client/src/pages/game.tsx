@@ -14,6 +14,7 @@ import {
   calculateGriffinMoves,
   calculateAssassinMoves,
   calculatePaladinMoves,
+  calculatePaladinProtectionZone,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -34,6 +35,7 @@ export default function Game() {
   const [burnMarks, setBurnMarks] = useState<BurnMark[]>([]);
   const [holyLights, setHolyLights] = useState<HolyLight[]>([]);
   const [dragonPathNodes, setDragonPathNodes] = useState<{ row: number; col: number }[]>([]);
+  const [protectionZones, setProtectionZones] = useState<{ row: number; col: number }[]>([]);
 
   useEffect(() => {
     const rows = buildRows(700, 700);
@@ -81,11 +83,14 @@ export default function Game() {
               setDragonPathNodes([]);
             } else if (piece.type === 'paladin') {
               const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
+              setProtectionZones(zones);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
+              setProtectionZones([]);
             }
           } else {
             setHighlights([]);
@@ -104,6 +109,7 @@ export default function Game() {
       setSelectedPieceIndex(-1);
       setHighlights([]);
       setDragonPathNodes([]);
+      setProtectionZones([]);
       return;
     }
 
@@ -144,11 +150,14 @@ export default function Game() {
               setDragonPathNodes([]);
             } else if (piece.type === 'paladin') {
               const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
+              setProtectionZones(zones);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
+              setProtectionZones([]);
             }
           } else {
             setHighlights([]);
@@ -270,6 +279,7 @@ export default function Game() {
     setSelectedPieceIndex(-1);
     setHighlights([]);
     setDragonPathNodes([]);
+    setProtectionZones([]);
     
     // Switch to next player
     const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
@@ -308,6 +318,7 @@ export default function Game() {
               currentPlayer={currentPlayer}
               onNodeClick={handleNodeClick}
               burnMarks={burnMarks}
+              protectionZones={protectionZones}
             />
           </div>
 

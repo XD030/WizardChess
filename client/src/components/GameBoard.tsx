@@ -11,6 +11,7 @@ interface GameBoardProps {
   currentPlayer: 'white' | 'black';
   onNodeClick: (row: number, col: number) => void;
   burnMarks: BurnMark[];
+  protectionZones: { row: number; col: number }[];
 }
 
 // Helper function to check if a piece should be visible to current player
@@ -22,7 +23,7 @@ function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean
   return true;
 }
 
-export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks }: GameBoardProps) {
+export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks, protectionZones }: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
@@ -281,6 +282,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       // Check if this piece is a swap or attack target
       const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
       const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
+      const isProtected = protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
 
       // Determine if we should use image or symbol
       const useWizardImage = piece.type === 'wizard' && wizardHatImage;
@@ -363,6 +365,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (attackHighlight) {
             outlineColor = '#ef4444';
             outlineWidth = 3;
+          } else if (isProtected) {
+            // Golden outline for protected pieces
+            outlineColor = '#facc15';
+            outlineWidth = 2.5;
           } else if (piece.side === 'black') {
             // Black moon gets white outline in normal state
             outlineColor = '#fff';
@@ -471,6 +477,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             // Hot pink for all stealthed assassins - very visible
             outlineColor = '#ff69b4';
             outlineWidth = 3;
+          } else if (isProtected) {
+            // Golden outline for protected pieces
+            outlineColor = '#facc15';
+            outlineWidth = 2.5;
           } else if (piece.side === 'black') {
             outlineColor = '#fff';
             outlineWidth = 1;
@@ -522,6 +532,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         } else if (attackHighlight) {
           outlineColor = '#ef4444';
           outlineWidth = 2.5;
+        } else if (isProtected) {
+          // Golden outline for protected pieces
+          outlineColor = '#facc15';
+          outlineWidth = 2.5;
         } else {
           if (piece.side === 'white') {
             outlineColor = '#000';
@@ -547,7 +561,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         ctx.fillText(symbol, node.x, node.y);
       }
     });
-  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode, burnMarks, wizardHatImage, assassinLogoImage]);
+  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode, burnMarks, wizardHatImage, assassinLogoImage, protectionZones, currentPlayer]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
