@@ -366,8 +366,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             outlineColor = '#ef4444';
             outlineWidth = 3;
           } else if (isProtected) {
-            // Golden outline for protected pieces
-            outlineColor = '#facc15';
+            // Green outline for protected pieces
+            outlineColor = '#22c55e';
             outlineWidth = 2.5;
           } else if (piece.side === 'black') {
             // Black moon gets white outline in normal state
@@ -478,8 +478,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             outlineColor = '#ff69b4';
             outlineWidth = 3;
           } else if (isProtected) {
-            // Golden outline for protected pieces
-            outlineColor = '#facc15';
+            // Green outline for protected pieces
+            outlineColor = '#22c55e';
             outlineWidth = 2.5;
           } else if (piece.side === 'black') {
             outlineColor = '#fff';
