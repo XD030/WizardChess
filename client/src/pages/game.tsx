@@ -302,7 +302,12 @@ export default function Game() {
 
         {/* Debug info */}
         <div className="text-xs text-center mb-2 text-slate-400 font-mono" data-testid="text-debug">
-          選中: {selectedPieceIndex >= 0 ? `#${selectedPieceIndex}` : '無'} | 高亮: {highlights.length} | 玩家: {currentPlayer}
+          選中: {selectedPieceIndex >= 0 ? `#${selectedPieceIndex}` : '無'} | 高亮: {highlights.length} | 玩家: {currentPlayer} | 守護區: {protectionZones.length}
+          {protectionZones.length > 0 && (
+            <span className="ml-2">
+              [{protectionZones.map(z => `${getNodeCoordinate(z.row, z.col)}`).join(', ')}]
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-6 items-start">

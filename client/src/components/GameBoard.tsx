@@ -533,8 +533,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           outlineColor = '#ef4444';
           outlineWidth = 2.5;
         } else if (isProtected) {
-          // Golden outline for protected pieces
-          outlineColor = '#facc15';
+          // Cyan outline for protected pieces
+          outlineColor = '#06b6d4';
           outlineWidth = 2.5;
         } else {
           if (piece.side === 'white') {
