@@ -408,6 +408,8 @@ export function calculateRangerMoves(
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   
+  console.log(`游侠位置: (${piece.row},${piece.col}) = ${getNodeCoordinate(piece.row, piece.col)}`);
+  
   if (nodeIdx === -1) return highlights;
 
   // Ranger can move 1 step to adjacent empty nodes
