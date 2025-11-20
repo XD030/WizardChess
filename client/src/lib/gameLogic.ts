@@ -957,6 +957,11 @@ export function findGuardingPaladins(
   
   pieces.forEach((piece, idx) => {
     if (piece.type === 'paladin' && piece.side === side) {
+      // Paladin cannot guard itself
+      if (piece.row === targetRow && piece.col === targetCol) {
+        return;
+      }
+      
       const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
       const canGuard = zones.some(zone => zone.row === targetRow && zone.col === targetCol);
       if (canGuard) {
