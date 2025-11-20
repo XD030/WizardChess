@@ -28,6 +28,15 @@ import {
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
 
+// Helper function to activate all bards on the board
+function activateAllBards(pieces: Piece[]): Piece[] {
+  return pieces.map(piece => 
+    piece.type === 'bard' 
+      ? { ...piece, activated: true }
+      : piece
+  );
+}
+
 export default function Game() {
   const [pieces, setPieces] = useState<Piece[]>(getInitialPieces());
   const [currentPlayer, setCurrentPlayer] = useState<'white' | 'black'>('white');
@@ -130,9 +139,12 @@ export default function Game() {
     }
     
     // Build new pieces array: exclude paladin, attacker, and target; add moved versions
-    const newPieces = pieces
+    let newPieces = pieces
       .filter((_, idx) => idx !== paladinIndex && idx !== selectedPieceIndex && idx !== pendingAttack.targetPieceIndex)
       .concat([movedTarget, movedAttacker]);
+    
+    // Activate all bards when paladin is captured
+    newPieces = activateAllBards(newPieces);
     
     // Now check moved pieces against other remaining paladins (now in newPieces)
     const targetIdx = newPieces.findIndex(p => p.row === movedTarget.row && p.col === movedTarget.col);
@@ -188,7 +200,7 @@ export default function Game() {
   const handleGuardDecline = () => {
     if (!pendingAttack || selectedPieceIndex === -1) return;
     
-    const newPieces = [...pieces];
+    let newPieces = [...pieces];
     const selectedPiece = pieces[selectedPieceIndex];
     const targetPiece = pieces[pendingAttack.targetPieceIndex];
     
@@ -197,31 +209,42 @@ export default function Game() {
     const targetCol = pendingAttack.targetCol;
     const targetIdx = pendingAttack.targetPieceIndex;
     
-    // Remove the attacked piece first
-    newPieces.splice(targetIdx, 1);
-    
-    // Adjust selectedPieceIndex if needed
-    const adjustedIdx = targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
-    
-    // Move the attacking piece to the target position
-    let movedPiece = updateAssassinStealth(
-      { ...selectedPiece, row: targetRow, col: targetCol },
-      selectedPiece.row,
-      selectedPiece.col,
-      targetRow,
-      targetCol
-    );
-    
-    // If the attacking piece is an assassin, it reveals itself after killing
-    if (movedPiece.type === 'assassin') {
-      movedPiece = { ...movedPiece, stealthed: false };
+    // Remove the attacked piece first (unless it's a bard - bards cannot be killed)
+    if (targetPiece.type !== 'bard') {
+      newPieces.splice(targetIdx, 1);
+      
+      // Activate all bards when any piece is captured
+      newPieces = activateAllBards(newPieces);
     }
     
-    newPieces[adjustedIdx] = movedPiece;
+    // Adjust selectedPieceIndex if needed (if target was before selected piece and was actually removed)
+    const adjustedIdx = (targetPiece.type !== 'bard' && targetIdx < selectedPieceIndex) 
+      ? selectedPieceIndex - 1 
+      : selectedPieceIndex;
+    
+    // Move the attacking piece to the target position and update stealth (only if target wasn't a bard)
+    if (targetPiece.type !== 'bard') {
+      let movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row: targetRow, col: targetCol },
+        selectedPiece.row,
+        selectedPiece.col,
+        targetRow,
+        targetCol
+      );
+      
+      // If the attacking piece is an assassin, it reveals itself after killing
+      if (movedPiece.type === 'assassin') {
+        movedPiece = { ...movedPiece, stealthed: false };
+      }
+      
+      newPieces[adjustedIdx] = movedPiece;
+    }
     
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(targetRow, targetCol);
-    const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+    const moveDesc = targetPiece.type === 'bard'
+      ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
+      : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     
     setPieces(newPieces);
     setMoveHistory([...moveHistory, moveDesc]);
@@ -644,11 +667,7 @@ export default function Game() {
         newPieces.splice(targetIdx, 1);
         
         // Activate all bards when any piece is captured
-        for (let i = 0; i < newPieces.length; i++) {
-          if (newPieces[i].type === 'bard') {
-            newPieces[i] = { ...newPieces[i], activated: true };
-          }
-        }
+        newPieces = activateAllBards(newPieces);
       }
       
       // Adjust selectedPieceIndex if needed (if target was before selected piece and was actually removed)

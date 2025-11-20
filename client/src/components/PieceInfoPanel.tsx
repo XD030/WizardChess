@@ -134,6 +134,14 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
             <div className="text-sm text-muted-foreground" data-testid="text-piece-side">
               陣營：{SIDE_CHINESE[piece.side]}
             </div>
+            {piece.type === 'bard' && (
+              <div className="text-sm mt-1" data-testid="text-bard-status">
+                狀態：
+                <span className={piece.activated ? 'text-green-400 font-semibold' : 'text-slate-500'}>
+                  {piece.activated ? '已激活' : '未激活'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
