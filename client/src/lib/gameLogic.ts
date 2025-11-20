@@ -82,8 +82,9 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
     name: '《刺客》',
     move: ['沿相鄰黑白三角形組成的平行四邊形對角點移動。'],
     ability: [
-      '白→黑：進入潛行狀態，可被踩殺，敵方看不見其位置。',
-      '黑→白：現形。',
+      '黑方刺客：白→黑潛行，黑→白現形。',
+      '白方刺客：黑→白潛行，白→黑現形。',
+      '潛行時敵方看不見其位置，可被龍或獅鷲踩殺。',
       '不論潛行與否，落點若有敵人即擊殺。',
       '若進入或停留在聖騎士守護區或交換位置，立即現形。',
     ],
@@ -184,8 +185,12 @@ export function isBlackTriangle(row: number, col: number): boolean {
 // Update assassin stealth state based on movement direction only
 // Should be called whenever an assassin moves to a new position
 // Rule: Use rotated coordinate system (file x, rank y)
-// - If Δx + Δy = 1: Enter stealth (moving into black triangle)
-// - If Δx + Δy = -1: Reveal (moving into white triangle)
+// Black assassin:
+// - If Δx + Δy = 1: Enter stealth (moving into black triangle, white→black)
+// - If Δx + Δy = -1: Reveal (moving into white triangle, black→white)
+// White assassin (opposite):
+// - If Δx + Δy = -1: Enter stealth (moving into white triangle, black→white)
+// - If Δx + Δy = 1: Reveal (moving into black triangle, white→black)
 // - Otherwise: Maintain current state
 // Note: Protection zone reveals are handled separately via revealAssassinsInProtectionZones
 export function updateAssassinStealth(
@@ -208,14 +213,28 @@ export function updateAssassinStealth(
   const deltaY = toCoords.y - fromCoords.y;
   const deltaSum = deltaX + deltaY;
   
-  // Δx + Δy = 1: Enter stealth (moving into black triangle)
-  if (deltaSum === 1) {
-    return { ...piece, stealthed: true };
-  }
-  
-  // Δx + Δy = -1: Reveal (moving into white triangle)
-  if (deltaSum === -1) {
-    return { ...piece, stealthed: false };
+  // White assassin has opposite stealth logic
+  if (piece.side === 'white') {
+    // Δx + Δy = -1: Enter stealth (black→white)
+    if (deltaSum === -1) {
+      return { ...piece, stealthed: true };
+    }
+    
+    // Δx + Δy = 1: Reveal (white→black)
+    if (deltaSum === 1) {
+      return { ...piece, stealthed: false };
+    }
+  } else {
+    // Black assassin uses normal logic
+    // Δx + Δy = 1: Enter stealth (white→black)
+    if (deltaSum === 1) {
+      return { ...piece, stealthed: true };
+    }
+    
+    // Δx + Δy = -1: Reveal (black→white)
+    if (deltaSum === -1) {
+      return { ...piece, stealthed: false };
+    }
   }
   
   // Otherwise: Maintain current state
