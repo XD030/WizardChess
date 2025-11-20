@@ -65,3 +65,19 @@ export interface MoveHighlight {
   row: number;
   col: number;
 }
+
+export interface GuardOption {
+  paladinIndex: number; // Index in pieces array
+  paladinRow: number;
+  paladinCol: number;
+  coordinate: string; // e.g., "E6"
+}
+
+export interface GuardDialogState {
+  isOpen: boolean;
+  targetRow: number;
+  targetCol: number;
+  targetPieceIndex: number;
+  attackerPieceIndex: number;
+  guardOptions: GuardOption[];
+}
