@@ -479,8 +479,8 @@ export function calculateWizardMoves(
 
       const targetPiece = pieces[targetPieceIdx];
 
-      // Cannot attack pieces on enemy holy light
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+      // Cannot attack pieces on enemy holy light, and cannot attack bards
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
         if (!hasEnemyHolyLight(adjNode.row, adjNode.col, piece.side, holyLights)) {
           highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
         }
@@ -526,9 +526,9 @@ export function calculateApprenticeMoves(
     if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
-      // Can attack enemy pieces in forward direction (if not on enemy holy light)
+      // Can attack enemy pieces in forward direction (if not on enemy holy light), but not bards
       const targetPiece = pieces[targetPieceIdx];
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard' &&
           canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
@@ -575,9 +575,9 @@ export function calculateRangerMoves(
     if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
-      // Can attack adjacent enemy directly (if not on enemy holy light)
+      // Can attack adjacent enemy directly (if not on enemy holy light), but not bards
       const targetPiece = pieces[targetPieceIdx];
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard' &&
           canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
@@ -631,10 +631,10 @@ export function calculateRangerMoves(
         const nextNode = allNodes[nextIdx];
         const pieceAtNext = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
         
-        // Found a piece - check if it's an enemy (and not on enemy holy light)
+        // Found a piece - check if it's an enemy (and not on enemy holy light), and not a bard
         if (pieceAtNext !== -1) {
           const targetPiece = pieces[pieceAtNext];
-          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard' &&
               canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights)) {
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
@@ -716,7 +716,7 @@ export function calculateGriffinMoves(
       
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
           highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
         }
         break;
@@ -751,7 +751,7 @@ export function calculateGriffinMoves(
         highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
       } else {
         const targetPiece = pieces[targetPieceIdx];
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
           highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
         }
       }
@@ -821,7 +821,7 @@ export function calculateAssassinMoves(
                 highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
               } else {
                 const targetPiece = pieces[targetPieceIdx];
-                if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+                if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
                   highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
                 }
               }
@@ -858,7 +858,7 @@ export function calculatePaladinMoves(
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard' &&
           canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
@@ -1030,8 +1030,8 @@ export function calculateDragonMoves(
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
         
-        // Can attack enemy pieces (including assassins)
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        // Can attack enemy pieces (including assassins), but not bards
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
           highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
         }
         
