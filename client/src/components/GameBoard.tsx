@@ -467,6 +467,10 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (attackHighlight) {
             outlineColor = '#ef4444';
             outlineWidth = 3;
+          } else if (piece.stealthed && piece.side === currentPlayer) {
+            // Purple outline for own stealthed assassins
+            outlineColor = '#a855f7';
+            outlineWidth = 2.5;
           } else if (piece.side === 'black') {
             outlineColor = '#fff';
             outlineWidth = 1;
