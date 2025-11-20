@@ -470,7 +470,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (piece.stealthed && piece.side === currentPlayer) {
             // Different purple shades for black vs white stealthed assassins
             if (piece.side === 'black') {
-              outlineColor = '#e879f9'; // Pink-purple for black assassins
+              outlineColor = '#f0abfc'; // Brighter pink-purple for black assassins
             } else {
               outlineColor = '#c084fc'; // Bright purple for white assassins
             }
