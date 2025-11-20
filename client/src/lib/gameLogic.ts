@@ -1,4 +1,4 @@
-import type { Piece, PieceType, Side, NodePosition, MoveHighlight } from '@shared/schema';
+import type { Piece, PieceType, Side, NodePosition, MoveHighlight, HolyLight, BurnMark } from '@shared/schema';
 
 // Chess piece symbols (white/black versions)
 export const PIECE_SYMBOLS: Record<PieceType, { white: string; black: string }> = {
@@ -220,6 +220,22 @@ export function updateAssassinStealth(
   
   // Otherwise: Maintain current state
   return piece;
+}
+
+// Check if a position has an enemy holy light that blocks the piece
+// Holy lights only allow the creating side to pass through/stop
+export function hasEnemyHolyLight(
+  row: number,
+  col: number,
+  pieceSide: Side,
+  holyLights: HolyLight[]
+): boolean {
+  return holyLights.some(light => 
+    light.row === row && 
+    light.col === col && 
+    light.createdBy !== pieceSide &&
+    light.createdBy !== 'neutral'
+  );
 }
 
 // Check and reveal all stealthed assassins in protection zones
