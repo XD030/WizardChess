@@ -96,8 +96,8 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   griffin: {
     name: '《獅鷲》',
     move: [
-      '沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
-      '或者沿對角線方向（file 和 rank 同時增減的方向）移動 1 節點。',
+      '沿橫向直線方向（rank）前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '或者沿對角線方向（file）移動 1 節點。',
     ],
     ability: ['碰到潛行刺客會擊殺。'],
   },
@@ -580,18 +580,14 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 2: Single-step diagonal movement along x-y constant direction
-  // Check adjacent nodes for diagonal moves (where x and y change by the same amount)
+  // Part 2: Single-step diagonal movement along file direction (x constant)
+  // Check adjacent nodes for diagonal moves (same file = x constant)
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const adjCoords = getRotatedCoords(adjNode.row, adjNode.col);
     
-    // Check if this is a diagonal move (x and y change by the same amount)
-    const dx = adjCoords.x - currentCoords.x;
-    const dy = adjCoords.y - currentCoords.y;
-    
-    // Diagonal: x and y must change by the same amount (both +1 or both -1)
-    if (dx === dy && dx !== 0) {
+    // Diagonal: x must remain constant (same file), but y changes
+    if (adjCoords.x === currentCoords.x && adjCoords.y !== currentCoords.y) {
       const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
       
       if (targetPieceIdx === -1) {
