@@ -408,8 +408,6 @@ export function calculateRangerMoves(
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   
-  console.log(`游侠位置: (${piece.row},${piece.col}) = ${getNodeCoordinate(piece.row, piece.col)}`);
-  
   if (nodeIdx === -1) return highlights;
 
   // Ranger can move 1 step to adjacent empty nodes
@@ -449,20 +447,14 @@ export function calculateRangerMoves(
       let currentIdx = adjIdx;
       let nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       
-      console.log(`  跳过(${adjNode.row},${adjNode.col})后沿直线搜索，nextIdx=${nextIdx}`);
-      
       while (nextIdx !== -1) {
         const nextNode = allNodes[nextIdx];
         const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
         
-        console.log(`    位置(${nextNode.row},${nextNode.col}): pieceAtNext=${pieceAtNext}`);
-        
         // Found a piece - check if it's an enemy
         if (pieceAtNext !== -1) {
           const targetPiece = pieces[pieceAtNext];
-          console.log(`      棋子: type=${targetPiece.type}, side=${targetPiece.side}`);
           if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-            console.log(`      ✓ 添加炮攻击`);
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
           // Stop searching in this direction (found a piece)
@@ -472,11 +464,6 @@ export function calculateRangerMoves(
         // Continue searching in the same direction
         currentIdx = nextIdx;
         nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
-        console.log(`    继续搜索，nextIdx=${nextIdx}`);
-      }
-      
-      if (nextIdx === -1) {
-        console.log(`    搜索结束（到达边界或无下一个节点）`);
       }
     }
   }
@@ -686,30 +673,75 @@ export function calculateDragonPath(
   return path;
 }
 
-// Helper function to find the next node in the same direction
+// Convert (row, col) to rotated square coordinates (x, y)
+function toRotatedSquare(row: number, col: number): { x: number; y: number } {
+  if (row <= 8) {
+    // Upper half: expanding rows
+    return { x: col, y: row - col };
+  } else {
+    // Lower half: contracting rows
+    const offset = row - 8;
+    return { x: col + offset, y: 8 - col };
+  }
+}
+
+// Helper function to find the next node along a straight board line
+// Board lines are defined by constant x, y, or (x+y) in rotated square coordinates
 function findNextInDirection(
   currentIdx: number,
   direction: { from: number; to: number },
   adjacency: number[][],
   allNodes: NodePosition[]
 ): number {
-  const currentNode = allNodes[currentIdx];
-  const directionNode = allNodes[direction.to];
   const fromNode = allNodes[direction.from];
+  const toNode = allNodes[direction.to];
+  const currentNode = allNodes[currentIdx];
   
-  // Calculate direction vector
-  const dRow = directionNode.row - fromNode.row;
-  const dCol = directionNode.col - fromNode.col;
+  // Convert to rotated square coordinates
+  const fromXY = toRotatedSquare(fromNode.row, fromNode.col);
+  const toXY = toRotatedSquare(toNode.row, toNode.col);
+  const currentXY = toRotatedSquare(currentNode.row, currentNode.col);
   
-  // Expected next position
-  const nextRow = currentNode.row + dRow;
-  const nextCol = currentNode.col + dCol;
+  // Determine which line family we're on and direction
+  let lineType: 'x' | 'y' | 'diagonal' | null = null;
+  let dirSign: number = 0; // +1 or -1
   
-  // Find node at expected position among adjacent nodes
+  if (fromXY.x === toXY.x) {
+    // Constant x (vertical line in rotated square)
+    lineType = 'x';
+    dirSign = toXY.y > fromXY.y ? 1 : -1;
+  } else if (fromXY.y === toXY.y) {
+    // Constant y (horizontal line in rotated square)
+    lineType = 'y';
+    dirSign = toXY.x > fromXY.x ? 1 : -1;
+  } else if (fromXY.x + fromXY.y === toXY.x + toXY.y) {
+    // Constant (x+y) (diagonal line)
+    lineType = 'diagonal';
+    dirSign = toXY.x > fromXY.x ? 1 : -1; // Move along x direction
+  }
+  
+  if (!lineType) return -1; // Not on a valid straight line
+  
+  // Find next node among adjacency that continues the line
   for (const adjIdx of adjacency[currentIdx]) {
     const adjNode = allNodes[adjIdx];
-    if (adjNode.row === nextRow && adjNode.col === nextCol) {
-      return adjIdx;
+    const adjXY = toRotatedSquare(adjNode.row, adjNode.col);
+    
+    if (lineType === 'x') {
+      // Must have same x, and y increases/decreases correctly
+      if (adjXY.x === currentXY.x && (adjXY.y - currentXY.y) === dirSign) {
+        return adjIdx;
+      }
+    } else if (lineType === 'y') {
+      // Must have same y, and x increases/decreases correctly
+      if (adjXY.y === currentXY.y && (adjXY.x - currentXY.x) === dirSign) {
+        return adjIdx;
+      }
+    } else if (lineType === 'diagonal') {
+      // Must have same (x+y), and x increases/decreases correctly
+      if (adjXY.x + adjXY.y === currentXY.x + currentXY.y && (adjXY.x - currentXY.x) === dirSign) {
+        return adjIdx;
+      }
     }
   }
   
