@@ -767,9 +767,9 @@ export function calculatePaladinMoves(
 }
 
 // Calculate paladin protection zones for a given paladin
-// Protection zone: all adjacent nodes where the paladin can move (1 step)
-// that have friendly pieces on them
-// Note: No triangle color restriction - any adjacent node with friendly piece is protected
+// Protection zone: adjacent nodes that have friendly pieces
+// EXCEPT nodes that form a triangle with any enemy piece
+// (Paladin, friendly piece, enemy piece forming a triangle = no protection)
 export function calculatePaladinProtectionZone(
   paladin: Piece,
   pieces: Piece[],
@@ -796,8 +796,36 @@ export function calculatePaladinProtectionZone(
       continue; // Not friendly, skip
     }
     
-    // This friendly piece is in protection zone
-    protectionZone.push({ row: adjNode.row, col: adjNode.col });
+    // Check if this node forms a triangle with any enemy piece
+    // A triangle is formed when: paladin, friendly piece, and enemy piece
+    // are all mutually adjacent (all three nodes connected)
+    let formsTriangleWithEnemy = false;
+    
+    for (const otherAdjIdx of adjacency[paladinIdx]) {
+      if (otherAdjIdx === adjIdx) continue;
+      
+      const otherNode = allNodes[otherAdjIdx];
+      const otherPieceIdx = getPieceAt(pieces, otherNode.row, otherNode.col);
+      
+      if (otherPieceIdx === -1) continue;
+      
+      const otherPiece = pieces[otherPieceIdx];
+      if (otherPiece.side === paladin.side || otherPiece.side === 'neutral') {
+        continue; // Not enemy
+      }
+      
+      // Check if adjNode and otherNode are adjacent to each other
+      // If yes, they form a triangle with the paladin
+      if (adjacency[adjIdx].includes(otherAdjIdx)) {
+        formsTriangleWithEnemy = true;
+        break;
+      }
+    }
+    
+    // Only add to protection zone if NOT forming triangle with enemy
+    if (!formsTriangleWithEnemy) {
+      protectionZone.push({ row: adjNode.row, col: adjNode.col });
+    }
   }
   
   return protectionZone;
