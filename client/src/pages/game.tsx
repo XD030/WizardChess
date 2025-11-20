@@ -206,12 +206,9 @@ export default function Game() {
       targetCol
     );
     
-    // If the moved piece is a stealthed assassin, check if it entered a protection zone
-    if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
-      const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
-      if (isInProtectionZone(targetRow, targetCol, newPieces, enemySide, adjacency, allNodes)) {
-        movedPiece = { ...movedPiece, stealthed: false };
-      }
+    // If the attacking piece is an assassin, it reveals itself after killing
+    if (movedPiece.type === 'assassin') {
+      movedPiece = { ...movedPiece, stealthed: false };
     }
     
     newPieces[adjustedIdx] = movedPiece;
@@ -553,12 +550,9 @@ export default function Game() {
         col
       );
       
-      // If the moved piece is a stealthed assassin, check if it entered a protection zone
-      if (movedPiece.type === 'assassin' && movedPiece.stealthed) {
-        const enemySide = movedPiece.side === 'white' ? 'black' : 'white';
-        if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
-          movedPiece = { ...movedPiece, stealthed: false };
-        }
+      // If the attacking piece is an assassin, it reveals itself after killing
+      if (movedPiece.type === 'assassin') {
+        movedPiece = { ...movedPiece, stealthed: false };
       }
       
       newPieces[adjustedIdx] = movedPiece;
