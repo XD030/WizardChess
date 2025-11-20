@@ -463,7 +463,7 @@ export default function Game() {
     }
 
     // Execute the move
-    const newPieces = [...pieces];
+    let newPieces = [...pieces];
     let moveDesc = '';
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(row, col);
@@ -481,11 +481,7 @@ export default function Game() {
           newPieces.splice(actualTargetIdx, 1);
           
           // Activate all bards when any piece is captured
-          for (let i = 0; i < newPieces.length; i++) {
-            if (newPieces[i].type === 'bard') {
-              newPieces[i] = { ...newPieces[i], activated: true };
-            }
-          }
+          newPieces = activateAllBards(newPieces);
           
           // Adjust selectedPieceIndex if needed
           const adjustedIdx = actualTargetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;

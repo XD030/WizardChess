@@ -81,7 +81,12 @@ Preferred communication style: Simple, everyday language.
   - Assassin Reveal: Selecting a paladin automatically reveals any stealthed enemy assassins in the protection zone
   - Visual: Protected pieces show cyan border (#06b6d4) when paladin selected; holy light markers display golden glow with cross symbol
 - Assassin: Parallelogram diagonal moves with stealth mechanic (white triangle = visible, black triangle = stealthed and invisible to enemy); automatically revealed in paladin protection zones
-- Bard: Activation-based jumping ability
+- Bard: Checker-style chain jumping movement with activation and forced swap mechanics:
+  - Movement: BFS-based chain jumping - can jump over any piece (friendly or enemy) to reach empty positions, can also single-step to adjacent nodes
+  - Invulnerability: Cannot be killed by any attack - all attack functions (wizard, apprentice, dragon, ranger, paladin, assassin, griffin) prevent bard removal
+  - Activation System: Bards start inactive; when ANY piece is captured (any capture path: guard select, guard decline, direct attack), ALL bards on the board are activated
+  - Forced Swap: After a bard moves, player must swap it with a friendly piece (excluding dragons and other bards) before ending turn
+  - Visual: Activation status displayed in piece info panel (green "已激活" / gray "未激活")
 
 **Game State Management**: Centralized state includes pieces array, current player, selected piece, move history, burn marks, holy light markers, protection zones, and game-over conditions. All mutations flow through event handlers in the main Game component.
 
