@@ -552,7 +552,7 @@ export function calculateRangerMoves(
 }
 
 // Helper function to get rotated square coordinates
-export function getRotatedCoords(row: number, col: number): { x: number; y: number } {
+function getRotatedCoords(row: number, col: number): { x: number; y: number } {
   let x: number;
   let y: number;
   

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Piece, MoveHighlight, NodePosition, BurnMark } from '@shared/schema';
-import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate, getRotatedCoords } from '@/lib/gameLogic';
+import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate } from '@/lib/gameLogic';
 import wizardMoonImg from '@assets/wizard_moon.png';
 import assassinLogoImg from '@assets/assassin_logo.png';
 
@@ -221,8 +221,6 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     });
 
     // Draw move highlights (only for empty squares)
-    const selectedPiece = selectedPieceIndex >= 0 ? pieces[selectedPieceIndex] : null;
-    
     highlights.forEach((h) => {
       if (h.type !== 'move') return;
       
@@ -232,28 +230,9 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
       const opacity = isHovered ? 0.7 : 0.5;
 
-      // Check if this move would trigger stealth for an assassin
-      let willStealth = false;
-      if (selectedPiece && selectedPiece.type === 'assassin') {
-        const fromCoords = getRotatedCoords(selectedPiece.row, selectedPiece.col);
-        const toCoords = getRotatedCoords(h.row, h.col);
-        const deltaX = toCoords.x - fromCoords.x;
-        const deltaY = toCoords.y - fromCoords.y;
-        const deltaSum = deltaX + deltaY;
-        
-        // Will enter stealth if Δx + Δy = 1
-        willStealth = deltaSum === 1;
-      }
-
       ctx.beginPath();
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
-      
-      // Use hot pink for stealth moves, green for normal moves
-      if (willStealth) {
-        ctx.fillStyle = `rgba(255, 105, 180, ${opacity})`; // Hot pink #ff69b4
-      } else {
-        ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`; // Green
-      }
+      ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
       ctx.fill();
     });
 
