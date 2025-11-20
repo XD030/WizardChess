@@ -199,29 +199,17 @@ export function updateAssassinStealth(
   const fromBlack = isBlackTriangle(fromRow, fromCol);
   const toBlack = isBlackTriangle(toRow, toCol);
   
-  const fromColor = fromBlack ? '黑' : '白';
-  const toColor = toBlack ? '黑' : '白';
-  
-  console.log(`刺客移動 [${piece.side}]: ${fromColor}(${fromRow},${fromCol}) → ${toColor}(${toRow},${toCol}), 原本 stealthed=${piece.stealthed}`);
-  
   // 白→黑：進入潛行
   if (!fromBlack && toBlack) {
-    console.log(`  → 白→黑：進入潛行 (設置 stealthed=true)`);
-    const result = { ...piece, stealthed: true };
-    console.log(`  → 返回結果: stealthed=${result.stealthed}`);
-    return result;
+    return { ...piece, stealthed: true };
   }
   
   // 黑→白：現形
   if (fromBlack && !toBlack) {
-    console.log(`  → 黑→白：現形 (設置 stealthed=false)`);
-    const result = { ...piece, stealthed: false };
-    console.log(`  → 返回結果: stealthed=${result.stealthed}`);
-    return result;
+    return { ...piece, stealthed: false };
   }
   
   // 白→白 或 黑→黑：保持原狀態
-  console.log(`  → ${fromColor}→${toColor}：保持原狀態 stealthed=${piece.stealthed}`);
   return piece;
 }
 
