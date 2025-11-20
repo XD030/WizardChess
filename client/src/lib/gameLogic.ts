@@ -582,6 +582,8 @@ export function calculateGriffinMoves(
 
   // Part 2: Single-step diagonal movement along x+y constant direction
   // Check adjacent nodes for diagonal moves (where x and y change by opposite amounts)
+  console.log(`Griffin at row=${piece.row}, col=${piece.col}, x=${currentCoords.x}, y=${currentCoords.y}`);
+  
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const adjCoords = getRotatedCoords(adjNode.row, adjNode.col);
@@ -590,8 +592,11 @@ export function calculateGriffinMoves(
     const dx = adjCoords.x - currentCoords.x;
     const dy = adjCoords.y - currentCoords.y;
     
+    console.log(`  Adj row=${adjNode.row}, col=${adjNode.col}: dx=${dx}, dy=${dy}, dx+dy=${dx+dy}, same row? ${adjNode.row === piece.row}`);
+    
     // Diagonal: x and y must change by opposite amounts (dx = -dy)
     if (dx + dy === 0 && dx !== 0) {
+      console.log(`    -> DIAGONAL FOUND! Adding highlight`);
       const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
       
       if (targetPieceIdx === -1) {
@@ -604,6 +609,8 @@ export function calculateGriffinMoves(
       }
     }
   }
+  
+  console.log(`Total highlights: ${highlights.length}`);
 
   return highlights;
 }
