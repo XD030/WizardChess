@@ -427,6 +427,7 @@ export function calculateRangerMoves(
   }
 
   // Cannon-style jump attack: jump over exactly one piece to attack enemy
+  // Can jump to any distance along the straight line
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
@@ -441,20 +442,28 @@ export function calculateRangerMoves(
         continue;
       }
       
-      // Find the node in the same straight line direction after jumping
-      const jumpTarget = findJumpTarget(nodeIdx, adjIdx, adjacency, allNodes);
+      // Continue in the same direction to find enemy piece (any distance)
+      const direction = { from: nodeIdx, to: adjIdx };
+      let currentIdx = adjIdx;
+      let nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       
-      if (jumpTarget !== -1) {
-        const jumpNode = allNodes[jumpTarget];
-        const pieceAtJump = getPieceAt(pieces, jumpNode.row, jumpNode.col);
+      while (nextIdx !== -1) {
+        const nextNode = allNodes[nextIdx];
+        const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
         
-        // Can ONLY jump to attack enemy piece (like Chinese Chess Cannon)
-        if (pieceAtJump !== -1) {
-          const targetPiece = pieces[pieceAtJump];
+        // Found a piece - check if it's an enemy
+        if (pieceAtNext !== -1) {
+          const targetPiece = pieces[pieceAtNext];
           if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-            highlights.push({ type: 'attack', row: jumpNode.row, col: jumpNode.col });
+            highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
+          // Stop searching in this direction (found a piece)
+          break;
         }
+        
+        // Continue searching in the same direction
+        currentIdx = nextIdx;
+        nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       }
     }
   }
