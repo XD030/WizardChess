@@ -767,10 +767,9 @@ export function calculatePaladinMoves(
 }
 
 // Calculate paladin protection zones for a given paladin
-// Protection zone: adjacent nodes that are:
-// 1. On the same color triangle as the paladin
-// 2. Have friendly pieces
-// 3. Don't form a triangle with enemy pieces
+// Protection zone: all adjacent nodes where the paladin can move (1 step)
+// that have friendly pieces on them
+// Note: No triangle color restriction - any adjacent node with friendly piece is protected
 export function calculatePaladinProtectionZone(
   paladin: Piece,
   pieces: Piece[],
@@ -782,18 +781,9 @@ export function calculatePaladinProtectionZone(
   const paladinIdx = allNodes.findIndex((n) => n.row === paladin.row && n.col === paladin.col);
   if (paladinIdx === -1) return protectionZone;
   
-  // Determine paladin's triangle color
-  const paladinIsBlack = isBlackTriangle(paladin.row, paladin.col);
-  
-  // Check all adjacent nodes
+  // Check all adjacent nodes (where paladin can move in 1 step)
   for (const adjIdx of adjacency[paladinIdx]) {
     const adjNode = allNodes[adjIdx];
-    
-    // Check if adjacent node is same color triangle
-    const adjIsBlack = isBlackTriangle(adjNode.row, adjNode.col);
-    if (adjIsBlack !== paladinIsBlack) {
-      continue; // Different color, skip
-    }
     
     // Check if there's a friendly piece at this node
     const pieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
@@ -806,35 +796,8 @@ export function calculatePaladinProtectionZone(
       continue; // Not friendly, skip
     }
     
-    // Check if this node forms a triangle with any enemy piece
-    // A triangle is formed when the paladin, the friendly piece, and an enemy piece
-    // are all mutually adjacent
-    let formsTriangleWithEnemy = false;
-    
-    for (const otherAdjIdx of adjacency[paladinIdx]) {
-      if (otherAdjIdx === adjIdx) continue;
-      
-      const otherNode = allNodes[otherAdjIdx];
-      const otherPieceIdx = getPieceAt(pieces, otherNode.row, otherNode.col);
-      
-      if (otherPieceIdx === -1) continue;
-      
-      const otherPiece = pieces[otherPieceIdx];
-      if (otherPiece.side === paladin.side || otherPiece.side === 'neutral') {
-        continue; // Not enemy
-      }
-      
-      // Check if adjNode and otherNode are adjacent to each other
-      // If yes, they form a triangle with the paladin
-      if (adjacency[adjIdx].includes(otherAdjIdx)) {
-        formsTriangleWithEnemy = true;
-        break;
-      }
-    }
-    
-    if (!formsTriangleWithEnemy) {
-      protectionZone.push({ row: adjNode.row, col: adjNode.col });
-    }
+    // This friendly piece is in protection zone
+    protectionZone.push({ row: adjNode.row, col: adjNode.col });
   }
   
   return protectionZone;
