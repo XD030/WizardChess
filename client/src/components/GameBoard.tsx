@@ -236,6 +236,14 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.fill();
     });
 
+    // Draw triangle color indicators for debugging
+    ctx.font = 'bold 10px monospace';
+    allNodes.forEach(node => {
+      const isBlack = (node.row + node.col) % 2 === 1;
+      ctx.fillStyle = isBlack ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+      ctx.fillText(isBlack ? '●' : '○', node.x + 8, node.y - 8);
+    });
+
     // Draw coordinate labels
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
