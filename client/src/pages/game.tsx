@@ -11,6 +11,7 @@ import {
   calculateDragonMoves,
   calculateDragonPath,
   calculateRangerMoves,
+  calculateGriffinMoves,
   calculateAssassinMoves,
   buildRows,
   buildAllNodes,
@@ -67,6 +68,10 @@ export default function Game() {
               const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
+            } else if (piece.type === 'griffin') {
+              const moves = calculateGriffinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
             } else if (piece.type === 'assassin') {
               const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
@@ -120,6 +125,10 @@ export default function Game() {
               setDragonPathNodes(result.pathNodes);
             } else if (piece.type === 'ranger') {
               const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
+            } else if (piece.type === 'griffin') {
+              const moves = calculateGriffinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
             } else if (piece.type === 'assassin') {
