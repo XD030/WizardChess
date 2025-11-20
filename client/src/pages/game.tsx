@@ -84,6 +84,7 @@ export default function Game() {
     const selectedPiece = pieces[selectedPieceIndex];
     const targetPiece = pieces[pendingAttack.targetPieceIndex];
     const paladin = pieces[paladinIndex];
+    let updatedBurnMarks = [...burnMarks];
     
     // Additional validation: verify pieces exist and coordinates match
     if (!selectedPiece || !targetPiece || !paladin) {
@@ -103,6 +104,41 @@ export default function Game() {
     
     // Calculate the protection zone of the paladin BEFORE making any changes
     const paladinProtectionZone = calculatePaladinProtectionZone(paladin, pieces, adjacency, allNodes);
+    
+    // If attacker is a dragon, create burn marks for its path
+    if (selectedPiece.type === 'dragon') {
+      const path = calculateDragonPath(
+        selectedPiece.row,
+        selectedPiece.col,
+        targetRow,
+        targetCol,
+        adjacency,
+        allNodes
+      );
+      
+      // Add burn mark for the starting position
+      if (!updatedBurnMarks.some(b => b.row === selectedPiece.row && b.col === selectedPiece.col)) {
+        updatedBurnMarks.push({ 
+          row: selectedPiece.row, 
+          col: selectedPiece.col,
+          createdBy: currentPlayer 
+        });
+      }
+      
+      // Add burn marks for all nodes in the path except the destination
+      for (const pathNode of path) {
+        if (!(pathNode.row === targetRow && pathNode.col === targetCol)) {
+          // Check if not already a burn mark
+          if (!updatedBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
+            updatedBurnMarks.push({ 
+              row: pathNode.row, 
+              col: pathNode.col,
+              createdBy: currentPlayer 
+            });
+          }
+        }
+      }
+    }
     
     // Create moved target piece at paladin's position
     let movedTarget = updateAssassinStealth(
@@ -174,7 +210,7 @@ export default function Game() {
     const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
     
     // Clean up old burn marks and holy lights created by the next player
-    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    const remainingBurnMarks = updatedBurnMarks.filter(mark => mark.createdBy !== nextPlayer);
     const remainingHolyLights = holyLights.filter(light => light.createdBy !== nextPlayer);
     
     // Add holy light at paladin's ORIGINAL position (where it died)
@@ -203,6 +239,7 @@ export default function Game() {
     let newPieces = [...pieces];
     const selectedPiece = pieces[selectedPieceIndex];
     const targetPiece = pieces[pendingAttack.targetPieceIndex];
+    let updatedBurnMarks = [...burnMarks];
     
     // Execute normal attack
     const targetRow = pendingAttack.targetRow;
@@ -228,6 +265,51 @@ export default function Game() {
       if (selectedPiece.type === 'wizard') {
         // Wizard stays in place for line-of-sight attack - no position change needed
         // Wizard already at correct position in newPieces[adjustedIdx]
+      } else if (selectedPiece.type === 'dragon') {
+        // Dragon attacks and moves to target position
+        // Create burn marks for dragon's path when attacking
+        const path = calculateDragonPath(
+          selectedPiece.row,
+          selectedPiece.col,
+          targetRow,
+          targetCol,
+          adjacency,
+          allNodes
+        );
+        
+        // Add burn mark for the starting position
+        if (!updatedBurnMarks.some(b => b.row === selectedPiece.row && b.col === selectedPiece.col)) {
+          updatedBurnMarks.push({ 
+            row: selectedPiece.row, 
+            col: selectedPiece.col,
+            createdBy: currentPlayer 
+          });
+        }
+        
+        // Add burn marks for all nodes in the path except the destination
+        for (const pathNode of path) {
+          if (!(pathNode.row === targetRow && pathNode.col === targetCol)) {
+            // Check if not already a burn mark
+            if (!updatedBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
+              updatedBurnMarks.push({ 
+                row: pathNode.row, 
+                col: pathNode.col,
+                createdBy: currentPlayer 
+              });
+            }
+          }
+        }
+        
+        // Move dragon to target position
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row: targetRow, col: targetCol },
+          selectedPiece.row,
+          selectedPiece.col,
+          targetRow,
+          targetCol
+        );
+        
+        newPieces[adjustedIdx] = movedPiece;
       } else {
         // Other pieces move to target position after attacking
         let movedPiece = updateAssassinStealth(
@@ -267,7 +349,7 @@ export default function Game() {
     setCurrentPlayer(nextPlayer);
     
     // Clean up burn marks and holy lights created by the next player
-    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    const remainingBurnMarks = updatedBurnMarks.filter(mark => mark.createdBy !== nextPlayer);
     const remainingHolyLights = holyLights.filter(light => light.createdBy !== nextPlayer);
     setBurnMarks(remainingBurnMarks);
     setHolyLights(remainingHolyLights);
@@ -688,6 +770,51 @@ export default function Game() {
         if (selectedPiece.type === 'wizard') {
           // Wizard stays in place for line-of-sight attack - no position change needed
           // Wizard already at correct position in newPieces[adjustedIdx]
+        } else if (selectedPiece.type === 'dragon') {
+          // Dragon attacks and moves to target position
+          // Create burn marks for dragon's path when attacking
+          const path = calculateDragonPath(
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col,
+            adjacency,
+            allNodes
+          );
+          
+          // Add burn mark for the starting position
+          if (!updatedBurnMarks.some(b => b.row === selectedPiece.row && b.col === selectedPiece.col)) {
+            updatedBurnMarks.push({ 
+              row: selectedPiece.row, 
+              col: selectedPiece.col,
+              createdBy: currentPlayer 
+            });
+          }
+          
+          // Add burn marks for all nodes in the path except the destination
+          for (const pathNode of path) {
+            if (!(pathNode.row === row && pathNode.col === col)) {
+              // Check if not already a burn mark
+              if (!updatedBurnMarks.some(b => b.row === pathNode.row && b.col === pathNode.col)) {
+                updatedBurnMarks.push({ 
+                  row: pathNode.row, 
+                  col: pathNode.col,
+                  createdBy: currentPlayer 
+                });
+              }
+            }
+          }
+          
+          // Move dragon to target position
+          let movedPiece = updateAssassinStealth(
+            { ...selectedPiece, row, col },
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col
+          );
+          
+          newPieces[adjustedIdx] = movedPiece;
         } else {
           // Other pieces move to target position after attacking
           let movedPiece = updateAssassinStealth(
