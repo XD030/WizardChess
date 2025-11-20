@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Piece, MoveHighlight, NodePosition, BurnMark } from '@shared/schema';
-import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate } from '@/lib/gameLogic';
+import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate, calculateStealthedAssassinHints } from '@/lib/gameLogic';
 import wizardMoonImg from '@assets/wizard_moon.png';
 import assassinLogoImg from '@assets/assassin_logo.png';
 
@@ -234,6 +234,29 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
       ctx.fill();
+    });
+
+    // Draw hints for possible enemy stealthed assassin positions
+    const stealthHints = calculateStealthedAssassinHints(pieces, currentPlayer, adjacency, allNodes);
+    stealthHints.forEach((hint) => {
+      const node = allNodes.find((n) => n.row === hint.row && n.col === hint.col);
+      if (!node) return;
+
+      const isHovered = hoveredNode?.row === hint.row && hoveredNode?.col === hint.col;
+      const opacity = isHovered ? 0.6 : 0.4;
+
+      // Draw hot pink indicator for possible stealthed assassin positions
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 105, 180, ${opacity})`; // Hot pink
+      ctx.fill();
+      
+      // Add a subtle ring
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 6, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 105, 180, ${opacity + 0.2})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     });
 
     // Draw coordinate labels
