@@ -22,8 +22,10 @@ Preferred communication style: Simple, everyday language.
 
 **Game Rendering**: HTML5 Canvas for the game board visualization, with custom rendering logic for:
 - Diamond-shaped board layout with node-based positioning
-- Piece rendering using emoji symbols with circular backgrounds
-- Visual effects for selected pieces, legal moves, and burn marks
+- Piece rendering using chess symbols and custom images (wizard moon, assassin dagger)
+- Visual effects for selected pieces, legal moves, burn marks, and holy light markers
+- Protection zone visualization with cyan borders for protected pieces
+- Stealth visualization with hot pink borders for stealthed assassins
 - HiDPI (high-resolution display) support
 
 **Styling Approach**: 
@@ -71,11 +73,21 @@ Preferred communication style: Simple, everyday language.
 - Dragon: Straight-line movement with burn marks (persistent hazards)
 - Ranger: Cannon-style attack - single-step movement or jump over any piece to attack distant enemies
 - Griffin: Unlimited horizontal movement (y constant, same rank) OR single-step diagonal movement where both file and rank change by ±1 (e.g., G7→F6 or G7→H8, moving to non-adjacent nodes not in the hex adjacency list)
-- Paladin: Diagonal movement pattern
-- Assassin: Parallelogram diagonal moves with stealth mechanic (white triangle = visible, black triangle = stealthed and invisible to enemy)
+- Paladin: Diagonal movement pattern with guard mechanism:
+  - Protection Zone: Adjacent nodes with friendly pieces, excluding nodes forming triangles with enemy pieces
+  - Guard Trigger: When an enemy attacks a piece in the protection zone, a dialog appears offering guard options
+  - Guard Effect: Selected paladin swaps position with the attacked piece, then dies at its original position, leaving a golden holy light marker
+  - Visual: Protected pieces show cyan border (#06b6d4) when paladin selected; holy light markers display golden glow with cross symbol
+- Assassin: Parallelogram diagonal moves with stealth mechanic (white triangle = visible, black triangle = stealthed and invisible to enemy); automatically revealed in paladin protection zones
 - Bard: Activation-based jumping ability
 
-**Game State Management**: Centralized state includes pieces array, current player, selected piece, move history, burn marks, and game-over conditions. All mutations flow through event handlers in the main Game component.
+**Game State Management**: Centralized state includes pieces array, current player, selected piece, move history, burn marks, holy light markers, protection zones, and game-over conditions. All mutations flow through event handlers in the main Game component.
+
+**Guard Dialog System**: Interactive dialog component (GuardDialog.tsx) that:
+- Displays available paladins that can guard the attacked piece
+- Shows paladin coordinates and uses Shield icon (lucide-react)
+- Handles both guard acceptance (swap + sacrifice + holy light) and guard decline (normal attack)
+- Ensures correct index recalculation after paladin removal to maintain piece references
 
 **Coordinate System**: Dual coordinate system:
 - Row/column indices for logical game representation
