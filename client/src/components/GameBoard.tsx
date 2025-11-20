@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Piece, MoveHighlight, NodePosition, BurnMark } from '@shared/schema';
+import type { Piece, MoveHighlight, NodePosition, BurnMark, HolyLight } from '@shared/schema';
 import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate } from '@/lib/gameLogic';
 import wizardMoonImg from '@assets/wizard_moon.png';
 import assassinLogoImg from '@assets/assassin_logo.png';
@@ -12,6 +12,7 @@ interface GameBoardProps {
   onNodeClick: (row: number, col: number) => void;
   burnMarks: BurnMark[];
   protectionZones: { row: number; col: number }[];
+  holyLights: HolyLight[];
 }
 
 // Helper function to check if a piece should be visible to current player
@@ -23,7 +24,7 @@ function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean
   return true;
 }
 
-export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks, protectionZones }: GameBoardProps) {
+export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks, protectionZones, holyLights }: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
@@ -218,6 +219,46 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.beginPath();
       ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#ff4500';
+      ctx.fill();
+    });
+
+    // Draw holy lights
+    holyLights.forEach((light) => {
+      const node = allNodes.find((n) => n.row === light.row && n.col === light.col);
+      if (!node) return;
+      
+      // Draw a holy light effect - golden/yellow glowing circle with cross
+      const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
+      gradient.addColorStop(0, 'rgba(255, 215, 0, 0.9)'); // Golden center
+      gradient.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)'); // Bright yellow
+      gradient.addColorStop(1, 'rgba(255, 255, 200, 0)'); // Transparent edge
+      
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Add a shining cross pattern
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      
+      // Vertical line
+      ctx.beginPath();
+      ctx.moveTo(node.x, node.y - 8);
+      ctx.lineTo(node.x, node.y + 8);
+      ctx.stroke();
+      
+      // Horizontal line
+      ctx.beginPath();
+      ctx.moveTo(node.x - 8, node.y);
+      ctx.lineTo(node.x + 8, node.y);
+      ctx.stroke();
+      
+      // Add a small golden dot in the center
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffd700';
       ctx.fill();
     });
 
@@ -561,7 +602,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         ctx.fillText(symbol, node.x, node.y);
       }
     });
-  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode, burnMarks, wizardHatImage, assassinLogoImage, protectionZones, currentPlayer]);
+  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode, burnMarks, holyLights, wizardHatImage, assassinLogoImage, protectionZones, currentPlayer]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

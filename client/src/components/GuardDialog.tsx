@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Shield } from 'lucide-react';
 import type { GuardOption } from '@shared/schema';
 
 interface GuardDialogProps {
@@ -42,7 +43,7 @@ export default function GuardDialog({
                     onClick={() => onSelectGuard(option.paladinIndex)}
                     data-testid={`button-guard-${option.coordinate}`}
                   >
-                    <span className="font-mono mr-2">🛡️</span>
+                    <Shield className="h-4 w-4 mr-2" />
                     聖騎士 {option.coordinate}
                   </Button>
                 ))}

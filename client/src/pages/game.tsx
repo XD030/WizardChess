@@ -62,13 +62,13 @@ export default function Game() {
     const targetPiece = pieces[pendingAttack.targetPieceIndex];
     const paladin = pieces[paladinIndex];
     
-    // Swap paladin and target positions
+    // Save positions before modifications
     const targetRow = pendingAttack.targetRow;
     const targetCol = pendingAttack.targetCol;
     const paladinRow = paladin.row;
     const paladinCol = paladin.col;
     
-    // Move target to paladin's position
+    // Move target to paladin's position (swap)
     const movedTarget = updateAssassinStealth(
       { ...targetPiece, row: paladinRow, col: paladinCol },
       targetPiece.row,
@@ -78,16 +78,14 @@ export default function Game() {
     );
     newPieces[pendingAttack.targetPieceIndex] = movedTarget;
     
-    // Remove paladin (it dies)
+    // Remove paladin (it dies at its original position after swap)
     newPieces.splice(paladinIndex, 1);
     
-    // Adjust indices after removal
-    const adjustedTargetIdx = paladinIndex < pendingAttack.targetPieceIndex 
-      ? pendingAttack.targetPieceIndex - 1 
-      : pendingAttack.targetPieceIndex;
-    const adjustedSelectedIdx = paladinIndex < selectedPieceIndex 
-      ? selectedPieceIndex - 1 
-      : selectedPieceIndex;
+    // Recompute indices after paladin removal
+    let adjustedSelectedIdx = selectedPieceIndex;
+    if (paladinIndex < selectedPieceIndex) {
+      adjustedSelectedIdx = selectedPieceIndex - 1;
+    }
     
     // Move attacking piece to target's original position
     const movedAttacker = updateAssassinStealth(
@@ -99,10 +97,10 @@ export default function Game() {
     );
     newPieces[adjustedSelectedIdx] = movedAttacker;
     
-    // Add holy light at paladin's sacrificed position
+    // Add holy light at paladin's ORIGINAL position (where it died)
     const newHolyLights = [...holyLights, {
-      row: targetRow,
-      col: targetCol,
+      row: paladinRow,
+      col: paladinCol,
       createdBy: paladin.side,
     }];
     
@@ -507,6 +505,7 @@ export default function Game() {
               onNodeClick={handleNodeClick}
               burnMarks={burnMarks}
               protectionZones={protectionZones}
+              holyLights={holyLights}
             />
           </div>
 
