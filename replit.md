@@ -77,6 +77,8 @@ Preferred communication style: Simple, everyday language.
   - Protection Zone: All adjacent nodes with friendly pieces (simplified rule)
   - Guard Trigger: When an enemy attacks a piece in the protection zone, a dialog appears offering guard options
   - Guard Effect: Selected paladin swaps position with the attacked piece, then dies at its original position, leaving a golden holy light marker
+  - Holy Light Duration: Holy lights last until the enemy's turn ends (similar to burn marks)
+  - Assassin Reveal: Selecting a paladin automatically reveals any stealthed enemy assassins in the protection zone
   - Visual: Protected pieces show cyan border (#06b6d4) when paladin selected; holy light markers display golden glow with cross symbol
 - Assassin: Parallelogram diagonal moves with stealth mechanic (white triangle = visible, black triangle = stealthed and invisible to enemy); automatically revealed in paladin protection zones
 - Bard: Activation-based jumping ability
