@@ -15,6 +15,7 @@ import {
   calculateGriffinMoves,
   calculateAssassinMoves,
   calculatePaladinMoves,
+  calculateBardMoves,
   calculatePaladinProtectionZone,
   buildRows,
   buildAllNodes,
@@ -45,6 +46,11 @@ export default function Game() {
     targetRow: number;
     targetCol: number;
     targetPieceIndex: number;
+  } | null>(null);
+  const [bardNeedsSwap, setBardNeedsSwap] = useState<{
+    bardIndex: number;
+    bardRow: number;
+    bardCol: number;
   } | null>(null);
 
   useEffect(() => {
@@ -240,6 +246,47 @@ export default function Game() {
   const handleNodeClick = (row: number, col: number) => {
     const clickedPieceIdx = getPieceAt(pieces, row, col);
 
+    // If bard needs swap, handle the swap
+    if (bardNeedsSwap) {
+      if (clickedPieceIdx !== -1) {
+        const swapTarget = pieces[clickedPieceIdx];
+        
+        // Check if this is a valid swap target (friendly piece, not bard, not dragon)
+        if (swapTarget.side === currentPlayer && 
+            swapTarget.type !== 'bard' && 
+            swapTarget.type !== 'dragon') {
+          
+          const newPieces = [...pieces];
+          const bard = newPieces[bardNeedsSwap.bardIndex];
+          
+          // Swap positions
+          newPieces[bardNeedsSwap.bardIndex] = { ...bard, row: swapTarget.row, col: swapTarget.col };
+          newPieces[clickedPieceIdx] = { ...swapTarget, row: bardNeedsSwap.bardRow, col: bardNeedsSwap.bardCol };
+          
+          const bardCoord = getNodeCoordinate(bardNeedsSwap.bardRow, bardNeedsSwap.bardCol);
+          const swapCoord = getNodeCoordinate(swapTarget.row, swapTarget.col);
+          const swapDesc = `${PIECE_CHINESE['bard']} ${bardCoord} ⇄ ${PIECE_CHINESE[swapTarget.type]} ${swapCoord}`;
+          
+          setPieces(newPieces);
+          setMoveHistory([...moveHistory, swapDesc]);
+          setBardNeedsSwap(null);
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          
+          // Now switch to next player
+          const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
+          setCurrentPlayer(nextPlayer);
+          
+          // Clean up burn marks and holy lights
+          const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+          const remainingHolyLights = holyLights.filter(light => light.createdBy !== nextPlayer);
+          setBurnMarks(remainingBurnMarks);
+          setHolyLights(remainingHolyLights);
+        }
+      }
+      return; // Don't process other clicks when waiting for bard swap
+    }
+
     // If no piece selected, try to select a piece
     if (selectedPieceIndex === -1) {
       if (clickedPieceIdx !== -1) {
@@ -289,6 +336,11 @@ export default function Game() {
               // Reveal any stealthed enemy assassins in THIS paladin's protection zone
               const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
               setPieces(revealedPieces);
+            } else if (piece.type === 'bard') {
+              const moves = calculateBardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              setHighlights(moves);
+              setDragonPathNodes([]);
+              setProtectionZones([]);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
@@ -367,6 +419,11 @@ export default function Game() {
               // Reveal any stealthed enemy assassins in THIS paladin's protection zone
               const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
               setPieces(revealedPieces);
+            } else if (piece.type === 'bard') {
+              const moves = calculateBardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              setHighlights(moves);
+              setDragonPathNodes([]);
+              setProtectionZones([]);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
@@ -639,6 +696,49 @@ export default function Game() {
       }
     }
 
+    // Check if a bard just moved - if so, require swap before ending turn
+    if (selectedPiece.type === 'bard' && highlight.type === 'move') {
+      // Bard's index after move (it's still at selectedPieceIndex since we're in 'move' type)
+      const bardNewIdx = selectedPieceIndex;
+      
+      const movedBard = newPieces[bardNewIdx];
+      if (movedBard) {
+        // Set pieces first
+        setPieces(newPieces);
+        setMoveHistory([...moveHistory, moveDesc]);
+        
+        // Mark that bard needs to swap
+        setBardNeedsSwap({
+          bardIndex: bardNewIdx,
+          bardRow: movedBard.row,
+          bardCol: movedBard.col,
+        });
+        
+        // Show swap highlights for friendly pieces (exclude dragons)
+        const swapHighlights: MoveHighlight[] = newPieces
+          .map((p, idx) => ({
+            piece: p,
+            idx,
+          }))
+          .filter(({ piece }) => 
+            piece.side === currentPlayer && 
+            piece.type !== 'bard' &&
+            piece.type !== 'dragon'
+          )
+          .map(({ piece }) => ({
+            type: 'swap' as const,
+            row: piece.row,
+            col: piece.col,
+          }));
+        
+        setHighlights(swapHighlights);
+        setDragonPathNodes([]);
+        setProtectionZones([]);
+        // Keep selectedPieceIndex to track the bard
+        return; // Don't switch player yet
+      }
+    }
+    
     setPieces(newPieces);
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
