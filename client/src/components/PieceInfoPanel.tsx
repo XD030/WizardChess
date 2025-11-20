@@ -138,7 +138,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
               <div className="text-sm mt-1" data-testid="text-bard-status">
                 狀態：
                 <span className={piece.activated ? 'text-green-400 font-semibold' : 'text-slate-500'}>
-                  {piece.activated ? '已激活' : '未激活'} (debug: {piece.activated ? 'true' : 'false'})
+                  {piece.activated ? '已激活' : '未激活'}
                 </span>
               </div>
             )}

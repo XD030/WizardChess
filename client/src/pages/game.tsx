@@ -30,19 +30,11 @@ import {
 
 // Helper function to activate all bards on the board
 function activateAllBards(pieces: Piece[]): Piece[] {
-  const bardCount = pieces.filter(p => p.type === 'bard').length;
-  console.log(`[Bard Activation] Activating ${bardCount} bard(s)`);
-  
-  const result = pieces.map(piece => 
+  return pieces.map(piece => 
     piece.type === 'bard' 
       ? { ...piece, activated: true }
       : piece
   );
-  
-  const activatedCount = result.filter(p => p.type === 'bard' && p.activated).length;
-  console.log(`[Bard Activation] ${activatedCount} bard(s) are now activated`);
-  
-  return result;
 }
 
 export default function Game() {
