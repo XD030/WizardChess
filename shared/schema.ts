@@ -36,6 +36,12 @@ export interface BurnMark {
   createdBy: Side; // Which player created this burn mark
 }
 
+export interface HolyLight {
+  row: number;
+  col: number;
+  createdBy: Side; // Which player created this holy light (only they can pass through)
+}
+
 export interface GameState {
   pieces: Piece[];
   currentPlayer: Side;
@@ -44,6 +50,7 @@ export interface GameState {
   winner?: Side;
   moveHistory: string[];
   burnMarks: BurnMark[];
+  holyLights: HolyLight[];
 }
 
 export interface NodePosition {

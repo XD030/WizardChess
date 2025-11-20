@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Piece, Side, MoveHighlight, NodePosition, BurnMark } from '@shared/schema';
+import type { Piece, Side, MoveHighlight, NodePosition, BurnMark, HolyLight } from '@shared/schema';
 import GameBoard from '@/components/GameBoard';
 import PieceInfoPanel from '@/components/PieceInfoPanel';
 import TurnHistoryPanel from '@/components/TurnHistoryPanel';
@@ -13,6 +13,7 @@ import {
   calculateRangerMoves,
   calculateGriffinMoves,
   calculateAssassinMoves,
+  calculatePaladinMoves,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -30,6 +31,7 @@ export default function Game() {
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
   const [burnMarks, setBurnMarks] = useState<BurnMark[]>([]);
+  const [holyLights, setHolyLights] = useState<HolyLight[]>([]);
   const [dragonPathNodes, setDragonPathNodes] = useState<{ row: number; col: number }[]>([]);
 
   useEffect(() => {
@@ -74,6 +76,10 @@ export default function Game() {
               setDragonPathNodes([]);
             } else if (piece.type === 'assassin') {
               const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
+            } else if (piece.type === 'paladin') {
+              const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
             } else {
@@ -133,6 +139,10 @@ export default function Game() {
               setDragonPathNodes([]);
             } else if (piece.type === 'assassin') {
               const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
+              setHighlights(moves);
+              setDragonPathNodes([]);
+            } else if (piece.type === 'paladin') {
+              const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
             } else {

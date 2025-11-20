@@ -716,6 +716,37 @@ export function calculateAssassinMoves(
   return highlights;
 }
 
+// Calculate paladin moves - single step movement
+export function calculatePaladinMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): MoveHighlight[] {
+  const highlights: MoveHighlight[] = [];
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  
+  if (nodeIdx === -1) return highlights;
+
+  // Paladin moves 1 step along connections
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+    
+    if (targetPieceIdx === -1) {
+      highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+    } else {
+      const targetPiece = pieces[targetPieceIdx];
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+      }
+    }
+  }
+
+  return highlights;
+}
+
 // Helper function to find jump target node
 function findJumpTarget(
   fromIdx: number,
