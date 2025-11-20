@@ -329,12 +329,12 @@ export default function Game() {
           // Calculate moves based on piece type
           if (allNodes.length > 0) {
             if (piece.type === 'wizard') {
-              const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'apprentice') {
-              const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
@@ -344,22 +344,22 @@ export default function Game() {
               setDragonPathNodes(result.pathNodes);
               setProtectionZones([]);
             } else if (piece.type === 'ranger') {
-              const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'griffin') {
-              const moves = calculateGriffinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateGriffinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'assassin') {
-              const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'paladin') {
-              const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
@@ -369,7 +369,7 @@ export default function Game() {
               const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
               setPieces(revealedPieces);
             } else if (piece.type === 'bard') {
-              const moves = calculateBardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateBardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
@@ -414,12 +414,12 @@ export default function Game() {
           // Calculate moves based on piece type
           if (allNodes.length > 0) {
             if (piece.type === 'wizard') {
-              const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateWizardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'apprentice') {
-              const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateApprenticeMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
@@ -429,22 +429,22 @@ export default function Game() {
               setDragonPathNodes(result.pathNodes);
               setProtectionZones([]);
             } else if (piece.type === 'ranger') {
-              const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateRangerMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'griffin') {
-              const moves = calculateGriffinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateGriffinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'assassin') {
-              const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateAssassinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
             } else if (piece.type === 'paladin') {
-              const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculatePaladinMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
@@ -454,7 +454,7 @@ export default function Game() {
               const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
               setPieces(revealedPieces);
             } else if (piece.type === 'bard') {
-              const moves = calculateBardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights);
+              const moves = calculateBardMoves(piece, clickedPieceIdx, pieces, adjacency, allNodes, holyLights, burnMarks);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);

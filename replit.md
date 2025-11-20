@@ -70,7 +70,7 @@ Preferred communication style: Simple, everyday language.
 **Piece Movement System**: Each piece type has dedicated movement calculation functions:
 - Wizard: Single-node movement plus line-of-sight attacks through apprentices/bards
 - Apprentice: Forward-only movement with position swapping ability
-- Dragon: Straight-line movement with burn marks (persistent hazards)
+- Dragon: Straight-line movement with burn marks (persistent hazards that block movement - pieces cannot move to or stop on burn marks)
 - Ranger: Cannon-style attack - single-step movement or jump over any piece to attack distant enemies
 - Griffin: Unlimited horizontal movement (y constant, same rank) OR single-step diagonal movement where both file and rank change by ±1 (e.g., G7→F6 or G7→H8, moving to non-adjacent nodes not in the hex adjacency list)
 - Paladin: Diagonal movement pattern with guard mechanism:
