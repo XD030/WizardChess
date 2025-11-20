@@ -238,6 +238,25 @@ export function hasEnemyHolyLight(
   );
 }
 
+// Check if a piece can occupy a node (considering holy lights)
+export function canOccupyNode(
+  row: number,
+  col: number,
+  pieceSide: Side,
+  holyLights: HolyLight[]
+): boolean {
+  return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
+}
+
+// Filter move highlights to remove positions blocked by enemy holy lights
+export function filterHighlightsForHolyLight(
+  piece: Piece,
+  highlights: MoveHighlight[],
+  holyLights: HolyLight[]
+): MoveHighlight[] {
+  return highlights.filter(h => canOccupyNode(h.row, h.col, piece.side, holyLights));
+}
+
 // Check and reveal all stealthed assassins in protection zones
 // Should be called after any piece movement to check if stealthed assassins are in protection zones
 export function revealAssassinsInProtectionZones(
@@ -380,7 +399,8 @@ export function calculateWizardMoves(
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
-  allNodes: NodePosition[]
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -391,12 +411,13 @@ export function calculateWizardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const targetPiece = getPieceAt(pieces, adjNode.row, adjNode.col);
-    if (targetPiece === -1) {
+    // Cannot move to positions with enemy holy light
+    if (targetPiece === -1 && !hasEnemyHolyLight(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     }
   }
 
-  // Swap with apprentices
+  // Swap with apprentices (holy light doesn't affect swapping since both pieces move simultaneously)
   for (let i = 0; i < pieces.length; i++) {
     const p = pieces[i];
     if (p.side === piece.side && p.type === 'apprentice') {
@@ -422,8 +443,11 @@ export function calculateWizardMoves(
 
       const targetPiece = pieces[targetPieceIdx];
 
+      // Cannot attack pieces on enemy holy light
       if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-        highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+        if (!hasEnemyHolyLight(adjNode.row, adjNode.col, piece.side, holyLights)) {
+          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+        }
       } else if (
         targetPiece.side === piece.side &&
         (targetPiece.type === 'apprentice' || targetPiece.type === 'bard')
@@ -442,7 +466,8 @@ export function calculateApprenticeMoves(
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
-  allNodes: NodePosition[]
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -462,18 +487,19 @@ export function calculateApprenticeMoves(
     if (!isValidDirection) continue;
     
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
-    if (targetPieceIdx === -1) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-    } else {
-      // Can attack enemy pieces in forward direction
+    } else if (targetPieceIdx !== -1) {
+      // Can attack enemy pieces in forward direction (if not on enemy holy light)
       const targetPiece = pieces[targetPieceIdx];
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+          canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
     }
   }
 
-  // Swap with adjacent friendly pieces
+  // Swap with adjacent friendly pieces (holy light doesn't affect swapping)
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
@@ -496,7 +522,8 @@ export function calculateRangerMoves(
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
-  allNodes: NodePosition[]
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -508,12 +535,13 @@ export function calculateRangerMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
     
-    if (targetPieceIdx === -1) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-    } else {
-      // Can attack adjacent enemy directly
+    } else if (targetPieceIdx !== -1) {
+      // Can attack adjacent enemy directly (if not on enemy holy light)
       const targetPiece = pieces[targetPieceIdx];
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+          canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
     }
@@ -566,10 +594,11 @@ export function calculateRangerMoves(
         const nextNode = allNodes[nextIdx];
         const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
         
-        // Found a piece - check if it's an enemy
+        // Found a piece - check if it's an enemy (and not on enemy holy light)
         if (pieceAtNext !== -1) {
           const targetPiece = pieces[pieceAtNext];
-          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+              canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights)) {
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
           // Stop searching in this direction (found a piece)
@@ -610,7 +639,8 @@ export function calculateGriffinMoves(
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
-  allNodes: NodePosition[]
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -639,6 +669,12 @@ export function calculateGriffinMoves(
     
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
+      
+      // Cannot pass through enemy holy light
+      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights)) {
+        break;
+      }
+      
       const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
       
       if (targetPieceIdx !== -1) {
@@ -671,7 +707,7 @@ export function calculateGriffinMoves(
       }
     }
     
-    if (targetNode) {
+    if (targetNode && canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights)) {
       const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
       
       if (targetPieceIdx === -1) {
@@ -696,7 +732,8 @@ export function calculateAssassinMoves(
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
-  allNodes: NodePosition[]
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -732,14 +769,18 @@ export function calculateAssassinMoves(
           // Check if target is adjacent to both adj1 and adj2 (completing the parallelogram)
           if (adjacency[adj1Idx].includes(targetIdx) && adjacency[adj2Idx].includes(targetIdx)) {
             const targetNode = allNodes[targetIdx];
-            const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
             
-            if (targetPieceIdx === -1) {
-              highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
-            } else {
-              const targetPiece = pieces[targetPieceIdx];
-              if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-                highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
+            // Check if can occupy this node (not blocked by enemy holy light)
+            if (canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights)) {
+              const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
+              
+              if (targetPieceIdx === -1) {
+                highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
+              } else {
+                const targetPiece = pieces[targetPieceIdx];
+                if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+                  highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
+                }
               }
             }
           }
@@ -757,7 +798,8 @@ export function calculatePaladinMoves(
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
-  allNodes: NodePosition[]
+  allNodes: NodePosition[],
+  holyLights: HolyLight[] = []
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -769,11 +811,12 @@ export function calculatePaladinMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
     
-    if (targetPieceIdx === -1) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-    } else {
+    } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
-      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' &&
+          canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights)) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
     }
@@ -916,7 +959,8 @@ export function calculateDragonMoves(
   pieces: Piece[],
   adjacency: number[][],
   allNodes: NodePosition[],
-  burnMarks: { row: number; col: number }[]
+  burnMarks: { row: number; col: number }[],
+  holyLights: HolyLight[] = []
 ): { highlights: MoveHighlight[]; pathNodes: { row: number; col: number }[] } {
   const highlights: MoveHighlight[] = [];
   // Don't record path nodes during move calculation - we'll calculate them when a move is selected
@@ -937,6 +981,12 @@ export function calculateDragonMoves(
     
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
+      
+      // Cannot pass through enemy holy light - stop immediately
+      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights)) {
+        break;
+      }
+      
       const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
       const hasBurnMark = burnMarks.some(b => b.row === nextNode.row && b.col === nextNode.col);
       
