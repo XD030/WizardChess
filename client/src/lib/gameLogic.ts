@@ -9,6 +9,7 @@ export const PIECE_SYMBOLS: Record<PieceType, { white: string; black: string }> 
   paladin: { white: '♗', black: '♝' },     // Bishop
   assassin: { white: '♘', black: '♞' },    // Knight (alternative)
   bard: { white: '♔', black: '♚' },        // King
+  griffin: { white: '♖', black: '♜' },     // Rook (alternative)
 };
 
 export function getPieceSymbol(type: PieceType, side: Side): string {
@@ -24,6 +25,7 @@ export const PIECE_CHINESE: Record<PieceType, string> = {
   paladin: '聖騎士',
   assassin: '刺客',
   bard: '吟遊詩人',
+  griffin: '獅鷲',
 };
 
 export const SIDE_CHINESE: Record<Side, string> = {
@@ -90,6 +92,14 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
     name: '《吟遊詩人》',
     move: ['無法主動移動，只能換位（之後補完）。'],
     ability: ['可作為巫師導線的一部分。'],
+  },
+  griffin: {
+    name: '《獅鷲》',
+    move: [
+      '往正前後的點移動 1 節點。',
+      '或者只沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
+    ],
+    ability: ['碰到潛行刺客會擊殺。'],
   },
 };
 
@@ -494,6 +504,94 @@ export function calculateRangerMoves(
         currentIdx = nextIdx;
         nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       }
+    }
+  }
+
+  return highlights;
+}
+
+// Calculate griffin moves
+// Can move 1 step forward/backward OR move unlimited distance horizontally
+export function calculateGriffinMoves(
+  piece: Piece,
+  pieceIndex: number,
+  pieces: Piece[],
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): MoveHighlight[] {
+  const highlights: MoveHighlight[] = [];
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
+  
+  if (nodeIdx === -1) return highlights;
+
+  // Part 1: Single step forward or backward
+  // For white (bottom), forward means row decreases (towards top)
+  // For black (top), forward means row increases (towards bottom)
+  const isWhite = piece.side === 'white';
+  const forwardRowDelta = isWhite ? -1 : 1;
+  const backwardRowDelta = isWhite ? 1 : -1;
+
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const rowDiff = adjNode.row - piece.row;
+    
+    // Check if this is a forward or backward move
+    if (rowDiff === forwardRowDelta || rowDiff === backwardRowDelta) {
+      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
+      
+      if (targetPieceIdx === -1) {
+        highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+      } else {
+        const targetPiece = pieces[targetPieceIdx];
+        // Can attack enemy pieces (including stealthed assassins)
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+        }
+      }
+    }
+  }
+
+  // Part 2: Unlimited horizontal movement (same row, left or right)
+  // Follow straight lines in directions that keep the same row
+  for (const firstAdjIdx of adjacency[nodeIdx]) {
+    const firstAdjNode = allNodes[firstAdjIdx];
+    
+    // Only consider directions that stay on the same row
+    if (firstAdjNode.row !== piece.row) {
+      continue;
+    }
+    
+    const direction = {
+      from: nodeIdx,
+      to: firstAdjIdx,
+    };
+    
+    let currentIdx = nodeIdx;
+    let nextIdx = firstAdjIdx;
+    
+    while (nextIdx !== -1) {
+      const nextNode = allNodes[nextIdx];
+      const targetPieceIdx = getPieceAt(pieces, nextNode.row, nextNode.col);
+      
+      // If there's a piece at this position
+      if (targetPieceIdx !== -1) {
+        const targetPiece = pieces[targetPieceIdx];
+        
+        // Can attack enemy pieces (including stealthed assassins)
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+          highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
+        }
+        
+        // Stop - cannot pass through pieces
+        break;
+      }
+      
+      // Empty node - can move here
+      highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
+      
+      // Continue in the same direction
+      currentIdx = nextIdx;
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
     }
   }
 

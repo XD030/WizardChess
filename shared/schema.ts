@@ -18,7 +18,7 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 // Wizard Chess Game Types
-export type PieceType = 'wizard' | 'apprentice' | 'dragon' | 'ranger' | 'paladin' | 'assassin' | 'bard';
+export type PieceType = 'wizard' | 'apprentice' | 'dragon' | 'ranger' | 'paladin' | 'assassin' | 'bard' | 'griffin';
 export type Side = 'white' | 'black' | 'neutral';
 
 export interface Piece {
