@@ -653,36 +653,6 @@ export function calculateGriffinMoves(
   return highlights;
 }
 
-// Calculate all possible positions for enemy stealthed assassins
-// This provides hints to the current player about where stealthed enemies might be
-export function calculateStealthedAssassinHints(
-  pieces: Piece[],
-  currentPlayer: 'white' | 'black',
-  adjacency: number[][],
-  allNodes: NodePosition[]
-): { row: number; col: number }[] {
-  const hintPositions: { row: number; col: number }[] = [];
-  const hintSet = new Set<string>();
-  
-  // Find all enemy stealthed assassins
-  pieces.forEach((piece) => {
-    if (piece.type === 'assassin' && piece.stealthed && piece.side !== currentPlayer) {
-      // Calculate all possible moves for this assassin
-      const moves = calculateAssassinMoves(piece, -1, pieces, adjacency, allNodes);
-      
-      moves.forEach((move) => {
-        const key = `${move.row},${move.col}`;
-        if (!hintSet.has(key)) {
-          hintSet.add(key);
-          hintPositions.push({ row: move.row, col: move.col });
-        }
-      });
-    }
-  });
-  
-  return hintPositions;
-}
-
 // Calculate assassin moves - parallelogram diagonal moves
 // Assassin can move along parallelogram diagonals formed by adjacent triangles
 // Key: Exclude SQUARES (adj nodes in same row) but allow PARALLELOGRAMS
