@@ -781,15 +781,6 @@ export function calculatePaladinProtectionZone(
   const paladinIdx = allNodes.findIndex((n) => n.row === paladin.row && n.col === paladin.col);
   if (paladinIdx === -1) return protectionZone;
   
-  // Debug: Log paladin position and adjacent nodes
-  const paladinCoord = getNodeCoordinate(paladin.row, paladin.col);
-  console.log(`Paladin at ${paladinCoord} (row=${paladin.row}, col=${paladin.col}, idx=${paladinIdx})`);
-  console.log(`Adjacent node indices: ${adjacency[paladinIdx].join(', ')}`);
-  console.log(`Adjacent nodes:`, adjacency[paladinIdx].map(idx => {
-    const node = allNodes[idx];
-    return `${getNodeCoordinate(node.row, node.col)} (${node.row},${node.col})`;
-  }));
-  
   // Check all adjacent nodes (where paladin can move in 1 step)
   for (const adjIdx of adjacency[paladinIdx]) {
     const adjNode = allNodes[adjIdx];
@@ -801,8 +792,6 @@ export function calculatePaladinProtectionZone(
     }
     
     const pieceAtNode = pieces[pieceIdx];
-    console.log(`Found piece at ${getNodeCoordinate(adjNode.row, adjNode.col)}: ${pieceAtNode.type}, side=${pieceAtNode.side}, friendly=${pieceAtNode.side === paladin.side}`);
-    
     if (pieceAtNode.side !== paladin.side) {
       continue; // Not friendly, skip
     }
@@ -810,8 +799,6 @@ export function calculatePaladinProtectionZone(
     // This friendly piece is in protection zone
     protectionZone.push({ row: adjNode.row, col: adjNode.col });
   }
-  
-  console.log(`Protection zone:`, protectionZone.map(z => getNodeCoordinate(z.row, z.col)));
   
   return protectionZone;
 }
