@@ -426,46 +426,57 @@ export function calculateRangerMoves(
     }
   }
 
-  // Cannon-style jump attack: jump over exactly one piece to attack enemy
-  // Can jump to any distance along the straight line
+  // Cannon-style jump attack: jump over exactly one piece (at any distance) to attack enemy
+  // For each direction, find the first piece along the line, jump over it, and search for enemy
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
-    const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
-
-    console.log(`检查方向: 游侠(${piece.row},${piece.col})=${getNodeCoordinate(piece.row, piece.col)} -> adj(${adjNode.row},${adjNode.col})=${getNodeCoordinate(adjNode.row, adjNode.col)}, pieceAtAdj=${pieceAtAdj}`);
-
-    // If there's a piece at adjacent position, try to jump over it
-    // Exception: Cannot jump over unactivated bards
-    if (pieceAtAdj !== -1) {
-      const adjacentPiece = pieces[pieceAtAdj];
+    
+    // Define the direction based on this adjacent node
+    const direction = { from: nodeIdx, to: adjIdx };
+    
+    // Search along this direction to find the first piece (at any distance)
+    let currentIdx = nodeIdx;
+    let nextIdx = adjIdx;
+    let foundPieceToJumpIdx = -1;
+    
+    while (nextIdx !== -1) {
+      const nextNode = allNodes[nextIdx];
+      const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
       
-      console.log(`  跳过棋子: type=${adjacentPiece.type}, side=${adjacentPiece.side}`);
-      
-      // Skip if it's an unactivated bard
-      if (adjacentPiece.type === 'bard' && !adjacentPiece.activated) {
-        console.log(`  ✗ 不能跳过未激活的吟游诗人`);
-        continue;
+      // Found the first piece in this direction
+      if (pieceAtNext !== -1) {
+        const foundPiece = pieces[pieceAtNext];
+        
+        // Check if we can jump over this piece
+        // Cannot jump over unactivated bards
+        if (foundPiece.type === 'bard' && !foundPiece.activated) {
+          // Can't jump over this piece, stop searching in this direction
+          break;
+        }
+        
+        // Found a piece we can jump over
+        foundPieceToJumpIdx = nextIdx;
+        break;
       }
       
-      // Continue in the same direction to find enemy piece (any distance)
-      const direction = { from: nodeIdx, to: adjIdx };
-      let currentIdx = adjIdx;
-      let nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
-      
-      console.log(`  沿直线搜索，nextIdx=${nextIdx}`);
+      // Continue searching in the same direction
+      currentIdx = nextIdx;
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
+    }
+    
+    // If we found a piece to jump over, continue searching for enemy after it
+    if (foundPieceToJumpIdx !== -1) {
+      currentIdx = foundPieceToJumpIdx;
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
       
       while (nextIdx !== -1) {
         const nextNode = allNodes[nextIdx];
         const pieceAtNext = getPieceAt(pieces, nextNode.row, nextNode.col);
         
-        console.log(`    检查(${nextNode.row},${nextNode.col})=${getNodeCoordinate(nextNode.row, nextNode.col)}, piece=${pieceAtNext}`);
-        
         // Found a piece - check if it's an enemy
         if (pieceAtNext !== -1) {
           const targetPiece = pieces[pieceAtNext];
-          console.log(`      找到棋子: type=${targetPiece.type}, side=${targetPiece.side}`);
           if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-            console.log(`      ✓ 可以炮攻击`);
             highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
           }
           // Stop searching in this direction (found a piece)
