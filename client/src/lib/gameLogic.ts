@@ -233,6 +233,7 @@ export function getInitialPieces(): Piece[] {
   const whiteBasePieces: Pick<Piece, 'type' | 'row' | 'col'>[] = [
     { type: 'wizard', row: 16, col: 0 },
     { type: 'dragon', row: 14, col: 1 },
+    { type: 'griffin', row: 14, col: 0 },
     { type: 'ranger', row: 13, col: 0 },
     { type: 'ranger', row: 13, col: 3 },
     { type: 'paladin', row: 13, col: 1 },
