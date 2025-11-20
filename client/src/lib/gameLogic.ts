@@ -97,7 +97,7 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
     name: '《獅鷲》',
     move: [
       '沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
-      '或者沿對角線方向（file 和 rank 同時增減的方向）前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '或者沿對角線方向（file 和 rank 同時增減的方向）移動 1 節點。',
     ],
     ability: ['碰到潛行刺客會擊殺。'],
   },
@@ -580,47 +580,28 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 2: Unlimited diagonal movement along x-y constant direction
-  // This direction may not follow adjacency connections, so we iterate through all nodes
-  const targetDiff = currentCoords.x - currentCoords.y;  // For diagonal, x-y should remain constant
-  
-  for (let deltaSign of [-1, 1]) {
-    // Try both directions along x-y diagonal
-    let distance = 1;
-    let foundBlocker = false;
+  // Part 2: Single step diagonal movement along x-y constant direction
+  // Check adjacent nodes for diagonal moves (where x and y change by the same amount)
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const adjCoords = getRotatedCoords(adjNode.row, adjNode.col);
     
-    while (!foundBlocker && distance < 17) {
-      const targetX = currentCoords.x + (distance * deltaSign);
-      const targetY = currentCoords.y + (distance * deltaSign);
+    // Check if this is a diagonal move (x and y change by the same amount)
+    const dx = adjCoords.x - currentCoords.x;
+    const dy = adjCoords.y - currentCoords.y;
+    
+    // Diagonal: x and y must change by the same amount (both +1 or both -1)
+    if (dx === dy && dx !== 0) {
+      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
       
-      // Find the node with these rotated coordinates
-      let targetNode = null;
-      for (const node of allNodes) {
-        const nodeCoords = getRotatedCoords(node.row, node.col);
-        if (nodeCoords.x === targetX && nodeCoords.y === targetY) {
-          targetNode = node;
-          break;
-        }
-      }
-      
-      if (!targetNode) {
-        // No such node exists on the board
-        break;
-      }
-      
-      const targetPieceIdx = getPieceAt(pieces, targetNode.row, targetNode.col);
-      
-      if (targetPieceIdx !== -1) {
+      if (targetPieceIdx === -1) {
+        highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+      } else {
         const targetPiece = pieces[targetPieceIdx];
         if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-          highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
+          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
         }
-        foundBlocker = true;
-      } else {
-        highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
       }
-      
-      distance++;
     }
   }
 
