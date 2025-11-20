@@ -396,7 +396,8 @@ export function calculateApprenticeMoves(
   return highlights;
 }
 
-// Calculate ranger moves - checker-style jumps up to 2 times
+// Calculate ranger moves - similar to Chinese Chess Cannon (炮)
+// Can jump over exactly one piece to attack an enemy piece
 export function calculateRangerMoves(
   piece: Piece,
   pieceIndex: number,
@@ -409,99 +410,50 @@ export function calculateRangerMoves(
   
   if (nodeIdx === -1) return highlights;
 
-  // Track visited positions to avoid infinite loops
-  const visitedPositions = new Set<string>();
-  visitedPositions.add(`${piece.row},${piece.col}`);
-
-  // BFS to find all possible jump destinations (max 2 jumps)
-  interface JumpState {
-    nodeIdx: number;
-    jumpsCount: number;
-    path: number[]; // Path of node indices
-  }
-
-  const queue: JumpState[] = [{ nodeIdx, jumpsCount: 0, path: [nodeIdx] }];
-  const jumpDestinations = new Map<string, JumpState>();
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const currentNode = allNodes[current.nodeIdx];
-
-    // Try to jump in each direction (straight line only)
-    for (const adjIdx of adjacency[current.nodeIdx]) {
-      const adjNode = allNodes[adjIdx];
-      const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
-
-      // If there's a piece at adjacent position, try to jump over it
-      // Exception: Cannot jump over unactivated bards
-      if (pieceAtAdj !== -1) {
-        const adjacentPiece = pieces[pieceAtAdj];
-        
-        // Skip if it's an unactivated bard
-        if (adjacentPiece.type === 'bard' && !adjacentPiece.activated) {
-          continue;
-        }
-        
-        // Find the node in the same straight line direction after jumping
-        // This ensures: start point -> jump over point -> landing point are in a straight line
-        const jumpTarget = findJumpTarget(current.nodeIdx, adjIdx, adjacency, allNodes);
-        
-        if (jumpTarget !== -1) {
-          const jumpNode = allNodes[jumpTarget];
-          const posKey = `${jumpNode.row},${jumpNode.col}`;
-          
-          // Check if jump destination is valid
-          const pieceAtJump = getPieceAt(pieces, jumpNode.row, jumpNode.col);
-          
-          // Can ONLY land on empty space (cannot jump to attack)
-          if (pieceAtJump === -1) {
-            if (!visitedPositions.has(posKey)) {
-              visitedPositions.add(posKey);
-              const newState = {
-                nodeIdx: jumpTarget,
-                jumpsCount: current.jumpsCount + 1,
-                path: [...current.path, jumpTarget]
-              };
-
-              // Record this as a valid jump destination
-              if (!jumpDestinations.has(posKey) || jumpDestinations.get(posKey)!.jumpsCount > newState.jumpsCount) {
-                jumpDestinations.set(posKey, newState);
-              }
-
-              // If we can still jump (less than 2 jumps), continue exploring
-              if (newState.jumpsCount < 2) {
-                queue.push(newState);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Add jump destinations to highlights (all jumps are to empty spaces)
-  Array.from(jumpDestinations.entries()).forEach(([posKey, state]) => {
-    const [row, col] = posKey.split(',').map(Number);
-    highlights.push({ type: 'move', row, col });
-  });
-
-  // Ranger can also move 1 step to adjacent nodes (in addition to jumping)
+  // Ranger can move 1 step to adjacent empty nodes
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
     
-    // Check if this position is already in jump destinations
-    const posKey = `${adjNode.row},${adjNode.col}`;
-    const alreadyInJumps = jumpDestinations.has(posKey);
-    
-    if (!alreadyInJumps) {
-      if (targetPieceIdx === -1) {
-        highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-      } else {
-        // Can attack enemy
-        const targetPiece = pieces[targetPieceIdx];
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+    if (targetPieceIdx === -1) {
+      highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
+    } else {
+      // Can attack adjacent enemy directly
+      const targetPiece = pieces[targetPieceIdx];
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+        highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
+      }
+    }
+  }
+
+  // Cannon-style jump attack: jump over exactly one piece to attack enemy
+  for (const adjIdx of adjacency[nodeIdx]) {
+    const adjNode = allNodes[adjIdx];
+    const pieceAtAdj = getPieceAt(pieces, adjNode.row, adjNode.col);
+
+    // If there's a piece at adjacent position, try to jump over it
+    // Exception: Cannot jump over unactivated bards
+    if (pieceAtAdj !== -1) {
+      const adjacentPiece = pieces[pieceAtAdj];
+      
+      // Skip if it's an unactivated bard
+      if (adjacentPiece.type === 'bard' && !adjacentPiece.activated) {
+        continue;
+      }
+      
+      // Find the node in the same straight line direction after jumping
+      const jumpTarget = findJumpTarget(nodeIdx, adjIdx, adjacency, allNodes);
+      
+      if (jumpTarget !== -1) {
+        const jumpNode = allNodes[jumpTarget];
+        const pieceAtJump = getPieceAt(pieces, jumpNode.row, jumpNode.col);
+        
+        // Can ONLY jump to attack enemy piece (like Chinese Chess Cannon)
+        if (pieceAtJump !== -1) {
+          const targetPiece = pieces[pieceAtJump];
+          if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
+            highlights.push({ type: 'attack', row: jumpNode.row, col: jumpNode.col });
+          }
         }
       }
     }
