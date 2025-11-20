@@ -96,8 +96,7 @@ export const PIECE_DESCRIPTIONS: Record<PieceType, { name: string; move: string[
   griffin: {
     name: '《獅鷲》',
     move: [
-      '往正前後的點移動 1 節點。',
-      '或者沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
+      '沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子。',
       '或者沿對角線方向（file 和 rank 同時增減的方向）前進，距離不限，不可轉換方向或穿越其他棋子。',
     ],
     ability: ['碰到潛行刺客會擊殺。'],
@@ -530,7 +529,7 @@ function getRotatedCoords(row: number, col: number): { x: number; y: number } {
 }
 
 // Calculate griffin moves
-// Can move 1 step forward/backward OR move unlimited distance along two diagonal directions
+// Can move unlimited distance along two diagonal directions
 export function calculateGriffinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -546,34 +545,7 @@ export function calculateGriffinMoves(
   // Get rotated coordinates of current position
   const currentCoords = getRotatedCoords(piece.row, piece.col);
 
-  // Part 1: Single step forward or backward
-  // For white (bottom), forward means row decreases (towards top)
-  // For black (top), forward means row increases (towards bottom)
-  const isWhite = piece.side === 'white';
-  const forwardRowDelta = isWhite ? -1 : 1;
-  const backwardRowDelta = isWhite ? 1 : -1;
-
-  for (const adjIdx of adjacency[nodeIdx]) {
-    const adjNode = allNodes[adjIdx];
-    const rowDiff = adjNode.row - piece.row;
-    
-    // Check if this is a forward or backward move
-    if (rowDiff === forwardRowDelta || rowDiff === backwardRowDelta) {
-      const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
-      
-      if (targetPieceIdx === -1) {
-        highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
-      } else {
-        const targetPiece = pieces[targetPieceIdx];
-        // Can attack enemy pieces (including stealthed assassins)
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral') {
-          highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
-        }
-      }
-    }
-  }
-
-  // Part 2: Unlimited horizontal movement (same row, x+y constant)
+  // Part 1: Unlimited horizontal movement (y constant, same rank)
   for (const firstAdjIdx of adjacency[nodeIdx]) {
     const firstAdjNode = allNodes[firstAdjIdx];
     
@@ -608,7 +580,7 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Part 3: Unlimited diagonal movement along x-y constant direction
+  // Part 2: Unlimited diagonal movement along x-y constant direction
   // This direction may not follow adjacency connections, so we iterate through all nodes
   const targetDiff = currentCoords.x - currentCoords.y;  // For diagonal, x-y should remain constant
   
