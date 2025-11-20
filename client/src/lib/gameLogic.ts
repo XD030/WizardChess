@@ -183,8 +183,10 @@ export function isBlackTriangle(row: number, col: number): boolean {
 
 // Update assassin stealth state based on movement direction
 // Should be called whenever an assassin moves to a new position
-// 白→黑：進入潛行 (white triangle to black triangle: enter stealth)
-// 黑→白：現形 (black triangle to white triangle: reveal)
+// Rule: Use rotated coordinate system (file x, rank y)
+// - If Δx + Δy = 1: Enter stealth (moving into black triangle)
+// - If Δx + Δy = -1: Reveal (moving into white triangle)
+// - Otherwise: Maintain current state
 export function updateAssassinStealth(
   piece: Piece,
   fromRow: number,
@@ -196,20 +198,26 @@ export function updateAssassinStealth(
     return piece;
   }
   
-  const fromBlack = isBlackTriangle(fromRow, fromCol);
-  const toBlack = isBlackTriangle(toRow, toCol);
+  // Get rotated coordinates (file x, rank y)
+  const fromCoords = getRotatedCoords(fromRow, fromCol);
+  const toCoords = getRotatedCoords(toRow, toCol);
   
-  // 白→黑：進入潛行
-  if (!fromBlack && toBlack) {
+  // Calculate movement delta
+  const deltaX = toCoords.x - fromCoords.x;
+  const deltaY = toCoords.y - fromCoords.y;
+  const deltaSum = deltaX + deltaY;
+  
+  // Δx + Δy = 1: Enter stealth (moving into black triangle)
+  if (deltaSum === 1) {
     return { ...piece, stealthed: true };
   }
   
-  // 黑→白：現形
-  if (fromBlack && !toBlack) {
+  // Δx + Δy = -1: Reveal (moving into white triangle)
+  if (deltaSum === -1) {
     return { ...piece, stealthed: false };
   }
   
-  // 白→白 或 黑→黑：保持原狀態
+  // Otherwise: Maintain current state
   return piece;
 }
 
