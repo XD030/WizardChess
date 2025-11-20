@@ -97,13 +97,6 @@ export default function Game() {
     );
     newPieces[adjustedSelectedIdx] = movedAttacker;
     
-    // Add holy light at paladin's ORIGINAL position (where it died)
-    const newHolyLights = [...holyLights, {
-      row: paladinRow,
-      col: paladinCol,
-      createdBy: paladin.side,
-    }];
-    
     // Update history
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const targetCoord = getNodeCoordinate(targetRow, targetCol);
@@ -113,8 +106,22 @@ export default function Game() {
     // Reveal any assassins in protection zones after the move
     const revealedPieces = revealAssassinsInProtectionZones(newPieces, adjacency, allNodes);
     
+    // Switch to next player
+    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
+    
+    // Clean up old burn marks and holy lights created by the next player
+    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter(light => light.createdBy !== nextPlayer);
+    
+    // Add holy light at paladin's ORIGINAL position (where it died)
+    const updatedHolyLights = [...remainingHolyLights, {
+      row: paladinRow,
+      col: paladinCol,
+      createdBy: paladin.side,
+    }];
+    
     setPieces(revealedPieces);
-    setHolyLights(newHolyLights);
+    setHolyLights(updatedHolyLights);
     setMoveHistory([...moveHistory, moveDesc]);
     setSelectedPieceIndex(-1);
     setHighlights([]);
@@ -122,13 +129,7 @@ export default function Game() {
     setProtectionZones([]);
     setGuardDialogOpen(false);
     setPendingAttack(null);
-    
-    // Switch to next player
-    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
     setCurrentPlayer(nextPlayer);
-    
-    // Clean up burn marks created by the next player
-    const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
     setBurnMarks(remainingBurnMarks);
   };
 
@@ -181,9 +182,11 @@ export default function Game() {
     const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
     setCurrentPlayer(nextPlayer);
     
-    // Clean up burn marks created by the next player
+    // Clean up burn marks and holy lights created by the next player
     const remainingBurnMarks = burnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter(light => light.createdBy !== nextPlayer);
     setBurnMarks(remainingBurnMarks);
+    setHolyLights(remainingHolyLights);
   };
 
   const handleNodeClick = (row: number, col: number) => {
@@ -234,6 +237,10 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
+              
+              // Reveal any stealthed assassins in protection zones
+              const revealedPieces = revealAssassinsInProtectionZones(pieces, adjacency, allNodes);
+              setPieces(revealedPieces);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
@@ -308,6 +315,10 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
+              
+              // Reveal any stealthed assassins in protection zones
+              const revealedPieces = revealAssassinsInProtectionZones(pieces, adjacency, allNodes);
+              setPieces(revealedPieces);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
@@ -407,14 +418,17 @@ export default function Game() {
       const targetPiece = pieces[targetIdx];
       
       // Check if target is in a protection zone
-      const guardingPaladinIndices = findGuardingPaladins(
-        row,
-        col,
-        pieces,
-        targetPiece.side,
-        adjacency,
-        allNodes
-      );
+      // Only white or black pieces can be guarded (not neutral)
+      const guardingPaladinIndices = targetPiece.side !== 'neutral' 
+        ? findGuardingPaladins(
+            row,
+            col,
+            pieces,
+            targetPiece.side,
+            adjacency,
+            allNodes
+          )
+        : [];
       
       if (guardingPaladinIndices.length > 0) {
         // There are paladins that can guard this piece
@@ -466,10 +480,12 @@ export default function Game() {
     const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
     setCurrentPlayer(nextPlayer);
     
-    // Clean up burn marks created by the next player
+    // Clean up burn marks and holy lights created by the next player
     // (They last until the enemy's turn ends, which is when we switch back)
     const remainingBurnMarks = updatedBurnMarks.filter(mark => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter(light => light.createdBy !== nextPlayer);
     setBurnMarks(remainingBurnMarks);
+    setHolyLights(remainingHolyLights);
   };
 
   const selectedPiece = selectedPieceIndex !== -1 ? pieces[selectedPieceIndex] : null;
