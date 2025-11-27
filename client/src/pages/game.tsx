@@ -1,4 +1,5 @@
 // client/src/pages/Game.tsx
+import { createWebSocket } from '@/lib/utils';
 import WizardAttackDialog from '@/components/WizardAttackDialog';
 import { useState, useEffect, useRef } from 'react';
 import type {
@@ -41,6 +42,9 @@ import {
   findGuardingPaladins,
   PIECE_CHINESE,
 } from '@/lib/gameLogic';
+
+
+
 
 // ==== 型別 ====
 
@@ -398,7 +402,7 @@ export default function Game() {
 
   // ====== WebSocket 連線 ======
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:3001/ws');
+    const ws = createWebSocket();
     socketRef.current = ws;
     setSocketStatus('connecting');
 
