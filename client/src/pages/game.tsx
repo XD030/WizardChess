@@ -1,5 +1,5 @@
 // client/src/pages/Game.tsx
-import { createWebSocket } from '@/lib/utils';
+import { createWebSocket } from "@/lib/utils";
 import WizardAttackDialog from '@/components/WizardAttackDialog';
 import { useState, useEffect, useRef } from 'react';
 import type {
