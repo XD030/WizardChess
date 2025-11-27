@@ -1,60 +1,94 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// client/src/components/TurnHistoryPanel.tsx
+
+import type { Side } from '@shared/schema';
+
+type PlayerSide = 'white' | 'black';
 
 interface TurnHistoryPanelProps {
-  currentPlayer: 'white' | 'black';
+  currentPlayer: PlayerSide;
   moveHistory: string[];
+  /**
+   * 遊戲是否已結束；傳入 null 代表尚未結束
+   */
+  winner?: Side | null;
+  /**
+   * 點擊某一步移動紀錄（給觀戰模式用）
+   * index = 0 代表最新的一步
+   */
+  onSelectMove?: (index: number) => void;
 }
 
-export default function TurnHistoryPanel({ currentPlayer, moveHistory }: TurnHistoryPanelProps) {
+export default function TurnHistoryPanel({
+  currentPlayer,
+  moveHistory,
+  winner,
+  onSelectMove,
+}: TurnHistoryPanelProps) {
+  const hasWinner = !!winner;
+
   return (
-    <Card className="w-full" data-testid="card-turn-history">
-      <CardHeader>
-        <CardTitle className="text-lg">回合資訊</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-3" data-testid="div-turn-indicator">
-          <div className="text-sm font-medium">目前回合：</div>
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-4 h-4 rounded-full border-2 ${
-                currentPlayer === 'white'
-                  ? 'bg-white border-white'
-                  : 'bg-black border-white'
-              }`}
-              data-testid="dot-current-player"
-            />
-            <span className="text-sm font-semibold" data-testid="text-current-player">
+    <div className="bg-slate-900/70 border border-slate-700 rounded-2xl p-4 shadow-lg">
+      <h2 className="text-lg font-semibold text-slate-100 mb-2">
+        回合資訊
+      </h2>
+
+      {/* 回合 / 結束狀態 */}
+      <div className="text-xs text-slate-400 mb-3">
+        {hasWinner ? (
+          <>
+            <span className="mr-1">遊戲結束。</span>
+            <span className="text-emerald-300">
+              {winner === 'white' ? '白方勝利' : '黑方勝利'}
+            </span>
+          </>
+        ) : (
+          <>
+            目前回合：
+            <span className="text-emerald-300">
               {currentPlayer === 'white' ? '白方' : '黑方'}
             </span>
-          </div>
-        </div>
+          </>
+        )}
+      </div>
 
-        <div className="border-t border-border pt-4">
-          <div className="text-sm font-semibold text-slate-400 mb-2">移動紀錄</div>
-          <ScrollArea className="h-[300px]" data-testid="scroll-history">
-            {moveHistory.length === 0 ? (
-              <div className="text-sm text-muted-foreground">(尚無移動)</div>
-            ) : (
-              <div className="space-y-1 font-mono text-xs">
-                {moveHistory.map((move, i) => (
-                  <div
-                    key={i}
-                    className={`${
-                      i === moveHistory.length - 1
-                        ? 'text-amber-300 font-semibold'
-                        : 'text-slate-300'
-                    }`}
-                    data-testid={`text-move-${i}`}
-                  >
-                    {i + 1}. {move}
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      </CardContent>
-    </Card>
+      {/* 移動紀錄 */}
+      <div className="text-xs text-slate-300 mb-1">移動紀錄</div>
+      <div className="max-h-[420px] overflow-y-auto pr-1">
+        {moveHistory.length === 0 ? (
+          <div className="text-[11px] text-slate-500">
+            尚無移動紀錄。
+          </div>
+        ) : (
+          <ol className="space-y-1 text-[11px] leading-relaxed">
+            {moveHistory.map((desc, index) => {
+              // moveHistory[0] 是最新的一步 → 顯示編號要反過來數
+              const displayIndex = moveHistory.length - index;
+
+              const clickable = !!onSelectMove;
+
+              return (
+                <li
+                  key={index}
+                  className={
+                    'flex gap-1 ' +
+                    (clickable
+                      ? 'cursor-pointer hover:text-emerald-300'
+                      : '')
+                  }
+                  onClick={
+                    clickable ? () => onSelectMove!(index) : undefined
+                  }
+                >
+                  <span className="text-slate-500 w-5 text-right">
+                    {displayIndex}.
+                  </span>
+                  <span>{desc}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </div>
+    </div>
   );
 }

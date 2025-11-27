@@ -81,7 +81,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
               未選取棋子
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              點擊自己的巫師可以查看能力。
+              點擊棋子可以查看能力。
             </div>
           </div>
         </CardContent>
