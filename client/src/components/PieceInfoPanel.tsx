@@ -1,9 +1,21 @@
-import { useEffect, useRef } from 'react';
-import type { Piece } from '@shared/schema';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getPieceSymbol, PIECE_CHINESE, SIDE_CHINESE, PIECE_DESCRIPTIONS } from '@/lib/gameLogic';
-import wizardMoonImg from '@assets/wizard_moon.png';
-import assassinLogoImg from '@assets/assassin_logo.png';
+import { useEffect, useRef } from "react";
+import type { Piece } from "@shared/schema";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "../components/ui/card";
+import {
+  getPieceSymbol,
+  PIECE_CHINESE,
+  SIDE_CHINESE,
+  PIECE_DESCRIPTIONS,
+} from "../lib/gameLogic";
+
+// ✅ 一樣是 ../assets
+import wizardMoonImg from "../assets/wizard_moon.png";
+import assassinLogoImg from "../assets/assassin_logo.png";
 
 interface PieceInfoPanelProps {
   piece: Piece | null;
@@ -81,7 +93,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
               未選取棋子
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              點擊自己的巫師可以查看能力。
+              點擊棋子可以查看能力。
             </div>
           </div>
         </CardContent>

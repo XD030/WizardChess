@@ -1,8 +1,22 @@
+// client/src/components/GameBoard.tsx
+
 import { useEffect, useRef, useState } from 'react';
-import type { Piece, MoveHighlight, NodePosition, BurnMark, HolyLight } from '@shared/schema';
-import { getPieceSymbol, buildRows, buildAllNodes, buildAdjacency, NODE_RADIUS, getPieceAt, getNodeCoordinate } from '@/lib/gameLogic';
-import wizardMoonImg from '@assets/wizard_moon.png';
-import assassinLogoImg from '@assets/assassin_logo.png';
+import type {
+  Piece,
+  MoveHighlight,
+  NodePosition,
+  BurnMark,
+  HolyLight,
+} from '@shared/schema';
+import {
+  getPieceSymbol,
+  buildRows,
+  buildAllNodes,
+  buildAdjacency,
+  NODE_RADIUS,
+} from '../lib/gameLogic';
+import wizardMoonImg from '../assets/wizard_moon.png';
+import assassinLogoImg from '../assets/assassin_logo.png';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -13,18 +27,51 @@ interface GameBoardProps {
   burnMarks: BurnMark[];
   protectionZones: { row: number; col: number }[];
   holyLights: HolyLight[];
+  // 新增：視角
+  viewerSide: 'white' | 'black' | 'spectator';
+  // 新增：是否為觀察模式（遊戲結束後看重播）
+  observing: boolean;
+  guardPreview?: {
+    paladinRow: number;
+    paladinCol: number;
+    targetRow: number;
+    targetCol: number;
+    attackerRow: number;
+    attackerCol: number;
+  } | null;
 }
 
-// Helper function to check if a piece should be visible to current player
-function isPieceVisible(piece: Piece, currentPlayer: 'white' | 'black'): boolean {
-  // Stealthed assassins are only visible to their own side
+// 決定「這個視角」是否看得到這顆棋
+function isPieceVisible(
+  piece: Piece,
+  viewerSide: 'white' | 'black' | 'spectator',
+  observing: boolean,
+): boolean {
+  // 觀察模式：全部顯示（包含潛行刺客）
+  if (observing) return true;
+
+  // 潛行刺客：只有自己看得到
   if (piece.type === 'assassin' && piece.stealthed) {
-    return piece.side === currentPlayer;
+    if (viewerSide === 'spectator') return false;
+    return piece.side === viewerSide;
   }
+
   return true;
 }
 
-export default function GameBoard({ pieces, selectedPieceIndex, highlights, currentPlayer, onNodeClick, burnMarks, protectionZones, holyLights }: GameBoardProps) {
+export default function GameBoard({
+  pieces,
+  selectedPieceIndex,
+  highlights,
+  currentPlayer,
+  onNodeClick,
+  burnMarks,
+  protectionZones,
+  holyLights,
+  viewerSide,
+  observing,
+  guardPreview,
+}: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
@@ -34,7 +81,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
 
   const LOGICAL_SIZE = 700;
 
-  // Load wizard moon image
+  // 載入圖片
   useEffect(() => {
     const wizardImg = new Image();
     wizardImg.src = wizardMoonImg;
@@ -45,6 +92,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     assassinImg.onload = () => setAssassinLogoImage(assassinImg);
   }, []);
 
+  // 棋盤幾何
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -65,6 +113,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     setAllNodes(newNodes);
   }, []);
 
+  // 繪圖
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || rows.length === 0) return;
@@ -74,36 +123,34 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
 
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // Draw gradient background
+    // === 背景 ===
     const gradient = ctx.createRadialGradient(
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE / 2,
       0,
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE / 2,
-      LOGICAL_SIZE * 0.7
+      LOGICAL_SIZE * 0.7,
     );
     gradient.addColorStop(0, 'hsl(222, 47%, 7%)');
     gradient.addColorStop(1, 'hsl(222, 47%, 4%)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // Draw triangular cells
+    // === 三角形棋盤 ===
     const adjacency = buildAdjacency(rows);
-    
-    // Draw upward triangles (black) and downward triangles (white)
+
     for (let r = 0; r < rows.length - 1; r++) {
       const rowA = rows[r];
       const rowB = rows[r + 1];
-      
+
       if (rowB.length === rowA.length + 1) {
-        // Expanding rows - draw both black (upward) and white (downward) triangles
+        // 擴張
         for (let c = 0; c < rowA.length; c++) {
           const p1 = rowA[c];
           const p2 = { x: rowB[c].x, y: rowB[c].y };
           const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
-          
-          // Upward triangle (black) - apex at top
+
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
@@ -115,14 +162,12 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
-        
-        // Also draw white triangles for the same region
+
         for (let c = 0; c < rowA.length - 1; c++) {
           const p1 = rowA[c];
           const p2 = rowA[c + 1];
           const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
-          
-          // Downward triangle (white) - apex at bottom
+
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
@@ -135,13 +180,12 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           ctx.stroke();
         }
       } else if (rowA.length === rowB.length + 1) {
-        // Contracting rows - draw both white (downward) and black (upward) triangles
+        // 收縮
         for (let c = 0; c < rowB.length; c++) {
           const p1 = rowB[c];
           const p2 = { x: rowA[c].x, y: rowA[c].y };
           const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
-          
-          // Downward triangle (white) - apex at bottom
+
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
@@ -153,14 +197,12 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
-        
-        // Also draw black triangles for the same region
+
         for (let c = 0; c < rowB.length - 1; c++) {
           const p1 = rowB[c];
           const p2 = rowB[c + 1];
           const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
-          
-          // Upward triangle (black) - apex at top
+
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
@@ -175,7 +217,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
     }
 
-    // Draw connections
+    // === 節點連線 ===
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
@@ -190,7 +232,7 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       });
     });
 
-    // Draw nodes
+    // === 節點圓點 ===
     allNodes.forEach((node) => {
       const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
       ctx.beginPath();
@@ -199,92 +241,76 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       ctx.fill();
     });
 
-    // Draw burn marks
+    // === 火焰標記 ===
     burnMarks.forEach((mark) => {
       const node = allNodes.find((n) => n.row === mark.row && n.col === mark.col);
       if (!node) return;
-      
-      // Draw a flame effect - orange glowing circle
-      const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
-      gradient.addColorStop(0, 'rgba(255, 140, 0, 0.8)'); // Orange center
-      gradient.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)'); // Red-orange
-      gradient.addColorStop(1, 'rgba(255, 69, 0, 0)'); // Transparent edge
-      
+
+      const gradient2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
+      gradient2.addColorStop(0, 'rgba(255, 140, 0, 0.8)');
+      gradient2.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)');
+      gradient2.addColorStop(1, 'rgba(255, 69, 0, 0)');
       ctx.beginPath();
       ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = gradient2;
       ctx.fill();
-      
-      // Add a small red dot in the center
+
       ctx.beginPath();
       ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#ff4500';
       ctx.fill();
     });
 
-    // Draw holy lights
+    // === 聖光標記 ===
     holyLights.forEach((light) => {
       const node = allNodes.find((n) => n.row === light.row && n.col === light.col);
       if (!node) return;
-      
-      // Draw a holy light effect - golden/yellow glowing circle with cross
-      const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
-      gradient.addColorStop(0, 'rgba(255, 215, 0, 0.9)'); // Golden center
-      gradient.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)'); // Bright yellow
-      gradient.addColorStop(1, 'rgba(255, 255, 200, 0)'); // Transparent edge
-      
+
+      const gradient3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
+      gradient3.addColorStop(0, 'rgba(255, 215, 0, 0.9)');
+      gradient3.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)');
+      gradient3.addColorStop(1, 'rgba(255, 255, 200, 0)');
       ctx.beginPath();
       ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = gradient3;
       ctx.fill();
-      
-      // Add a shining cross pattern
+
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
-      
-      // Vertical line
       ctx.beginPath();
       ctx.moveTo(node.x, node.y - 8);
       ctx.lineTo(node.x, node.y + 8);
       ctx.stroke();
-      
-      // Horizontal line
       ctx.beginPath();
       ctx.moveTo(node.x - 8, node.y);
       ctx.lineTo(node.x + 8, node.y);
       ctx.stroke();
-      
-      // Add a small golden dot in the center
+
       ctx.beginPath();
       ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = '#ffd700';
       ctx.fill();
     });
 
-    // Draw move highlights (only for empty squares)
+    // === 移動高亮（綠色圓點） ===
     highlights.forEach((h) => {
       if (h.type !== 'move') return;
-      
       const node = allNodes.find((n) => n.row === h.row && n.col === h.col);
       if (!node) return;
-
       const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
       const opacity = isHovered ? 0.7 : 0.5;
-
       ctx.beginPath();
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
       ctx.fill();
     });
 
-    // Draw coordinate labels
+    // === 座標標籤 A~I / 1~9 ===
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-    
-    // Row labels (A-I) on the right side, rows 0-8
+
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-    
     rowLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
@@ -293,10 +319,8 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         ctx.fillText(label, rightNode.x + 10, rightNode.y - 5);
       }
     });
-    
-    // Column labels (1-9) on the left side, rows 0-8
+
     const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    
     colLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const leftNode = rows[rowIdx][0];
@@ -306,83 +330,73 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
       }
     });
 
-    // Draw pieces
+    // === 棋子 ===
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 28px serif';
 
     pieces.forEach((piece, idx) => {
-      // Skip drawing enemy stealthed assassins
-      if (!isPieceVisible(piece, currentPlayer)) {
+      // 這裡套用「潛行可見規則」
+      if (!isPieceVisible(piece, viewerSide, observing)) {
         return;
       }
-      
+
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
       if (!node) return;
 
-      // Check if this piece is a swap or attack target
-      const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
-      const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
-      const isProtected = protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
+      const swapHighlight = highlights.find(
+        (h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col,
+      );
+      const attackHighlight = highlights.find(
+        (h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col,
+      );
+      const isProtected =
+        protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
 
-      // Determine if we should use image or symbol
       const useWizardImage = piece.type === 'wizard' && wizardHatImage;
       const useAssassinImage = piece.type === 'assassin' && assassinLogoImage;
-      
-      if (useWizardImage) {
-        // Draw wizard moon image with high quality
-        const displaySize = 30; // Smaller size for wizard
-        const highResSize = 128; // Use higher resolution for better quality
+
+      // === 巫師（月亮 icon） ===
+      if (useWizardImage && wizardHatImage) {
+        const displaySize = 30;
+        const highResSize = 128;
         ctx.save();
-        
-        // Enable image smoothing for better quality
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        
-        // Create high-res temporary canvas
+
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = highResSize;
         tempCanvas.height = highResSize;
         const tempCtx = tempCanvas.getContext('2d', { alpha: true });
-        
+
         if (tempCtx) {
           tempCtx.imageSmoothingEnabled = true;
           tempCtx.imageSmoothingQuality = 'high';
-          
-          // Draw image at high resolution
           tempCtx.drawImage(wizardHatImage, 0, 0, highResSize, highResSize);
-          
-          // Get image data and process
+
           const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
           const data = imageData.data;
-          
+
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
             const g = data[i + 1];
             const b = data[i + 2];
             const alpha = data[i + 3];
-            
-            // Remove light gray/white pixels (anti-aliasing artifacts)
-            // Only keep dark pixels (the actual moon shape)
+
             if (alpha > 0) {
-              // If pixel is too light (gray/white edge), make it transparent
               const brightness = (r + g + b) / 3;
               if (brightness > 50) {
-                data[i + 3] = 0; // Make transparent
+                data[i + 3] = 0;
               } else {
-                // Apply color based on piece side
                 if (piece.side === 'white') {
-                  // White moon - invert to white
                   data[i] = 255 - data[i];
                   data[i + 1] = 255 - data[i + 1];
                   data[i + 2] = 255 - data[i + 2];
                 } else if (piece.side === 'neutral') {
-                  // Purple moon
                   data[i] = Math.min(255, data[i] * 0.6 + 168);
                   data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
                   data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
                 } else {
-                  // Black moon - force pure black
                   data[i] = 0;
                   data[i + 1] = 0;
                   data[i + 2] = 0;
@@ -390,13 +404,12 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
               }
             }
           }
-          
+
           tempCtx.putImageData(imageData, 0, 0);
-          
-          // Determine outline color and width
-          let outlineColor = null;
+
+          let outlineColor: string | null = null;
           let outlineWidth = 0;
-          
+
           if (idx === selectedPieceIndex) {
             outlineColor = '#fbbf24';
             outlineWidth = 3;
@@ -407,104 +420,106 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             outlineColor = '#ef4444';
             outlineWidth = 3;
           } else if (isProtected) {
-            // Cyan outline for protected pieces
             outlineColor = '#06b6d4';
             outlineWidth = 2.5;
           } else if (piece.side === 'black') {
-            // Black moon gets white outline in normal state
             outlineColor = '#fff';
             outlineWidth = 1;
           }
-          // White and neutral moons have no outline in normal state
-          
-          // Draw fine outline
+
           if (outlineColor && outlineWidth > 0) {
             ctx.save();
-            
-            // Use shadow for subtle outline
             ctx.shadowColor = outlineColor;
             ctx.shadowBlur = 0;
-            
+
             const offsets = [
               [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
               [-0.8, 0],                [0.8, 0],
-              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8]
+              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8],
             ];
-            
             offsets.forEach(([dx, dy]) => {
               ctx.shadowOffsetX = dx;
               ctx.shadowOffsetY = dy;
-              ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+              ctx.drawImage(
+                tempCanvas,
+                node.x - displaySize / 2,
+                node.y - displaySize / 2,
+                displaySize,
+                displaySize,
+              );
             });
-            
             ctx.restore();
           }
-          
-          // Draw main image on top
-          ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+
+          ctx.drawImage(
+            tempCanvas,
+            node.x - displaySize / 2,
+            node.y - displaySize / 2,
+            displaySize,
+            displaySize,
+          );
         }
-        
+
         ctx.restore();
-      } else if (useAssassinImage) {
-        // Draw assassin logo - remove white background, keep only dark pattern
+      }
+      // === 刺客（logo） ===
+      else if (useAssassinImage && assassinLogoImage) {
         const displaySize = 28;
         const highResSize = 128;
         ctx.save();
-        
-        // Apply transparency for stealthed assassins (visible to own side only)
-        if (piece.stealthed && piece.side === currentPlayer) {
+
+        // 自己的潛行刺客 → 半透明
+        if (
+          piece.stealthed &&
+          viewerSide !== 'spectator' &&
+          piece.side === viewerSide &&
+          !observing
+        ) {
           ctx.globalAlpha = 0.5;
         }
-        
+
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        
+
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = highResSize;
         tempCanvas.height = highResSize;
         const tempCtx = tempCanvas.getContext('2d', { alpha: true });
-        
+
         if (tempCtx) {
           tempCtx.imageSmoothingEnabled = true;
           tempCtx.imageSmoothingQuality = 'high';
-          
           tempCtx.drawImage(assassinLogoImage, 0, 0, highResSize, highResSize);
-          
+
           const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
           const data = imageData.data;
-          
+
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
             const g = data[i + 1];
             const b = data[i + 2];
             const brightness = (r + g + b) / 3;
-            
-            // Remove white/light background - only keep dark pixels
+
             if (brightness > 128) {
-              // Make light pixels transparent
               data[i + 3] = 0;
             } else {
-              // Keep dark pixels and colorize based on side
               if (piece.side === 'white') {
-                // White assassin - make it white
                 data[i] = 255;
                 data[i + 1] = 255;
                 data[i + 2] = 255;
               } else {
-                // Black assassin - keep it black
                 data[i] = 0;
                 data[i + 1] = 0;
                 data[i + 2] = 0;
               }
             }
           }
-          
+
           tempCtx.putImageData(imageData, 0, 0);
-          
-          // Determine outline color and width
-          let outlineColor = null;
+
+          let outlineColor: string | null = null;
           let outlineWidth = 0;
-          
+
           if (idx === selectedPieceIndex) {
             outlineColor = '#fbbf24';
             outlineWidth = 3;
@@ -514,12 +529,16 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           } else if (attackHighlight) {
             outlineColor = '#ef4444';
             outlineWidth = 3;
-          } else if (piece.stealthed && piece.side === currentPlayer) {
-            // Hot pink for all stealthed assassins - very visible
+          } else if (
+            piece.stealthed &&
+            viewerSide !== 'spectator' &&
+            piece.side === viewerSide &&
+            !observing
+          ) {
+            // 自己視角看到的潛行刺客 → 粉紅框
             outlineColor = '#ff69b4';
             outlineWidth = 3;
           } else if (isProtected) {
-            // Cyan outline for protected pieces
             outlineColor = '#06b6d4';
             outlineWidth = 2.5;
           } else if (piece.side === 'black') {
@@ -529,41 +548,49 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             outlineColor = '#000';
             outlineWidth = 1;
           }
-          
-          // Draw outline if needed
+
           if (outlineColor && outlineWidth > 0) {
             ctx.save();
             ctx.shadowColor = outlineColor;
             ctx.shadowBlur = 0;
-            
+
             const offsets = [
               [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
               [-0.8, 0],                [0.8, 0],
-              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8]
+              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8],
             ];
-            
             offsets.forEach(([dx, dy]) => {
               ctx.shadowOffsetX = dx;
               ctx.shadowOffsetY = dy;
-              ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+              ctx.drawImage(
+                tempCanvas,
+                node.x - displaySize / 2,
+                node.y - displaySize / 2,
+                displaySize,
+                displaySize,
+              );
             });
-            
             ctx.restore();
           }
-          
-          // Draw main image
-          ctx.drawImage(tempCanvas, node.x - displaySize / 2, node.y - displaySize / 2, displaySize, displaySize);
+
+          ctx.drawImage(
+            tempCanvas,
+            node.x - displaySize / 2,
+            node.y - displaySize / 2,
+            displaySize,
+            displaySize,
+          );
         }
-        
+
         ctx.restore();
-      } else {
-        // Draw chess symbol for other pieces
+      }
+      // === 其他棋子（字元） ===
+      else {
         const symbol = getPieceSymbol(piece.type, piece.side);
-        
-        // Determine outline color based on highlight state
+
         let outlineColor = '#000';
         let outlineWidth = 1.2;
-        
+
         if (idx === selectedPieceIndex) {
           outlineColor = '#fbbf24';
           outlineWidth = 2.5;
@@ -574,7 +601,6 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
           outlineColor = '#ef4444';
           outlineWidth = 2.5;
         } else if (isProtected) {
-          // Cyan outline for protected pieces
           outlineColor = '#06b6d4';
           outlineWidth = 2.5;
         } else {
@@ -586,12 +612,11 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
             outlineColor = '#000';
           }
         }
-        
-        // Draw piece with appropriate color
+
         ctx.strokeStyle = outlineColor;
         ctx.lineWidth = outlineWidth;
         ctx.strokeText(symbol, node.x, node.y);
-        
+
         if (piece.side === 'white') {
           ctx.fillStyle = '#fff';
         } else if (piece.side === 'black') {
@@ -602,7 +627,74 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
         ctx.fillText(symbol, node.x, node.y);
       }
     });
-  }, [rows, allNodes, pieces, selectedPieceIndex, highlights, hoveredNode, burnMarks, holyLights, wizardHatImage, assassinLogoImage, protectionZones, currentPlayer]);
+
+        // --- Guard preview glow (Paladin / target / attacker) ---
+    if (guardPreview) {
+      const drawGuardGlow = (
+        row: number,
+        col: number,
+        color: string,
+        radius: number,
+      ) => {
+        const node = allNodes.find((n) => n.row === row && n.col === col);
+        if (!node) return;
+
+        const gradient = ctx.createRadialGradient(
+          node.x,
+          node.y,
+          0,
+          node.x,
+          node.y,
+          radius,
+        );
+        gradient.addColorStop(0, color.replace('0.9', '0.0'));
+        gradient.addColorStop(0.4, color);
+        gradient.addColorStop(1, color.replace('0.9', '0'));
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+      };
+
+      // 聖騎士：青色
+      drawGuardGlow(
+        guardPreview.paladinRow,
+        guardPreview.paladinCol,
+        'rgba(56, 189, 248, 0.9)',
+        26,
+      );
+      // 被攻擊目標：金色
+      drawGuardGlow(
+        guardPreview.targetRow,
+        guardPreview.targetCol,
+        'rgba(250, 204, 21, 0.9)',
+        26,
+      );
+      // 攻擊者：紅色
+      drawGuardGlow(
+        guardPreview.attackerRow,
+        guardPreview.attackerCol,
+        'rgba(248, 113, 113, 0.9)',
+        26,
+      );
+    }
+
+  }, [
+    rows,
+    allNodes,
+    pieces,
+    selectedPieceIndex,
+    highlights,
+    hoveredNode,
+    burnMarks,
+    holyLights,
+    wizardHatImage,
+    assassinLogoImage,
+    protectionZones,
+    viewerSide,
+    observing,
+  ]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -612,7 +704,6 @@ export default function GameBoard({ pieces, selectedPieceIndex, highlights, curr
     const x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
     const y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
 
-    // Find clicked node
     for (const node of allNodes) {
       const dx = x - node.x;
       const dy = y - node.y;
