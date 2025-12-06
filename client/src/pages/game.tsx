@@ -1515,7 +1515,7 @@ export default function Game() {
       return;
     }
 
-    // ===== 已經有選到一顆棋 =====
+    // ===== 已經有選到一顆棋 ======
     const selectedPiece =
       isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
         ? snapshots[viewSnapshotIndex].pieces[selectedPieceIndex]
@@ -1940,54 +1940,54 @@ export default function Game() {
 
       moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     } else if (highlight.type === 'attack') {
-  const targetIdx = clickedPieceIdx!;
-  const targetPiece = pieces[targetIdx];
+      const targetIdx = clickedPieceIdx!;
+      const targetPiece = pieces[targetIdx];
 
-  // 🧙‍♂ 巫師：若攻擊的是「相鄰」格，跳出導線 / 移動選擇視窗
-  if (selectedPiece.type === 'wizard') {
-    // 找出巫師節點與目標節點在 adjacency 裡的 index
-    const wizardNodeIdx = allNodes.findIndex(
-      (n) => n.row === selectedPiece.row && n.col === selectedPiece.col,
-    );
-    const targetNodeIdx = allNodes.findIndex(
-      (n) => n.row === row && n.col === col,
-    );
+      // 🧙‍♂ 巫師：若攻擊的是「相鄰」格，跳出導線 / 移動選擇視窗
+      if (selectedPiece.type === 'wizard') {
+        // 找出巫師節點與目標節點在 adjacency 裡的 index
+        const wizardNodeIdx = allNodes.findIndex(
+          (n) => n.row === selectedPiece.row && n.col === selectedPiece.col,
+        );
+        const targetNodeIdx = allNodes.findIndex(
+          (n) => n.row === row && n.col === col,
+        );
 
-    const isAdjacent =
-      wizardNodeIdx !== -1 &&
-      targetNodeIdx !== -1 &&
-      adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+        const isAdjacent =
+          wizardNodeIdx !== -1 &&
+          targetNodeIdx !== -1 &&
+          adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
 
-    if (isAdjacent) {
-      setWizardAttackRequest({
-        wizardIndex: selectedPieceIndex,
-        targetRow: row,
-        targetCol: col,
-        targetPieceIndex: targetIdx,
-      });
+        if (isAdjacent) {
+          setWizardAttackRequest({
+            wizardIndex: selectedPieceIndex,
+            targetRow: row,
+            targetCol: col,
+            targetPieceIndex: targetIdx,
+          });
 
-      // 清掉目前選取與高亮，等待玩家在視窗選擇
-      setSelectedPieceIndex(-1);
-      setHighlights([]);
-      setDragonPathNodes([]);
-      setProtectionZones([]);
-      return;
-    }
-  }
+          // 清掉目前選取與高亮，等待玩家在視窗選擇
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          return;
+        }
+      }
 
-  const guardingPaladinIndices =
-    targetPiece.side !== 'neutral'
-      ? findGuardingPaladins(
-          row,
-          col,
-          pieces,
-          targetPiece.side,
-          adjacency,
-          allNodes,
-        )
-      : [];
+      const guardingPaladinIndices =
+        targetPiece.side !== 'neutral'
+          ? findGuardingPaladins(
+              row,
+              col,
+              pieces,
+              targetPiece.side,
+              adjacency,
+              allNodes,
+            )
+          : [];
 
-      // 聖騎士守護請求，只送到「被攻擊方的 client」
+      // === 🔧 修正：只有「被攻擊方的 client」才會開守護視窗並中斷 ===
       if (guardingPaladinIndices.length > 0) {
         if (localSide === targetPiece.side && !isObserving) {
           const options: GuardOption[] = guardingPaladinIndices.map(
@@ -2012,8 +2012,11 @@ export default function Game() {
           });
           setSelectedGuardPaladinIndex(null);
           setGuardDialogOpen(true);
+
+          // 被攻擊方這台機器 → 等使用者按下守護 / 不守護
+          return;
         }
-        return;
+        // 其他 client（攻擊方 / 觀戰）→ 視為「沒選守護」，直接走下面的正常攻擊邏輯
       }
 
       if (targetPiece.type !== 'bard') {
@@ -2573,7 +2576,7 @@ export default function Game() {
       {/* 結束遊戲彈出視窗 */}
       {winner && showEndModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-xs text-center shadow-2xl">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-xs text中心 shadow-2xl">
             <div className="text-lg font-bold text-slate-100 mb-1">
               {winner === 'white' ? '白方勝利' : '黑方勝利'}
             </div>
