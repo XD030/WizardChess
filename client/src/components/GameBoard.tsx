@@ -1,4 +1,5 @@
 // client/src/components/GameBoard.tsx
+
 import { useEffect, useRef, useState } from 'react';
 import type {
   Piece,
@@ -8,14 +9,11 @@ import type {
   HolyLight,
 } from '@shared/schema';
 import {
-  getPieceSymbol,
   buildRows,
   buildAllNodes,
   buildAdjacency,
   NODE_RADIUS,
 } from '../lib/gameLogic';
-import wizardMoonImg from '../assets/wizard_moon.png';
-import assassinLogoImg from '../assets/assassin_logo.png';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -38,17 +36,52 @@ interface GameBoardProps {
   } | null;
 }
 
-// 視角能不能看到這顆棋（刺客潛行）
+// ------------ 棋子圖片載入 ------------
+
+// 你自己的圖片檔名，如果不同請在這裡改
+import wizardWhitePng from '../assets/wizard_white.png';
+import wizardBlackPng from '../assets/wizard_black.png';
+
+import assassinWhitePng from '../assets/assassin_white.png';
+import assassinBlackPng from '../assets/assassin_black.png';
+
+import paladinWhitePng from '../assets/paladin_white.png';
+import paladinBlackPng from '../assets/paladin_black.png';
+
+import dragonWhitePng from '../assets/dragon_white.png';
+import dragonBlackPng from '../assets/dragon_black.png';
+
+import rangerWhitePng from '../assets/ranger_white.png';
+import rangerBlackPng from '../assets/ranger_black.png';
+
+import griffinWhitePng from '../assets/griffin_white.png';
+import griffinBlackPng from '../assets/griffin_black.png';
+
+// ⭐ bard 只有一張圖
+import bardPng from '../assets/bard.png';
+
+// apprentice 如果你也有分白黑就照這樣；只有一張圖也可以再改
+import apprenticeWhitePng from '../assets/apprentice_white.png';
+import apprenticeBlackPng from '../assets/apprentice_black.png';
+
+const LOGICAL_SIZE = 700;
+const PIECE_SIZE = 34;
+
+// 這個視角是否看得到這顆棋
 function isPieceVisible(
   piece: Piece,
   viewerSide: 'white' | 'black' | 'spectator',
   observing: boolean,
 ): boolean {
+  // 觀察模式：全部顯示
   if (observing) return true;
+
+  // 潛行刺客：只有自己看得到
   if (piece.type === 'assassin' && piece.stealthed) {
     if (viewerSide === 'spectator') return false;
     return piece.side === viewerSide;
   }
+
   return true;
 }
 
@@ -65,24 +98,90 @@ export default function GameBoard({
   observing,
   guardPreview,
 }: GameBoardProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
-  const [wizardHatImage, setWizardHatImage] = useState<HTMLImageElement | null>(null);
-  const [assassinLogoImage, setAssassinLogoImage] = useState<HTMLImageElement | null>(null);
+  const [adjacency, setAdjacency] = useState<number[][]>([]);
 
-  const LOGICAL_SIZE = 700;
+  // ===== 棋子圖片 =====
+  const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement | null>>({});
 
-  // 載入圖片
+  // ===== 移動動畫 =====
+  type MoveAnimState = {
+    pieceIndex: number;
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+    startTime: number;
+    duration: number;
+  } | null;
+
+  const [animState, setAnimState] = useState<MoveAnimState>(null);
+  const animStateRef = useRef<MoveAnimState>(null);
+  const prevPiecesRef = useRef<Piece[] | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
   useEffect(() => {
-    const wizardImg = new Image();
-    wizardImg.src = wizardMoonImg;
-    wizardImg.onload = () => setWizardHatImage(wizardImg);
+    animStateRef.current = animState;
+  }, [animState]);
 
-    const assassinImg = new Image();
-    assassinImg.src = assassinLogoImg;
-    assassinImg.onload = () => setAssassinLogoImage(assassinImg);
+  // key：決定用哪張圖
+  function keyForPiece(piece: Piece): string {
+    if (piece.type === 'bard') {
+      // bard 不分陣營，固定用同一張
+      return 'bard';
+    }
+
+    if (piece.side === 'white' || piece.side === 'black') {
+      return `${piece.type}_${piece.side}`;
+    }
+
+    // 中立：先共用白方圖
+    return `${piece.type}_white`;
+  }
+
+  function getImageForPiece(piece: Piece): HTMLImageElement | null {
+    const key = keyForPiece(piece);
+    return pieceImages[key] ?? null;
+  }
+
+  // 載入所有棋子圖片
+  useEffect(() => {
+    const srcMap: Record<string, string> = {
+      wizard_white: wizardWhitePng,
+      wizard_black: wizardBlackPng,
+
+      assassin_white: assassinWhitePng,
+      assassin_black: assassinBlackPng,
+
+      paladin_white: paladinWhitePng,
+      paladin_black: paladinBlackPng,
+
+      dragon_white: dragonWhitePng,
+      dragon_black: dragonBlackPng,
+
+      ranger_white: rangerWhitePng,
+      ranger_black: rangerBlackPng,
+
+      griffin_white: griffinWhitePng,
+      griffin_black: griffinBlackPng,
+
+      // bard 只有一張圖
+      bard: bardPng,
+
+      apprentice_white: apprenticeWhitePng,
+      apprentice_black: apprenticeBlackPng,
+    };
+
+    Object.entries(srcMap).forEach(([key, src]) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        setPieceImages((prev) => ({ ...prev, [key]: img }));
+      };
+    });
   }, []);
 
   // 棋盤幾何
@@ -102,22 +201,62 @@ export default function GameBoard({
 
     const newRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
     const newNodes = buildAllNodes(newRows);
+    const newAdjacency = buildAdjacency(newRows);
+
     setRows(newRows);
     setAllNodes(newNodes);
+    setAdjacency(newAdjacency);
   }, []);
 
-  // 繪圖
+  // 偵測棋子位移 → 啟動動畫
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || rows.length === 0) return;
+    if (!allNodes.length) {
+      prevPiecesRef.current = pieces;
+      return;
+    }
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const prev = prevPiecesRef.current;
+    if (prev && prev.length === pieces.length) {
+      // 簡單比對：同 index、同 type+side，但 row/col 不同 → 視為該棋移動
+      for (let i = 0; i < pieces.length; i++) {
+        const pNew = pieces[i];
+        const pOld = prev[i];
 
+        if (
+          pNew.type === pOld.type &&
+          pNew.side === pOld.side &&
+          (pNew.row !== pOld.row || pNew.col !== pOld.col)
+        ) {
+          const fromNode = allNodes.find((n) => n.row === pOld.row && n.col === pOld.col);
+          const toNode = allNodes.find((n) => n.row === pNew.row && n.col === pNew.col);
+          if (fromNode && toNode) {
+            setAnimState({
+              pieceIndex: i,
+              fromX: fromNode.x,
+              fromY: fromNode.y,
+              toX: toNode.x,
+              toY: toNode.y,
+              startTime: performance.now(),
+              duration: 200, // 毫秒
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    prevPiecesRef.current = pieces;
+  }, [pieces, allNodes]);
+
+  // ========= 繪圖主函式 =========
+  const drawBoard = (
+    ctx: CanvasRenderingContext2D,
+    overridePos?: { pieceIndex: number; x: number; y: number },
+  ) => {
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // === 背景 ===
-    const gradient = ctx.createRadialGradient(
+    // --- 背景 ---
+    const bgGrad = ctx.createRadialGradient(
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE / 2,
       0,
@@ -125,14 +264,12 @@ export default function GameBoard({
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE * 0.7,
     );
-    gradient.addColorStop(0, 'hsl(222, 47%, 7%)');
-    gradient.addColorStop(1, 'hsl(222, 47%, 4%)');
-    ctx.fillStyle = gradient;
+    bgGrad.addColorStop(0, 'hsl(222, 47%, 7%)');
+    bgGrad.addColorStop(1, 'hsl(222, 47%, 4%)');
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // === 三角形棋盤 ===
-    const adjacency = buildAdjacency(rows);
-
+    // --- 棋盤三角形 ---
     for (let r = 0; r < rows.length - 1; r++) {
       const rowA = rows[r];
       const rowB = rows[r + 1];
@@ -210,22 +347,22 @@ export default function GameBoard({
       }
     }
 
-    // === 節點連線 ===
+    // --- 節點連線 ---
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
-      adjacency[idx].forEach((adjIdx) => {
+      adjacency[idx]?.forEach((adjIdx) => {
+        if (idx >= adjIdx) return;
         const adjNode = allNodes[adjIdx];
-        if (idx < adjIdx) {
-          ctx.beginPath();
-          ctx.moveTo(node.x, node.y);
-          ctx.lineTo(adjNode.x, adjNode.y);
-          ctx.stroke();
-        }
+        if (!adjNode) return;
+        ctx.beginPath();
+        ctx.moveTo(node.x, node.y);
+        ctx.lineTo(adjNode.x, adjNode.y);
+        ctx.stroke();
       });
     });
 
-    // === 節點圓點 ===
+    // --- 節點圓點 ---
     allNodes.forEach((node) => {
       const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
       ctx.beginPath();
@@ -234,18 +371,18 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 火焰標記 ===
+    // --- 火焰標記 ---
     burnMarks.forEach((mark) => {
       const node = allNodes.find((n) => n.row === mark.row && n.col === mark.col);
       if (!node) return;
 
-      const gradient2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
-      gradient2.addColorStop(0, 'rgba(255, 140, 0, 0.8)');
-      gradient2.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)');
-      gradient2.addColorStop(1, 'rgba(255, 69, 0, 0)');
+      const g2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
+      g2.addColorStop(0, 'rgba(255, 140, 0, 0.8)');
+      g2.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)');
+      g2.addColorStop(1, 'rgba(255, 69, 0, 0)');
       ctx.beginPath();
       ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
-      ctx.fillStyle = gradient2;
+      ctx.fillStyle = g2;
       ctx.fill();
 
       ctx.beginPath();
@@ -254,18 +391,18 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 聖光標記 ===
+    // --- 聖光標記 ---
     holyLights.forEach((light) => {
       const node = allNodes.find((n) => n.row === light.row && n.col === light.col);
       if (!node) return;
 
-      const gradient3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
-      gradient3.addColorStop(0, 'rgba(255, 215, 0, 0.9)');
-      gradient3.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)');
-      gradient3.addColorStop(1, 'rgba(255, 255, 200, 0)');
+      const g3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
+      g3.addColorStop(0, 'rgba(255, 215, 0, 0.9)');
+      g3.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)');
+      g3.addColorStop(1, 'rgba(255, 255, 200, 0)');
       ctx.beginPath();
       ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
-      ctx.fillStyle = gradient3;
+      ctx.fillStyle = g3;
       ctx.fill();
 
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
@@ -286,7 +423,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 移動高亮（綠色圓點） ===
+    // --- 移動高亮 ---
     highlights.forEach((h) => {
       if (h.type !== 'move') return;
       const node = allNodes.find((n) => n.row === h.row && n.col === h.col);
@@ -299,7 +436,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 座標標籤 A~I / 1~9 ===
+    // --- 座標標籤 A~I / 1~9 ---
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
 
@@ -323,16 +460,22 @@ export default function GameBoard({
       }
     });
 
-    // === 棋子 ===
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 28px serif';
-
+    // --- 棋子（全部使用圖片） ---
     pieces.forEach((piece, idx) => {
       if (!isPieceVisible(piece, viewerSide, observing)) return;
 
+      const baseImg = getImageForPiece(piece);
+      if (!baseImg) return;
+
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
       if (!node) return;
+
+      const displaySize = PIECE_SIZE;
+
+      const drawX =
+        overridePos && overridePos.pieceIndex === idx ? overridePos.x : node.x;
+      const drawY =
+        overridePos && overridePos.pieceIndex === idx ? overridePos.y : node.y;
 
       const swapHighlight = highlights.find(
         (h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col,
@@ -341,164 +484,100 @@ export default function GameBoard({
         (h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col,
       );
       const isProtected =
-        protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
+        protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
+        false;
 
-      const useWizardImage = piece.type === 'wizard' && wizardHatImage;
-      const useAssassinImage = piece.type === 'assassin' && assassinLogoImage;
+      // 框線顏色 & 粗細
+      let outlineColor: string | null = null;
+      let outlineWidth = 0;
 
-      // === 巫師圖片（只畫圖，不加外框光） ===
-      if (useWizardImage && wizardHatImage) {
-        const displaySize = 30;
-        const highResSize = 128;
-
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = highResSize;
-        tempCanvas.height = highResSize;
-        const tempCtx = tempCanvas.getContext('2d', { alpha: true });
-
-        if (tempCtx) {
-          tempCtx.imageSmoothingEnabled = true;
-          tempCtx.imageSmoothingQuality = 'high';
-          tempCtx.drawImage(wizardHatImage, 0, 0, highResSize, highResSize);
-
-          const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-          const data = imageData.data;
-
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const alpha = data[i + 3];
-
-            if (alpha > 0) {
-              const brightness = (r + g + b) / 3;
-              if (brightness > 50) {
-                data[i + 3] = 0;
-              } else {
-                if (piece.side === 'white') {
-                  data[i] = 255 - data[i];
-                  data[i + 1] = 255 - data[i + 1];
-                  data[i + 2] = 255 - data[i + 2];
-                } else if (piece.side === 'neutral') {
-                  data[i] = Math.min(255, data[i] * 0.6 + 168);
-                  data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
-                  data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
-                } else {
-                  data[i] = 0;
-                  data[i + 1] = 0;
-                  data[i + 2] = 0;
-                }
-              }
-            }
-          }
-
-          tempCtx.putImageData(imageData, 0, 0);
-
-          // 👉 只畫一次，不加 outline / glow
-          ctx.drawImage(
-            tempCanvas,
-            node.x - displaySize / 2,
-            node.y - displaySize / 2,
-            displaySize,
-            displaySize,
-          );
-        }
-
-        ctx.restore();
-      }
-      // === 刺客圖片（只畫圖，不加外框光） ===
-      else if (useAssassinImage && assassinLogoImage) {
-        const displaySize = 28;
-        const highResSize = 128;
-
-        ctx.save();
-
-        // 自己視角看到潛行刺客 → 半透明
-        if (
-          piece.stealthed &&
-          viewerSide !== 'spectator' &&
-          piece.side === viewerSide &&
-          !observing
-        ) {
-          ctx.globalAlpha = 0.5;
-        }
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = highResSize;
-        tempCanvas.height = highResSize;
-        const tempCtx = tempCanvas.getContext('2d', { alpha: true });
-
-        if (tempCtx) {
-          tempCtx.imageSmoothingEnabled = true;
-          tempCtx.imageSmoothingQuality = 'high';
-          tempCtx.drawImage(assassinLogoImage, 0, 0, highResSize, highResSize);
-
-          const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-          const data = imageData.data;
-
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const brightness = (r + g + b) / 3;
-
-            if (brightness > 128) {
-              data[i + 3] = 0;
-            } else {
-              if (piece.side === 'white') {
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-              } else {
-                data[i] = 0;
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-              }
-            }
-          }
-
-          tempCtx.putImageData(imageData, 0, 0);
-
-          // 👉 同樣只畫一次，不加 outline / glow
-          ctx.drawImage(
-            tempCanvas,
-            node.x - displaySize / 2,
-            node.y - displaySize / 2,
-            displaySize,
-            displaySize,
-          );
-        }
-
-        ctx.restore();
-      }
-      // === 其他棋子：維持原本 emoji（如果你已經改成圖片，可以自己換掉這段） ===
-      else {
-        const symbol = getPieceSymbol(piece.type, piece.side);
-
-        // 這裡如果也不想要外框，可以直接把 strokeText 拔掉，只留 fillText
-        ctx.lineWidth = 0; // 不要粗框
-        ctx.strokeStyle = 'transparent';
-        // ctx.strokeText(symbol, node.x, node.y); // <- 不再描邊
-
+      if (idx === selectedPieceIndex) {
+        outlineColor = '#fbbf24';
+        outlineWidth = 3;
+      } else if (swapHighlight) {
+        outlineColor = '#3b82f6';
+        outlineWidth = 3;
+      } else if (attackHighlight) {
+        outlineColor = '#ef4444';
+        outlineWidth = 3;
+      } else if (isProtected) {
+        outlineColor = '#06b6d4';
+        outlineWidth = 2.5;
+      } else {
+        // 一般狀態：白方黑框、黑方白框、中立紫框
         if (piece.side === 'white') {
-          ctx.fillStyle = '#fff';
+          outlineColor = '#000000';
+          outlineWidth = 2.5;
         } else if (piece.side === 'black') {
-          ctx.fillStyle = '#000';
+          outlineColor = '#ffffff';
+          outlineWidth = 3.2;
         } else {
-          ctx.fillStyle = '#a855f7';
+          outlineColor = 'rgba(168, 85, 247, 0.9)';
+          outlineWidth = 2.5;
         }
-        ctx.fillText(symbol, node.x, node.y);
       }
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // 自己視角的潛行刺客 → 半透明
+      if (
+        piece.type === 'assassin' &&
+        piece.stealthed &&
+        viewerSide !== 'spectator' &&
+        piece.side === viewerSide &&
+        !observing
+      ) {
+        ctx.globalAlpha = 0.5;
+      }
+
+      // 先畫外框（shadow 疊圖）
+      if (outlineColor && outlineWidth > 0) {
+        ctx.save();
+        ctx.shadowColor = outlineColor;
+        ctx.shadowBlur = outlineWidth;
+
+        const offsets = [
+          [-1, -1], [0, -1], [1, -1],
+          [-1,  0],         [1,  0],
+          [-1,  1], [0,  1], [1,  1],
+        ];
+        offsets.forEach(([dx, dy]) => {
+          ctx.shadowOffsetX = dx;
+          ctx.shadowOffsetY = dy;
+          ctx.drawImage(
+            baseImg,
+            0,
+            0,
+            baseImg.width,
+            baseImg.height,
+            drawX - displaySize / 2,
+            drawY - displaySize / 2,
+            displaySize,
+            displaySize,
+          );
+        });
+        ctx.restore();
+      }
+
+      // 再畫一次正常圖片
+      ctx.drawImage(
+        baseImg,
+        0,
+        0,
+        baseImg.width,
+        baseImg.height,
+        drawX - displaySize / 2,
+        drawY - displaySize / 2,
+        displaySize,
+        displaySize,
+      );
+
+      ctx.restore();
     });
 
-    // --- Guard preview glow (這個是守護預覽，不是棋子外框，可保留) ---
+    // --- 聖騎士守護 preview 光暈 ---
     if (guardPreview) {
       const drawGuardGlow = (
         row: number,
@@ -509,21 +588,13 @@ export default function GameBoard({
         const node = allNodes.find((n) => n.row === row && n.col === col);
         if (!node) return;
 
-        const gradient = ctx.createRadialGradient(
-          node.x,
-          node.y,
-          0,
-          node.x,
-          node.y,
-          radius,
-        );
-        gradient.addColorStop(0, color.replace('0.9', '0.0'));
-        gradient.addColorStop(0.4, color);
-        gradient.addColorStop(1, color.replace('0.9', '0'));
-
+        const g = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius);
+        g.addColorStop(0, color.replace('0.9', '0.0'));
+        g.addColorStop(0.4, color);
+        g.addColorStop(1, color.replace('0.9', '0'));
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
+        ctx.fillStyle = g;
         ctx.fill();
       };
 
@@ -546,22 +617,83 @@ export default function GameBoard({
         26,
       );
     }
+  };
+
+  // 非動畫時重繪
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || rows.length === 0 || allNodes.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (animStateRef.current) return;
+    drawBoard(ctx);
   }, [
     rows,
     allNodes,
+    adjacency,
     pieces,
     selectedPieceIndex,
     highlights,
     hoveredNode,
     burnMarks,
     holyLights,
-    wizardHatImage,
-    assassinLogoImage,
     protectionZones,
     viewerSide,
     observing,
     guardPreview,
+    pieceImages,
   ]);
+
+  // 動畫 loop
+  useEffect(() => {
+    if (!animState) return;
+    const canvas = canvasRef.current;
+    if (!canvas || rows.length === 0 || allNodes.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const { pieceIndex, fromX, fromY, toX, toY, startTime, duration } = animState;
+
+    const step = (time: number) => {
+      const t = Math.min(1, (time - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const x = fromX + (toX - fromX) * eased;
+      const y = fromY + (toY - fromY) * eased;
+
+      drawBoard(ctx, { pieceIndex, x, y });
+
+      if (t < 1 && animStateRef.current) {
+        animationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        setAnimState(null);
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (animationFrameRef.current != null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [
+    animState,
+    rows,
+    allNodes,
+    adjacency,
+    highlights,
+    burnMarks,
+    holyLights,
+    protectionZones,
+    viewerSide,
+    observing,
+    guardPreview,
+    selectedPieceIndex,
+    pieceImages,
+  ]);
+
+  // ========= Canvas 事件 =========
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -601,9 +733,7 @@ export default function GameBoard({
         break;
       }
     }
-    if (!found) {
-      setHoveredNode(null);
-    }
+    if (!found) setHoveredNode(null);
   };
 
   return (
