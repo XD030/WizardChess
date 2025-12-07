@@ -1,5 +1,4 @@
 import type { Piece } from "@shared/schema";
-import { useMemo } from "react";
 
 import {
   Card,
@@ -9,7 +8,6 @@ import {
 } from "../components/ui/card";
 
 import {
-  PIECE_CHINESE,
   SIDE_CHINESE,
   PIECE_DESCRIPTIONS,
 } from "../lib/gameLogic";
@@ -33,10 +31,10 @@ import rangerBlackPng from "../assets/ranger_black.png";
 import griffinWhitePng from "../assets/griffin_white.png";
 import griffinBlackPng from "../assets/griffin_black.png";
 
-// ⭐ bard 只有一張
+// bard 只有一張
 import bardPng from "../assets/bard.png";
 
-// apprentice（如果你也有白黑兩張）
+// apprentice（如果有分白黑）
 import apprenticeWhitePng from "../assets/apprentice_white.png";
 import apprenticeBlackPng from "../assets/apprentice_black.png";
 
@@ -72,7 +70,7 @@ function getPieceImage(piece: Piece): string {
       return piece.side === "black" ? apprenticeBlackPng : apprenticeWhitePng;
 
     default:
-      return bardPng; // Fallback，不應該進來
+      return bardPng; // 理論上不會用到
   }
 }
 
@@ -109,40 +107,36 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
       <CardContent className="space-y-4">
         {/* ===== 棋子圖片 + 基本資訊 ===== */}
         <div className="flex items-center gap-3">
-          {/* 棋子圖片（統一 PNG） */}
+          {/* 棋子圖片（只保留顏色調整，不加邊框 / 光） */}
           <img
             src={imgSrc}
             alt={piece.type}
             className="w-16 h-16 object-contain"
             data-testid="text-piece-emoji"
             style={{
-              // 白方圖片 → 白色圖案 + 黑邊框
-              // 黑方圖片 → 黑色圖案 + 白邊框
               filter:
                 piece.side === "white"
-                  ? "brightness(1.5)"
+                  ? "brightness(1.4)"
                   : piece.side === "black"
-                  ? "brightness(0.6)"
+                  ? "brightness(0.7)"
                   : "brightness(1)",
-              // 外框
-              border:
-                piece.side === "white"
-                  ? "2px solid #000"
-                  : piece.side === "black"
-                  ? "2px solid #fff"
-                  : "2px solid #a855f7",
             }}
           />
 
           <div>
-            <div className="text-base font-bold text-foreground" data-testid="text-piece-name">
+            <div
+              className="text-base font-bold text-foreground"
+              data-testid="text-piece-name"
+            >
               {desc.name}
             </div>
-            <div className="text-sm text-muted-foreground" data-testid="text-piece-side">
+            <div
+              className="text-sm text-muted-foreground"
+              data-testid="text-piece-side"
+            >
               陣營：{SIDE_CHINESE[piece.side]}
             </div>
 
-            {/* bard 額外顯示狀態 */}
             {piece.type === "bard" && (
               <div className="text-sm mt-1" data-testid="text-bard-status">
                 狀態：{" "}
