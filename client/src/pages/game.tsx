@@ -1966,7 +1966,7 @@ export default function Game() {
             }
           }
         }
-      }
+      
     } else if (highlight.type === "swap") {
   const targetIdx = clickedPieceIdx!;
   const targetPiece = pieces[targetIdx];
