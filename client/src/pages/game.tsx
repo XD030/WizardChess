@@ -461,7 +461,7 @@ export default function Game() {
     }
 
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      setRoomError('WebSocket 尚未連線，請稍候再試');
+      setRoomError('WebSocket 尚未連線，請稍後再試');
       return;
     }
 
@@ -745,7 +745,7 @@ export default function Game() {
   const handleGuardConfirm = () => {
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
-    // ⚠️ 這裡原本有 if (!canPlay) return; 已移除，守護是防守方反應動作
+    // 已移除 if (!canPlay) return; 守護是防守方被動反應，不受回合限制
 
     const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } =
       guardRequest;
@@ -987,7 +987,7 @@ export default function Game() {
   const handleGuardDecline = () => {
     if (!guardRequest) return;
     if (winner) return;
-    // ⚠️ 這裡原本有 if (!canPlay) return; 已移除，守護是防守方反應動作
+    // 已移除 if (!canPlay) return;
 
     const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } =
       guardRequest;
@@ -1987,36 +1987,28 @@ export default function Game() {
             )
           : [];
 
-      // === 🔧 修正：只有「被攻擊方的 client」才會開守護視窗並中斷 ===
-      if (guardingPaladinIndices.length > 0) {
-        if (localSide === targetPiece.side && !isObserving) {
-          const options: GuardOption[] = guardingPaladinIndices.map(
-            (idx) => ({
-              paladinIndex: idx,
-              paladinRow: pieces[idx].row,
-              paladinCol: pieces[idx].col,
-              coordinate: getNodeCoordinate(
-                pieces[idx].row,
-                pieces[idx].col,
-              ),
-            }),
-          );
+      // ✅ 只要有守護聖騎士，且不是觀察模式，就在目前這個 client 跳守護視窗
+      if (guardingPaladinIndices.length > 0 && !isObserving) {
+        const options: GuardOption[] = guardingPaladinIndices.map((idx) => ({
+          paladinIndex: idx,
+          paladinRow: pieces[idx].row,
+          paladinCol: pieces[idx].col,
+          coordinate: getNodeCoordinate(pieces[idx].row, pieces[idx].col),
+        }));
 
-          setGuardOptions(options);
-          setGuardRequest({
-            targetRow: row,
-            targetCol: col,
-            targetPieceIndex: targetIdx,
-            attackerPieceIndex: selectedPieceIndex,
-            defenderSide: targetPiece.side as PlayerSide,
-          });
-          setSelectedGuardPaladinIndex(null);
-          setGuardDialogOpen(true);
+        setGuardOptions(options);
+        setGuardRequest({
+          targetRow: row,
+          targetCol: col,
+          targetPieceIndex: targetIdx,
+          attackerPieceIndex: selectedPieceIndex,
+          defenderSide: targetPiece.side as PlayerSide,
+        });
+        setSelectedGuardPaladinIndex(null);
+        setGuardDialogOpen(true);
 
-          // 被攻擊方這台機器 → 等使用者按下守護 / 不守護
-          return;
-        }
-        // 其他 client（攻擊方 / 觀戰）→ 視為「沒選守護」，直接走下面的正常攻擊邏輯
+        // 等玩家按「守護」或「不守護」
+        return;
       }
 
       if (targetPiece.type !== 'bard') {
@@ -2502,7 +2494,7 @@ export default function Game() {
 
   // -------------- 已進房且遊戲已開始：棋盤畫面 --------------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to黑色 p-4 md:p-8">
       <div className="max-w-[1400px] mx-auto">
         <h1
           className="text-3xl font-bold text-center mb-4 text-slate-100"
@@ -2607,9 +2599,9 @@ export default function Game() {
         </div>
       )}
 
-      {/* 聖騎士守護視窗（只有被攻擊方、且 guardRequest 存在時顯示） */}
+      {/* 聖騎士守護視窗：現在只要 guardDialogOpen + guardRequest 就會顯示 */}
       <GuardDialog
-        isOpen={guardDialogOpen && !!guardRequest && localSide === guardRequest?.defenderSide}
+        isOpen={guardDialogOpen && !!guardRequest}
         guardOptions={guardOptions}
         targetCoordinate={
           guardRequest
