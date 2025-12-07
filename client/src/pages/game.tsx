@@ -2665,21 +2665,34 @@ export default function Game() {
             <PieceInfoPanel piece={selectedPiece || null} />
           </div>
 
-          {/* 中間：棋盤 */}
+          {/* 中間：棋盤（安全版魔法背景，不影響棋盤點擊） */}
           <div className="order-1 lg:order-2 flex justify-center">
-            <GameBoard
-              pieces={displayPieces}
-              selectedPieceIndex={selectedPieceIndex}
-              highlights={highlights}
-              currentPlayer={boardState.currentPlayer}
-              onNodeClick={handleNodeClick}
-              burnMarks={boardState.burnMarks}
-              protectionZones={protectionZones}
-              holyLights={boardState.holyLights}
-              viewerSide={localSide}
-              observing={isObserving}
-            />
+            {/* 魔法風外框，只當背景，不吃滑鼠事件 */}
+            <div
+              className="
+                p-6 rounded-3xl
+                bg-gradient-to-br from-indigo-950 via-purple-900 to-slate-900
+                shadow-[0_0_35px_rgba(129,0,255,0.45)]
+              "
+            >
+              {/* 棋盤本體：給一個實心深色底，避免被外面顏色影響 */}
+              <div className="bg-slate-900 rounded-2xl p-2">
+                <GameBoard
+                  pieces={displayPieces}
+                  selectedPieceIndex={selectedPieceIndex}
+                  highlights={highlights}
+                  currentPlayer={boardState.currentPlayer}
+                  onNodeClick={handleNodeClick}
+                  burnMarks={boardState.burnMarks}
+                  protectionZones={protectionZones}
+                  holyLights={boardState.holyLights}
+                  viewerSide={localSide}
+                  observing={isObserving}
+                />
+              </div>
+            </div>
           </div>
+
 
 
 
