@@ -17,13 +17,13 @@ import {
 import wizardMoonImg from '../assets/wizard_moon.png';
 import assassinLogoImg from '../assets/assassin_logo.png';
 
-// 其他棋子的 PNG（依你的實際檔名調整）
-import paladinPng from '../assets/paladin.png';
-import dragonPng from '../assets/dragon.png';
-import rangerPng from '../assets/ranger.png';
-import griffinPng from '../assets/griffin.png';
-import bardPng from '../assets/bard.png';
-import apprenticePng from '../assets/apprentice.png';
+// 其他棋子的 PNG（依你的實際檔名調整路徑）
+import paladinPng from '../assets/pieces/paladin.png';
+import dragonPng from '../assets/pieces/dragon.png';
+import rangerPng from '../assets/pieces/ranger.png';
+import griffinPng from '../assets/pieces/griffin.png';
+import bardPng from '../assets/pieces/bard.png';
+import apprenticePng from '../assets/pieces/apprentice.png';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -46,10 +46,10 @@ interface GameBoardProps {
   } | null;
 }
 
-// 所有棋子統一的繪製尺寸（你覺得太大/太小可以改這裡）
+// 所有棋子統一尺寸
 const PIECE_SIZE = 34;
 
-// 決定這個視角是否看得到這顆棋
+// 這個視角是否看得到這顆棋
 function isPieceVisible(
   piece: Piece,
   viewerSide: 'white' | 'black' | 'spectator',
@@ -94,7 +94,7 @@ export default function GameBoard({
 
   const LOGICAL_SIZE = 700;
 
-  // ==== 動畫狀態 ====
+  // ===== 動畫狀態 =====
   type MoveAnimState = {
     pieceIndex: number;
     fromX: number;
@@ -156,7 +156,7 @@ export default function GameBoard({
     setAdjacency(newAdj);
   }, []);
 
-  // 偵測棋子移動 → 啟動動畫
+  // 偵測棋子移動啟動動畫
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -195,34 +195,82 @@ export default function GameBoard({
     prevPiecesRef.current = pieces;
   }, [pieces, allNodes]);
 
-  // 取得其他棋子的圖片 & 尺寸（尺寸統一用 PIECE_SIZE）
-  function getImageForPiece(piece: Piece): { img: HTMLImageElement | null; size: number } {
+  // 取得其他棋子的圖片
+  function getImageForPiece(piece: Piece): HTMLImageElement | null {
     switch (piece.type) {
       case 'paladin':
-        return { img: paladinImage, size: PIECE_SIZE };
+        return paladinImage;
       case 'dragon':
-        return { img: dragonImage, size: PIECE_SIZE };
+        return dragonImage;
       case 'ranger':
-        return { img: rangerImage, size: PIECE_SIZE };
+        return rangerImage;
       case 'griffin':
-        return { img: griffinImage, size: PIECE_SIZE };
+        return griffinImage;
       case 'bard':
-        return { img: bardImage, size: PIECE_SIZE };
+        return bardImage;
       case 'apprentice':
-        return { img: apprenticeImage, size: PIECE_SIZE };
+        return apprenticeImage;
       default:
-        return { img: null, size: PIECE_SIZE };
+        return null;
     }
   }
 
-  // ===== 實際繪圖 =====
+  // 把一張 PNG 當「遮罩」：非透明區域全部改成白色，其它變透明
+  function makeMonochromeMask(
+    img: HTMLImageElement,
+    size: number,
+  ): HTMLCanvasElement {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = size;
+    tempCanvas.height = size;
+    const tempCtx = tempCanvas.getContext('2d', { alpha: true });
+    if (!tempCtx) return tempCanvas;
+
+    tempCtx.imageSmoothingEnabled = true;
+    tempCtx.imageSmoothingQuality = 'high';
+    tempCtx.drawImage(img, 0, 0, size, size);
+
+    const imageData = tempCtx.getImageData(0, 0, size, size);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+
+      if (a < 20) {
+        // 幾乎透明 → 直接透明
+        data[i + 3] = 0;
+        continue;
+      }
+
+      const brightness = (r + g + b) / 3;
+
+      // 太亮的背景也當透明（避免白底整塊）
+      if (brightness > 230) {
+        data[i + 3] = 0;
+      } else {
+        // icon 本體 → 一律變白
+        data[i] = 255;
+        data[i + 1] = 255;
+        data[i + 2] = 255;
+        data[i + 3] = a;
+      }
+    }
+
+    tempCtx.putImageData(imageData, 0, 0);
+    return tempCanvas;
+  }
+
+  // ===== 真正繪圖函式 =====
   const drawBoard = (
     ctx: CanvasRenderingContext2D,
     overridePos?: { pieceIndex: number; x: number; y: number },
   ) => {
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // === 背景 ===
+    // 背景
     const gradient = ctx.createRadialGradient(
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE / 2,
@@ -236,7 +284,7 @@ export default function GameBoard({
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // === 三角形棋盤 ===
+    // 棋盤三角形
     for (let r = 0; r < rows.length - 1; r++) {
       const rowA = rows[r];
       const rowB = rows[r + 1];
@@ -312,7 +360,7 @@ export default function GameBoard({
       }
     }
 
-    // === 節點連線 ===
+    // 節點連線
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
@@ -328,7 +376,7 @@ export default function GameBoard({
       });
     });
 
-    // === 節點圓點 ===
+    // 節點圓點
     allNodes.forEach((node) => {
       const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
       ctx.beginPath();
@@ -337,7 +385,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 火焰 ===
+    // 火焰
     burnMarks.forEach((mark) => {
       const node = allNodes.find((n) => n.row === mark.row && n.col === mark.col);
       if (!node) return;
@@ -357,7 +405,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 聖光 ===
+    // 聖光
     holyLights.forEach((light) => {
       const node = allNodes.find((n) => n.row === light.row && n.col === light.col);
       if (!node) return;
@@ -389,7 +437,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 移動高亮 ===
+    // 移動高亮
     highlights.forEach((h) => {
       if (h.type !== 'move') return;
       const node = allNodes.find((n) => n.row === h.row && n.col === h.col);
@@ -402,7 +450,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // === 座標標籤 ===
+    // 座標標籤
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
 
@@ -426,7 +474,7 @@ export default function GameBoard({
       }
     });
 
-    // === 棋子 ===
+    // ===== 棋子（全部圖案變白，邊框依 side） =====
     pieces.forEach((piece, idx) => {
       if (!isPieceVisible(piece, viewerSide, observing)) return;
 
@@ -448,308 +496,116 @@ export default function GameBoard({
         protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
         false;
 
-      // === 巫師 ===
-      if (piece.type === 'wizard' && wizardHatImage) {
-        const displaySize = PIECE_SIZE;
-        const highResSize = 128;
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+      // === 決定框線顏色 ===
+      let outlineColor: string | null = null;
+      let outlineWidth = 0;
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = highResSize;
-        tempCanvas.height = highResSize;
-        const tempCtx = tempCanvas.getContext('2d', { alpha: true });
-
-        if (tempCtx) {
-          tempCtx.imageSmoothingEnabled = true;
-          tempCtx.imageSmoothingQuality = 'high';
-          tempCtx.drawImage(wizardHatImage, 0, 0, highResSize, highResSize);
-
-          const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-          const data = imageData.data;
-
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const alpha = data[i + 3];
-
-            if (alpha > 0) {
-              const brightness = (r + g + b) / 3;
-              if (brightness > 50) {
-                data[i + 3] = 0;
-              } else {
-                if (piece.side === 'white') {
-                  data[i] = 255 - data[i];
-                  data[i + 1] = 255 - data[i + 1];
-                  data[i + 2] = 255 - data[i + 2];
-                } else if (piece.side === 'neutral') {
-                  data[i] = Math.min(255, data[i] * 0.6 + 168);
-                  data[i + 1] = Math.min(255, data[i + 1] * 0.3 + 85);
-                  data[i + 2] = Math.min(255, data[i + 2] * 0.6 + 247);
-                } else {
-                  data[i] = 0;
-                  data[i + 1] = 0;
-                  data[i + 2] = 0;
-                }
-              }
-            }
-          }
-
-          tempCtx.putImageData(imageData, 0, 0);
-
-          let outlineColor: string | null = null;
-          let outlineWidth = 0;
-
-          if (idx === selectedPieceIndex) {
-            outlineColor = '#fbbf24';
-            outlineWidth = 3;
-          } else if (swapHighlight) {
-            outlineColor = '#3b82f6';
-            outlineWidth = 3;
-          } else if (attackHighlight) {
-            outlineColor = '#ef4444';
-            outlineWidth = 3;
-          } else if (isProtected) {
-            outlineColor = '#06b6d4';
-            outlineWidth = 2.5;
-          } else if (piece.side === 'black') {
-            outlineColor = '#fff';
-            outlineWidth = 1;
-          }
-
-          if (outlineColor && outlineWidth > 0) {
-            ctx.save();
-            ctx.shadowColor = outlineColor;
-            ctx.shadowBlur = outlineWidth;
-
-            const offsets = [
-              [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
-              [-0.8,  0],              [0.8,  0],
-              [-0.8,  0.8], [0,  0.8], [0.8,  0.8],
-            ];
-            offsets.forEach(([dx, dy]) => {
-              ctx.shadowOffsetX = dx;
-              ctx.shadowOffsetY = dy;
-              ctx.drawImage(
-                tempCanvas,
-                drawX - displaySize / 2,
-                drawY - displaySize / 2,
-                displaySize,
-                displaySize,
-              );
-            });
-            ctx.restore();
-          }
-
-          ctx.drawImage(
-            tempCanvas,
-            drawX - displaySize / 2,
-            drawY - displaySize / 2,
-            displaySize,
-            displaySize,
-          );
-        }
-
-        ctx.restore();
-      }
-      // === 刺客 ===
-      else if (piece.type === 'assassin' && assassinLogoImage) {
-        const displaySize = PIECE_SIZE;
-        const highResSize = 128;
-        ctx.save();
-
-        if (
-          piece.stealthed &&
-          viewerSide !== 'spectator' &&
-          piece.side === viewerSide &&
-          !observing
-        ) {
-          ctx.globalAlpha = 0.5;
-        }
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = highResSize;
-        tempCanvas.height = highResSize;
-        const tempCtx = tempCanvas.getContext('2d', { alpha: true });
-
-        if (tempCtx) {
-          tempCtx.imageSmoothingEnabled = true;
-          tempCtx.imageSmoothingQuality = 'high';
-          tempCtx.drawImage(assassinLogoImage, 0, 0, highResSize, highResSize);
-
-          const imageData = tempCtx.getImageData(0, 0, highResSize, highResSize);
-          const data = imageData.data;
-
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const brightness = (r + g + b) / 3;
-
-            if (brightness > 128) {
-              data[i + 3] = 0;
-            } else {
-              if (piece.side === 'white') {
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-              } else {
-                data[i] = 0;
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-              }
-            }
-          }
-
-          tempCtx.putImageData(imageData, 0, 0);
-
-          let outlineColor: string | null = null;
-          let outlineWidth = 0;
-
-          if (idx === selectedPieceIndex) {
-            outlineColor = '#fbbf24';
-            outlineWidth = 3;
-          } else if (swapHighlight) {
-            outlineColor = '#3b82f6';
-            outlineWidth = 3;
-          } else if (attackHighlight) {
-            outlineColor = '#ef4444';
-            outlineWidth = 3;
-          } else if (
-            piece.stealthed &&
-            viewerSide !== 'spectator' &&
-            piece.side === viewerSide &&
-            !observing
-          ) {
-            outlineColor = '#ff69b4';
-            outlineWidth = 3;
-          } else if (isProtected) {
-            outlineColor = '#06b6d4';
-            outlineWidth = 2.5;
-          } else if (piece.side === 'black') {
-            outlineColor = '#fff';
-            outlineWidth = 1;
-          } else if (piece.side === 'white') {
-            outlineColor = '#000';
-            outlineWidth = 1;
-          }
-
-          if (outlineColor && outlineWidth > 0) {
-            ctx.save();
-            ctx.shadowColor = outlineColor;
-            ctx.shadowBlur = outlineWidth;
-
-            const offsets = [
-              [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
-              [-0.8,  0],              [0.8,  0],
-              [-0.8,  0.8], [0,  0.8], [0.8,  0.8],
-            ];
-            offsets.forEach(([dx, dy]) => {
-              ctx.shadowOffsetX = dx;
-              ctx.shadowOffsetY = dy;
-              ctx.drawImage(
-                tempCanvas,
-                drawX - displaySize / 2,
-                drawY - displaySize / 2,
-                displaySize,
-                displaySize,
-              );
-            });
-            ctx.restore();
-          }
-
-          ctx.drawImage(
-            tempCanvas,
-            drawX - displaySize / 2,
-            drawY - displaySize / 2,
-            displaySize,
-            displaySize,
-          );
-        }
-
-        ctx.restore();
-      }
-      // === 其他棋子：PNG + 沿圖案發光 ===
-      else {
-        const { img, size: displaySize } = getImageForPiece(piece);
-        if (!img) return;
-
-        let outlineColor: string | null = null;
-        let outlineWidth = 0;
-
-        if (idx === selectedPieceIndex) {
-          outlineColor = '#fbbf24';
-          outlineWidth = 3;
-        } else if (swapHighlight) {
-          outlineColor = '#3b82f6';
-          outlineWidth = 3;
-        } else if (attackHighlight) {
-          outlineColor = '#ef4444';
-          outlineWidth = 3;
-        } else if (isProtected) {
-          outlineColor = '#06b6d4';
-          outlineWidth = 2.5;
+      // 優先：選中 / 換位 / 攻擊 / 守護 顏色
+      if (idx === selectedPieceIndex) {
+        outlineColor = '#fbbf24';
+        outlineWidth = 3;
+      } else if (swapHighlight) {
+        outlineColor = '#3b82f6';
+        outlineWidth = 3;
+      } else if (attackHighlight) {
+        outlineColor = '#ef4444';
+        outlineWidth = 3;
+      } else if (isProtected) {
+        outlineColor = '#06b6d4';
+        outlineWidth = 2.5;
+      } else {
+        // 一般情況：白方→黑框，黑方→白框，中立→紫框
+        if (piece.side === 'white') {
+          outlineColor = '#000000';
+          outlineWidth = 2;
+        } else if (piece.side === 'black') {
+          outlineColor = '#ffffff';
+          outlineWidth = 2;
         } else {
-          if (piece.side === 'white') {
-            outlineColor = 'rgba(229, 231, 235, 0.9)';
-            outlineWidth = 2;
-          } else if (piece.side === 'black') {
-            outlineColor = 'rgba(15, 23, 42, 0.9)';
-            outlineWidth = 2;
-          } else {
-            outlineColor = 'rgba(168, 85, 247, 0.9)';
-            outlineWidth = 2;
-          }
+          outlineColor = 'rgba(168, 85, 247, 0.9)';
+          outlineWidth = 2;
         }
+      }
 
+      // === 巫師 / 刺客（專用圖片） ===
+      const baseImg =
+        piece.type === 'wizard'
+          ? wizardHatImage
+          : piece.type === 'assassin'
+          ? assassinLogoImage
+          : getImageForPiece(piece);
+
+      if (!baseImg) return;
+
+      const displaySize = PIECE_SIZE;
+
+      // 先做 monochrome mask（整個 icon 變純白）
+      const maskCanvas = makeMonochromeMask(baseImg, 128);
+      const tmpSize = 128;
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // 刺客潛行：自己視角半透明
+      if (
+        piece.type === 'assassin' &&
+        piece.stealthed &&
+        viewerSide !== 'spectator' &&
+        piece.side === viewerSide &&
+        !observing
+      ) {
+        ctx.globalAlpha = 0.5;
+      }
+
+      // 外框：用多方向 shadow 疊圖，沿著圖案邊緣出框
+      if (outlineColor && outlineWidth > 0) {
         ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        ctx.shadowColor = outlineColor;
+        ctx.shadowBlur = outlineWidth;
 
-        if (outlineColor && outlineWidth > 0) {
-          ctx.save();
-          ctx.shadowColor = outlineColor;
-          ctx.shadowBlur = outlineWidth;
+        const offsets = [
+          [-1, -1], [0, -1], [1, -1],
+          [-1,  0],         [1,  0],
+          [-1,  1], [0,  1], [1,  1],
+        ];
 
-          const offsets = [
-            [-1, -1], [0, -1], [1, -1],
-            [-1,  0],         [1,  0],
-            [-1,  1], [0,  1], [1,  1],
-          ];
-
-          offsets.forEach(([dx, dy]) => {
-            ctx.shadowOffsetX = dx;
-            ctx.shadowOffsetY = dy;
-            ctx.drawImage(
-              img,
-              drawX - displaySize / 2,
-              drawY - displaySize / 2,
-              displaySize,
-              displaySize,
-            );
-          });
-
-          ctx.restore();
-        }
-
-        ctx.drawImage(
-          img,
-          drawX - displaySize / 2,
-          drawY - displaySize / 2,
-          displaySize,
-          displaySize,
-        );
+        offsets.forEach(([dx, dy]) => {
+          ctx.shadowOffsetX = dx;
+          ctx.shadowOffsetY = dy;
+          ctx.drawImage(
+            maskCanvas,
+            0,
+            0,
+            tmpSize,
+            tmpSize,
+            drawX - displaySize / 2,
+            drawY - displaySize / 2,
+            displaySize,
+            displaySize,
+          );
+        });
 
         ctx.restore();
       }
+
+      // 真正畫 icon（純白）
+      ctx.drawImage(
+        maskCanvas,
+        0,
+        0,
+        tmpSize,
+        tmpSize,
+        drawX - displaySize / 2,
+        drawY - displaySize / 2,
+        displaySize,
+        displaySize,
+      );
+
+      ctx.restore();
     });
 
-    // --- 守護預覽光暈 ---
+    // 守護預覽光暈
     if (guardPreview) {
       const drawGuardGlow = (
         row: number,
