@@ -111,7 +111,7 @@ export const PIECE_DESCRIPTIONS: Record<
       '激活機制：當任意棋子被吃掉時，吟遊詩人會被激活。',
       '強制交換：移動後必須與己方棋子（除龍外）交換位置。',
       '可作為巫師導線的一部分。',
-      '與敵方潛行重疊時，會與其交換位置並使其保持潛行。'
+      '與敵方潛行刺客重疊時，會與其交換位置並使其現形。',
     ],
   },
   griffin: {
@@ -1407,10 +1407,7 @@ function findNextInDirection(
 }
 
 // ---- Bard ----
-
-// Calculate bard moves - straight-line jumping
-// Calculate bard moves - straight-line jumping
-// Calculate bard moves - straight-line jumping
+// 吟遊詩人：單步 + 直線跳「一次」，不能踩己方潛行刺客，可以踩敵方潛行刺客（之後在 Game.tsx 處理交換＋現形）
 export function calculateBardMoves(
   piece: Piece,
   pieceIndex: number,
@@ -1418,11 +1415,11 @@ export function calculateBardMoves(
   adjacency: number[][],
   allNodes: NodePosition[],
   holyLights: HolyLight[] = [],
-  burnMarks: { row: number; col: number }[] = []
+  burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
 
-  // Bard can only move when activated
+  // 只有啟動後才可以移動
   if (!piece.activated) {
     return highlights;
   }
@@ -1436,8 +1433,10 @@ export function calculateBardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
-    // 不能被敵方聖光 / 灼痕擋住
-    if (!canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
+    // 聖光 / 灼痕擋住就不能去
+    if (
+      !canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
+    ) {
       continue;
     }
 
@@ -1448,7 +1447,8 @@ export function calculateBardMoves(
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else {
       const targetPiece = pieces[targetPieceIdx];
-      // ⭐ 特例：敵方潛行刺客 → 允許走上去，之後在 Game.tsx 裡會做「交換位置」
+
+      // 只能踩「敵方潛行刺客」，己方潛行刺客不能踩
       if (
         targetPiece.type === 'assassin' &&
         targetPiece.side !== piece.side &&
@@ -1456,110 +1456,85 @@ export function calculateBardMoves(
       ) {
         highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
       }
-      // 其他棋子一律不能單步踩上去（留給 attack / swap 規則處理）
+      // 其他棋子（包含己方潛行刺客、任意可見棋子）都不能單步踩上去
     }
   }
 
-  // ===== 2. 直線跳躍 =====
+  // ===== 2. 直線跳一次 =====
   for (const firstJumpIdx of adjacency[nodeIdx]) {
     const firstJumpNode = allNodes[firstJumpIdx];
     const overPieceIdx = getPieceAt(pieces, firstJumpNode.row, firstJumpNode.col);
 
-    // 第一跳一定要先「跳過」一顆棋
+    // 第一格必須有棋
     if (overPieceIdx === -1) continue;
 
     const overPiece = pieces[overPieceIdx];
 
-    // 只能跳過「非吟遊詩人」或「已啟動的吟遊詩人」
+    // 未啟動吟遊詩人不能當跳板
     if (overPiece.type === 'bard' && !overPiece.activated) continue;
 
+    // 方向向量（從 bard 指向第一個被跳過的棋）
     const dRow = firstJumpNode.row - piece.row;
     const dCol = firstJumpNode.col - piece.col;
 
-    let currentIdx = nodeIdx;
-    const visited = new Set<number>([nodeIdx]);
+    // 落點：被跳過棋子後面那一格
+    const landingIdx = findNodeInDirection(
+      firstJumpIdx,
+      dRow,
+      dCol,
+      adjacency,
+      allNodes,
+    );
+    if (landingIdx === -1) continue;
 
-    while (true) {
-      // 下一個要被跳過的棋
-      const nextOverIdx = findNodeInDirection(
-        currentIdx,
-        dRow,
-        dCol,
-        adjacency,
-        allNodes,
-      );
-      if (nextOverIdx === -1 || visited.has(nextOverIdx)) break;
+    const landingNode = allNodes[landingIdx];
 
-      const nextOverNode = allNodes[nextOverIdx];
-      const nextOverPieceIdx = getPieceAt(
-        pieces,
-        nextOverNode.row,
-        nextOverNode.col,
-      );
-      if (nextOverPieceIdx === -1) break;
-
-      const nextOverPiece = pieces[nextOverPieceIdx];
-
-      if (nextOverPiece.type === 'bard' && !nextOverPiece.activated) break;
-
-      // 計算落點（再往同一方向一格）
-      const landingIdx = findNodeInDirection(
-        nextOverIdx,
-        dRow,
-        dCol,
-        adjacency,
-        allNodes,
-      );
-      if (landingIdx === -1 || visited.has(landingIdx)) break;
-
-      const landingNode = allNodes[landingIdx];
-
-      if (!canOccupyNode(landingNode.row, landingNode.col, piece.side, holyLights, burnMarks)) {
-        break;
-      }
-
-      const landingPieceIdx = getPieceAt(
-        pieces,
+    if (
+      !canOccupyNode(
         landingNode.row,
         landingNode.col,
-      );
+        piece.side,
+        holyLights,
+        burnMarks,
+      )
+    ) {
+      continue;
+    }
 
-      if (landingPieceIdx === -1) {
-        // 落點為空 → 可以跳到這格
+    const landingPieceIdx = getPieceAt(
+      pieces,
+      landingNode.row,
+      landingNode.col,
+    );
+
+    if (landingPieceIdx === -1) {
+      // 落點是空格 → 可以跳到這格
+      highlights.push({
+        type: 'move',
+        row: landingNode.row,
+        col: landingNode.col,
+      });
+    } else {
+      const landingPiece = pieces[landingPieceIdx];
+
+      // 特例：落點是敵方潛行刺客 → 可以跳上去，後續在 Game.tsx 做交換＋現形
+      if (
+        landingPiece.type === 'assassin' &&
+        landingPiece.side !== piece.side &&
+        landingPiece.stealthed
+      ) {
         highlights.push({
           type: 'move',
           row: landingNode.row,
           col: landingNode.col,
         });
-        visited.add(nextOverIdx);
-        visited.add(landingIdx);
-        currentIdx = landingIdx;
-      } else {
-        const landingPiece = pieces[landingPieceIdx];
-
-        // ⭐ 特例：落點是敵方潛行刺客 → 允許跳到這格並交換位置
-        if (
-          landingPiece.type === 'assassin' &&
-          landingPiece.side !== piece.side &&
-          landingPiece.stealthed
-        ) {
-          highlights.push({
-            type: 'move',
-            row: landingNode.row,
-            col: landingNode.col,
-          });
-        }
-        // 不論能不能跳上去，這條線再往前都不再持續了
-        break;
       }
+      // 其他情況都不能落在這格（包含己方潛行刺客、可見棋子）
     }
   }
 
   return highlights;
 }
-
-
-
 
 // helper: straight-line search used by bard jumping
 function findNodeInDirection(
