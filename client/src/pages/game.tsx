@@ -1799,7 +1799,13 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
     let localCaptured = cloneCaptured(capturedPieces);
 
-    // ⭐ 規則：吟遊詩人走到「敵方潛行刺客」的位置：
+if (highlight.type === "move") {
+  const actualTargetIdx = getPieceAt(pieces, row, col);
+
+  if (actualTargetIdx !== -1) {
+    const targetPiece = pieces[actualTargetIdx];
+
+        // ⭐ 規則：吟遊詩人走到「敵方潛行刺客」的位置：
     //    1. 互換位置
     //    2. 使該刺客現形（stealthed = false）
     if (
