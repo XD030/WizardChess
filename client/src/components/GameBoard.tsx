@@ -682,59 +682,84 @@ export default function GameBoard({
 
         ctx.restore();
       }
-      // === 其他棋子：全部用 PNG 畫 ===
-      else {
-        const { img, size: displaySize } = getImageForPiece(piece);
-        if (!img) return;
+      // === 其他棋子：全部用 PNG 畫（沿著圖案發光，不畫圓圈） ===
+else {
+  const { img, size: displaySize } = getImageForPiece(piece);
+  if (!img) return;
 
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+  // 判斷外框顏色
+  let outlineColor: string | null = null;
+  let outlineWidth = 0;
 
-        // 先畫圖片
-        ctx.drawImage(
-          img,
-          drawX - displaySize / 2,
-          drawY - displaySize / 2,
-          displaySize,
-          displaySize,
-        );
+  if (idx === selectedPieceIndex) {
+    outlineColor = '#fbbf24'; // 選中：金色
+    outlineWidth = 3;
+  } else if (swapHighlight) {
+    outlineColor = '#3b82f6'; // 換位：藍色
+    outlineWidth = 3;
+  } else if (attackHighlight) {
+    outlineColor = '#ef4444'; // 攻擊：紅色
+    outlineWidth = 3;
+  } else if (isProtected) {
+    outlineColor = '#06b6d4'; // 聖騎士守護區：青色
+    outlineWidth = 2.5;
+  } else {
+    // 一般狀態：依 side 給淡淡外圈
+    if (piece.side === 'white') {
+      outlineColor = 'rgba(229, 231, 235, 0.9)';
+      outlineWidth = 2;
+    } else if (piece.side === 'black') {
+      outlineColor = 'rgba(15, 23, 42, 0.9)';
+      outlineWidth = 2;
+    } else {
+      outlineColor = 'rgba(168, 85, 247, 0.9)';
+      outlineWidth = 2;
+    }
+  }
 
-        // 外框顏色：沿用你原本的邏輯
-        let outlineColor = '#000';
-        let outlineWidth = 1.5;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
-        if (idx === selectedPieceIndex) {
-          outlineColor = '#fbbf24';
-          outlineWidth = 3;
-        } else if (swapHighlight) {
-          outlineColor = '#3b82f6';
-          outlineWidth = 3;
-        } else if (attackHighlight) {
-          outlineColor = '#ef4444';
-          outlineWidth = 3;
-        } else if (isProtected) {
-          outlineColor = '#06b6d4';
-          outlineWidth = 2.5;
-        } else {
-          if (piece.side === 'white') {
-            outlineColor = '#e5e7eb';
-          } else if (piece.side === 'black') {
-            outlineColor = '#0f172a';
-          } else {
-            outlineColor = '#a855f7';
-          }
-        }
+  // 先畫一圈「沿圖案外框」的光暈（跟巫師/刺客一樣做法）
+  if (outlineColor && outlineWidth > 0) {
+    ctx.save();
+    ctx.shadowColor = outlineColor;
+    ctx.shadowBlur = outlineWidth;
 
-        ctx.beginPath();
-        ctx.arc(drawX, drawY, displaySize / 2 + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = outlineColor;
-        ctx.lineWidth = outlineWidth;
-        ctx.stroke();
+    const offsets = [
+      [-1, -1], [0, -1], [1, -1],
+      [-1,  0],          [1,  0],
+      [-1,  1], [0,  1], [1,  1],
+    ];
 
-        ctx.restore();
-      }
+    offsets.forEach(([dx, dy]) => {
+      ctx.shadowOffsetX = dx;
+      ctx.shadowOffsetY = dy;
+      ctx.drawImage(
+        img,
+        drawX - displaySize / 2,
+        drawY - displaySize / 2,
+        displaySize,
+        displaySize,
+      );
     });
+
+    ctx.restore();
+  }
+
+  // 再畫一次本體（沒有 shadow）
+  ctx.drawImage(
+    img,
+    drawX - displaySize / 2,
+    drawY - displaySize / 2,
+    displaySize,
+    displaySize,
+  );
+
+  ctx.restore();
+}
+
 
     // --- Guard preview glow (Paladin / target / attacker) ---
     if (guardPreview) {
