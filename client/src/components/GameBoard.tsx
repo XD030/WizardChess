@@ -164,7 +164,7 @@ export default function GameBoard({
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 200, // 動畫時間（毫秒）
+              duration: 350, // 動畫時間（毫秒）
             });
           }
           break;
