@@ -8,12 +8,6 @@ import type {
   BurnMark,
 } from '@shared/schema';
 
-
-export function getPieceSymbol(type: PieceType, side: Side): string {
-  if (side === 'neutral') return PIECE_SYMBOLS[type].white;
-  return PIECE_SYMBOLS[type][side];
-}
-
 export const PIECE_CHINESE: Record<PieceType, string> = {
   wizard: '巫師',
   apprentice: '學徒',
