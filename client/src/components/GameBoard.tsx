@@ -18,12 +18,12 @@ import wizardMoonImg from '../assets/wizard_moon.png';
 import assassinLogoImg from '../assets/assassin_logo.png';
 
 // 其他棋子的 PNG（依你的實際檔名調整路徑）
-import paladinPng from '../assets/pieces/paladin.png';
-import dragonPng from '../assets/pieces/dragon.png';
-import rangerPng from '../assets/pieces/ranger.png';
-import griffinPng from '../assets/pieces/griffin.png';
-import bardPng from '../assets/pieces/bard.png';
-import apprenticePng from '../assets/pieces/apprentice.png';
+import paladinPng from '../assets/paladin.png';
+import dragonPng from '../assets/dragon.png';
+import rangerPng from '../assets/ranger.png';
+import griffinPng from '../assets/griffin.png';
+import bardPng from '../assets/bard.png';
+import apprenticePng from '../assets/apprentice.png';
 
 interface GameBoardProps {
   pieces: Piece[];
