@@ -62,7 +62,7 @@ import bardPng from '../assets/bard.png';
 import apprenticeWhitePng from '../assets/apprentice_white.png';
 import apprenticeBlackPng from '../assets/apprentice_black.png';
 
-const LOGICAL_SIZE = 1500;
+const LOGICAL_SIZE = 500;
 const PIECE_SIZE = 34;
 
 // 這個視角是否看得到這顆棋
