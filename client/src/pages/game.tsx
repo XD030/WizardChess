@@ -1988,7 +1988,11 @@ export default function Game() {
           : [];
 
       // ✅ 只要有守護聖騎士，且不是觀察模式，就在目前這個 client 跳守護視窗
-      if (guardingPaladinIndices.length > 0 && !isObserving) {
+      if (
+          guardingPaladinIndices.length > 0 &&
+          !isObserving &&
+          localSide === targetPiece.side
+        ) {
         const options: GuardOption[] = guardingPaladinIndices.map((idx) => ({
           paladinIndex: idx,
           paladinRow: pieces[idx].row,
@@ -2601,7 +2605,11 @@ export default function Game() {
 
       {/* 聖騎士守護視窗：現在只要 guardDialogOpen + guardRequest 就會顯示 */}
       <GuardDialog
-        isOpen={guardDialogOpen && !!guardRequest}
+        isOpen={
+                guardDialogOpen &&
+                !!guardRequest &&
+                localSide === guardRequest?.defenderSide
+                }
         guardOptions={guardOptions}
         targetCoordinate={
           guardRequest
