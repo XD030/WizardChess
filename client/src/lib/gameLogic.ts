@@ -8,25 +8,6 @@ import type {
   BurnMark,
 } from '@shared/schema';
 
-// Chess piece symbols (white/black versions)
-export const PIECE_SYMBOLS: Record<
-  PieceType,
-  { white: string; black: string }
-> = {
-  wizard: { white: '♕', black: '♛' }, // Queen
-  apprentice: { white: '♙', black: '♟' }, // Pawn
-  dragon: { white: '♕', black: '♛' }, // Rook
-  ranger: { white: '♘', black: '♞' }, // Knight
-  paladin: { white: '♗', black: '♝' }, // Bishop
-  assassin: { white: '♘', black: '♞' }, // Knight (alternative)
-  bard: { white: '♔', black: '♚' }, // King
-  griffin: { white: '♖', black: '♜' }, // Rook (alternative)
-};
-
-export function getPieceSymbol(type: PieceType, side: Side): string {
-  if (side === 'neutral') return PIECE_SYMBOLS[type].white;
-  return PIECE_SYMBOLS[type][side];
-}
 
 export const PIECE_CHINESE: Record<PieceType, string> = {
   wizard: '巫師',
