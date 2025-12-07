@@ -27,9 +27,7 @@ interface GameBoardProps {
   burnMarks: BurnMark[];
   protectionZones: { row: number; col: number }[];
   holyLights: HolyLight[];
-  // 新增：視角
   viewerSide: 'white' | 'black' | 'spectator';
-  // 新增：是否為觀察模式（遊戲結束後看重播）
   observing: boolean;
   guardPreview?: {
     paladinRow: number;
@@ -137,7 +135,7 @@ export default function GameBoard({
     setAdjacency(newAdj);
   }, []);
 
-  // 偵測「棋子移動」→ 啟動動畫
+  // 偵測「棋子移動」→ 啟動動畫（只處理：同樣長度陣列、index 相同但 row/col 改變的情況）
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -145,26 +143,12 @@ export default function GameBoard({
     }
 
     const prev = prevPiecesRef.current;
-    if (!prev) {
-      prevPiecesRef.current = pieces;
-      return;
-    }
-
-    // 簡單防呆：如果差太多（例如重開局），就不要動
-    if (Math.abs(prev.length - pieces.length) > 1) {
-      prevPiecesRef.current = pieces;
-      return;
-    }
-
-    // 尋找「看起來是同一顆棋，但座標變了」的 pair
-    let foundAnim: MoveAnimState | null = null;
-
-    // 情況 1：長度相同（普通移動或換位）
-    if (prev.length === pieces.length) {
+    if (prev && prev.length === pieces.length) {
       for (let i = 0; i < pieces.length; i++) {
         const pNew = pieces[i];
         const pOld = prev[i];
 
+        // 同一 index：型別與陣營相同，但座標變動 → 視為移動
         if (
           pNew.type === pOld.type &&
           pNew.side === pOld.side &&
@@ -173,56 +157,19 @@ export default function GameBoard({
           const fromNode = allNodes.find((n) => n.row === pOld.row && n.col === pOld.col);
           const toNode = allNodes.find((n) => n.row === pNew.row && n.col === pNew.col);
           if (fromNode && toNode) {
-            foundAnim = {
+            setAnimState({
               pieceIndex: i,
               fromX: fromNode.x,
               fromY: fromNode.y,
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 400, // 動畫時間（毫秒）← 拉長一點
-            };
+              duration: 200, // 動畫時間（毫秒）
+            });
           }
           break;
         }
       }
-    }
-
-    // 情況 2：prev 比現在多 1（代表吃子 / 棋子消失）
-    if (!foundAnim && prev.length === pieces.length + 1) {
-      outer: for (let i = 0; i < prev.length; i++) {
-        const pOld = prev[i];
-
-        for (let j = 0; j < pieces.length; j++) {
-          const pNew = pieces[j];
-
-          // 找「同 type & side，但座標改變」的那顆
-          if (
-            pNew.type === pOld.type &&
-            pNew.side === pOld.side &&
-            (pNew.row !== pOld.row || pNew.col !== pOld.col)
-          ) {
-            const fromNode = allNodes.find((n) => n.row === pOld.row && n.col === pOld.col);
-            const toNode = allNodes.find((n) => n.row === pNew.row && n.col === pNew.col);
-            if (fromNode && toNode) {
-              foundAnim = {
-                pieceIndex: j, // 在新陣列的 index
-                fromX: fromNode.x,
-                fromY: fromNode.y,
-                toX: toNode.x,
-                toY: toNode.y,
-                startTime: performance.now(),
-                duration: 400,
-              };
-              break outer;
-            }
-          }
-        }
-      }
-    }
-
-    if (foundAnim) {
-      setAnimState(foundAnim);
     }
 
     prevPiecesRef.current = pieces;
@@ -572,6 +519,7 @@ export default function GameBoard({
             drawX - displaySize / 2,
             drawY - displaySize / 2,
             displaySize,
+            displaySize,
           );
         }
 
@@ -650,7 +598,6 @@ export default function GameBoard({
             piece.side === viewerSide &&
             !observing
           ) {
-            // 自己視角看到的潛行刺客 → 粉紅框
             outlineColor = '#ff69b4';
             outlineWidth = 3;
           } else if (isProtected) {
@@ -692,6 +639,7 @@ export default function GameBoard({
             tempCanvas,
             drawX - displaySize / 2,
             drawY - displaySize / 2,
+            displaySize,
             displaySize,
           );
         }
