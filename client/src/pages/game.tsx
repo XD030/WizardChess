@@ -2323,6 +2323,14 @@ export default function Game() {
           pendingGuard: null,
         } as SyncedState);
 
+    // 是否輪到「我」這一方
+  const isMyTurn =
+    !winner &&
+    gameStarted &&
+    localSide !== "spectator" &&
+    localSide === boardState.currentPlayer;
+
+
   const displayPieces: Piece[] = isObserving
     ? boardState.pieces.map((p) =>
         p.type === "assassin" ? { ...p, stealthed: false } : p
@@ -2626,6 +2634,29 @@ export default function Game() {
             </span>
           )}
         </div>
+
+                {/* 回合與玩家狀態列 */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-3">
+          <div
+            className={`px-3 py-1 rounded-full text-xs sm:text-sm border ${
+              isMyTurn
+                ? "border-emerald-400 text-emerald-300 bg-emerald-500/10"
+                : "border-slate-600 text-slate-200 bg-slate-800/60"
+            }`}
+          >
+            目前回合：
+            {boardState.currentPlayer === "white" ? "白方" : "黑方"}
+          </div>
+
+          <div className="px-3 py-1 rounded-full text-[11px] sm:text-xs border border-slate-700 text-slate-300 bg-slate-900/60">
+            {localSide === "spectator"
+              ? "你目前是：觀戰者"
+              : `你扮演：${
+                  localSide === "white" ? "白方" : "黑方"
+                }${isMyTurn ? "（現在輪到你）" : ""}`}
+          </div>
+        </div>
+
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-6 items-start">
           {/* 左邊：被吃掉的棋子（上） + 棋子資訊（下） */}
