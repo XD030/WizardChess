@@ -1429,6 +1429,14 @@ export function calculateBardMoves(
     } else {
       const targetPiece = pieces[targetPieceIdx];
 
+      // 🚫 不能踩己方潛行刺客
+      if (targetPiece &&
+          targetPiece.side === piece.side &&
+          targetPiece.type === "assassin" &&
+          targetPiece.stealthed) {
+        continue;
+      }
+      
       // 只能踩「敵方潛行刺客」，己方潛行刺客不能踩
       if (
         targetPiece.type === 'assassin' &&
