@@ -1799,39 +1799,39 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
     let localCaptured = cloneCaptured(capturedPieces);
 
-    // ---- 普通移動 / 吃子 ----
-    if (highlight.type === "move") {
-      const actualTargetIdx = getPieceAt(pieces, row, col);
+    // ⭐ 規則：吟遊詩人走到「敵方潛行刺客」的位置：
+    //    1. 互換位置
+    //    2. 使該刺客現形（stealthed = false）
+    if (
+      selectedPiece.type === "bard" &&
+      targetPiece.type === "assassin" &&
+      targetPiece.side !== selectedPiece.side &&
+      targetPiece.stealthed
+    ) {
+      const bardIdx = selectedPieceIndex;
+      const assassinIdx = actualTargetIdx;
 
-      if (actualTargetIdx !== -1) {
-        const targetPiece = pieces[actualTargetIdx];
+      // 吟遊詩人走到原本刺客的格子
+      const newBard: Piece = {
+        ...selectedPiece,
+        row,
+        col,
+      };
 
-        // ⭐ 新規則：吟遊詩人可以踩「敵方潛行刺客」並與之交換位置（刺客保持潛行）
-        if (
-          selectedPiece.type === "bard" &&
-          targetPiece.type === "assassin" &&
-          targetPiece.side !== selectedPiece.side &&
-          targetPiece.stealthed
-        ) {
-          const bardIdx = selectedPieceIndex;
-          const assassinIdx = actualTargetIdx;
+      // 刺客換到吟遊詩人原本的位置，並且「現形」
+      const newAssassin: Piece = {
+        ...targetPiece,
+        row: selectedPiece.row,
+        col: selectedPiece.col,
+        stealthed: false,
+      };
 
-          const newBard: Piece = {
-            ...selectedPiece,
-            row,
-            col,
-          };
+      newPieces[bardIdx] = newBard;
+      newPieces[assassinIdx] = newAssassin;
 
-          const newAssassin: Piece = {
-            ...targetPiece,
-            row: selectedPiece.row,
-            col: selectedPiece.col,
-          };
+      // 這步是交換，不是吃子，不啟動 bard 強制啟動（activateAllBards 不用管）
+      moveDesc = `${PIECE_CHINESE["bard"]} ${fromCoord} ⇄ 刺客 ${toCoord}`;
 
-          newPieces[bardIdx] = newBard;
-          newPieces[assassinIdx] = newAssassin;
-
-          moveDesc = `${PIECE_CHINESE["bard"]} ${fromCoord} ⇄ 刺客 ${toCoord}`;
         } else if (targetPiece.type === "bard") {
           // 吟遊詩人不能被吃，這步當作無效
           setSelectedPieceIndex(-1);
