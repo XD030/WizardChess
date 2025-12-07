@@ -2665,32 +2665,22 @@ export default function Game() {
             <PieceInfoPanel piece={selectedPiece || null} />
           </div>
 
-          {/* 中間：棋盤（魔法背景） */}
+          {/* 中間：棋盤 */}
           <div className="order-1 lg:order-2 flex justify-center">
-            <div
-              className="
-                p-6 rounded-3xl relative overflow-hidden
-                bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800
-                shadow-[0_0_40px_rgba(129,0,255,0.4)]
-                before:content-[''] before:absolute before:inset-0
-                before:bg-[radial-gradient(circle_at_center,rgba(120,0,255,0.45),transparent_70%)]
-                before:animate-pulse before:opacity-70 before:rounded-3xl
-              "
-            >
-              <GameBoard
-                pieces={displayPieces}
-                selectedPieceIndex={selectedPieceIndex}
-                highlights={highlights}
-                currentPlayer={boardState.currentPlayer}
-                onNodeClick={handleNodeClick}
-                burnMarks={boardState.burnMarks}
-                protectionZones={protectionZones}
-                holyLights={boardState.holyLights}
-                viewerSide={localSide}
-                observing={isObserving}
-              />
-            </div>
+            <GameBoard
+              pieces={displayPieces}
+              selectedPieceIndex={selectedPieceIndex}
+              highlights={highlights}
+              currentPlayer={boardState.currentPlayer}
+              onNodeClick={handleNodeClick}
+              burnMarks={boardState.burnMarks}
+              protectionZones={protectionZones}
+              holyLights={boardState.holyLights}
+              viewerSide={localSide}
+              observing={isObserving}
+            />
           </div>
+
 
 
           {/* 右邊：回合資訊 + 歷史 */}
