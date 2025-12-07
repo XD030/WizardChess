@@ -745,7 +745,7 @@ export default function Game() {
   const handleGuardConfirm = () => {
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
-    if (!canPlay) return;
+    // ⚠️ 這裡原本有 if (!canPlay) return; 已移除，守護是防守方反應動作
 
     const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } =
       guardRequest;
@@ -987,7 +987,7 @@ export default function Game() {
   const handleGuardDecline = () => {
     if (!guardRequest) return;
     if (winner) return;
-    if (!canPlay) return;
+    // ⚠️ 這裡原本有 if (!canPlay) return; 已移除，守護是防守方反應動作
 
     const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } =
       guardRequest;
