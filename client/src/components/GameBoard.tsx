@@ -17,7 +17,7 @@ import {
 import wizardMoonImg from '../assets/wizard_moon.png';
 import assassinLogoImg from '../assets/assassin_logo.png';
 
-// 👉 下面這些請照你的實際檔名放在 /assets/ 裡
+// 其他棋子的 PNG（請依照你的實際路徑與檔名調整）
 import paladinPng from '../assets/paladin.png';
 import dragonPng from '../assets/dragon.png';
 import rangerPng from '../assets/ranger.png';
@@ -34,8 +34,11 @@ interface GameBoardProps {
   burnMarks: BurnMark[];
   protectionZones: { row: number; col: number }[];
   holyLights: HolyLight[];
+  // 視角
   viewerSide: 'white' | 'black' | 'spectator';
+  // 遊戲結束後觀察模式
   observing: boolean;
+  // 守護預覽（可選）
   guardPreview?: {
     paladinRow: number;
     paladinCol: number;
@@ -46,7 +49,7 @@ interface GameBoardProps {
   } | null;
 }
 
-// 決定「這個視角」是否看得到這顆棋
+// 決定這個視角是否看得到這顆棋
 function isPieceVisible(
   piece: Piece,
   viewerSide: 'white' | 'black' | 'spectator',
@@ -83,11 +86,9 @@ export default function GameBoard({
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
 
-  // 巫師 / 刺客原本的圖片
   const [wizardHatImage, setWizardHatImage] = useState<HTMLImageElement | null>(null);
   const [assassinLogoImage, setAssassinLogoImage] = useState<HTMLImageElement | null>(null);
 
-  // 其他棋子的圖片
   const [paladinImage, setPaladinImage] = useState<HTMLImageElement | null>(null);
   const [dragonImage, setDragonImage] = useState<HTMLImageElement | null>(null);
   const [rangerImage, setRangerImage] = useState<HTMLImageElement | null>(null);
@@ -97,7 +98,7 @@ export default function GameBoard({
 
   const LOGICAL_SIZE = 700;
 
-  // === 動畫相關 ===
+  // ==== 動畫狀態 ====
   type MoveAnimState = {
     pieceIndex: number;
     fromX: number;
@@ -117,7 +118,7 @@ export default function GameBoard({
     animStateRef.current = animState;
   }, [animState]);
 
-  // 載入所有圖片
+  // 載入圖片
   useEffect(() => {
     const loadImage = (src: string, cb: (img: HTMLImageElement) => void) => {
       const img = new Image();
@@ -159,7 +160,7 @@ export default function GameBoard({
     setAdjacency(newAdj);
   }, []);
 
-  // 偵測「棋子移動」→ 啟動動畫（同 index、type/side 一樣但 row/col 改變）
+  // 偵測「棋子位置變化」→ 啟動動畫
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -198,7 +199,7 @@ export default function GameBoard({
     prevPiecesRef.current = pieces;
   }, [pieces, allNodes]);
 
-  // 幫其他棋子選對 image + size
+  // 取得其他棋子的圖片 & 尺寸
   function getImageForPiece(piece: Piece): { img: HTMLImageElement | null; size: number } {
     switch (piece.type) {
       case 'paladin':
@@ -218,7 +219,7 @@ export default function GameBoard({
     }
   }
 
-  // 實際繪圖函式（支援某顆棋 override 位置）
+  // ===== 實際繪圖（支援某一顆棋 override 位置，用於動畫） =====
   const drawBoard = (
     ctx: CanvasRenderingContext2D,
     overridePos?: { pieceIndex: number; x: number; y: number },
@@ -455,7 +456,7 @@ export default function GameBoard({
         protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
         false;
 
-      // === 巫師：保持原本 moon icon 效果 ===
+      // === 巫師：moon icon 特效 ===
       if (piece.type === 'wizard' && wizardHatImage) {
         const displaySize = 30;
         const highResSize = 128;
@@ -529,12 +530,12 @@ export default function GameBoard({
           if (outlineColor && outlineWidth > 0) {
             ctx.save();
             ctx.shadowColor = outlineColor;
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = outlineWidth;
 
             const offsets = [
               [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
-              [-0.8, 0],                [0.8, 0],
-              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8],
+              [-0.8,  0],              [0.8,  0],
+              [-0.8,  0.8], [0,  0.8], [0.8,  0.8],
             ];
             offsets.forEach(([dx, dy]) => {
               ctx.shadowOffsetX = dx;
@@ -561,13 +562,12 @@ export default function GameBoard({
 
         ctx.restore();
       }
-      // === 刺客：保持原本 logo + 上色 效果 ===
+      // === 刺客：logo 特效 ===
       else if (piece.type === 'assassin' && assassinLogoImage) {
         const displaySize = 28;
         const highResSize = 128;
         ctx.save();
 
-        // 自己的潛行刺客 → 半透明
         if (
           piece.stealthed &&
           viewerSide !== 'spectator' &&
@@ -650,12 +650,12 @@ export default function GameBoard({
           if (outlineColor && outlineWidth > 0) {
             ctx.save();
             ctx.shadowColor = outlineColor;
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = outlineWidth;
 
             const offsets = [
               [-0.8, -0.8], [0, -0.8], [0.8, -0.8],
-              [-0.8, 0],                [0.8, 0],
-              [-0.8, 0.8],  [0, 0.8],   [0.8, 0.8],
+              [-0.8,  0],              [0.8,  0],
+              [-0.8,  0.8], [0,  0.8], [0.8,  0.8],
             ];
             offsets.forEach(([dx, dy]) => {
               ctx.shadowOffsetX = dx;
@@ -682,84 +682,83 @@ export default function GameBoard({
 
         ctx.restore();
       }
-      // === 其他棋子：全部用 PNG 畫（沿著圖案發光，不畫圓圈） ===
-else {
-  const { img, size: displaySize } = getImageForPiece(piece);
-  if (!img) return;
+      // === 其他棋子：PNG + 沿圖案發光 ===
+      else {
+        const { img, size: displaySize } = getImageForPiece(piece);
+        if (!img) return;
 
-  // 判斷外框顏色
-  let outlineColor: string | null = null;
-  let outlineWidth = 0;
+        // 判斷外框顏色
+        let outlineColor: string | null = null;
+        let outlineWidth = 0;
 
-  if (idx === selectedPieceIndex) {
-    outlineColor = '#fbbf24'; // 選中：金色
-    outlineWidth = 3;
-  } else if (swapHighlight) {
-    outlineColor = '#3b82f6'; // 換位：藍色
-    outlineWidth = 3;
-  } else if (attackHighlight) {
-    outlineColor = '#ef4444'; // 攻擊：紅色
-    outlineWidth = 3;
-  } else if (isProtected) {
-    outlineColor = '#06b6d4'; // 聖騎士守護區：青色
-    outlineWidth = 2.5;
-  } else {
-    // 一般狀態：依 side 給淡淡外圈
-    if (piece.side === 'white') {
-      outlineColor = 'rgba(229, 231, 235, 0.9)';
-      outlineWidth = 2;
-    } else if (piece.side === 'black') {
-      outlineColor = 'rgba(15, 23, 42, 0.9)';
-      outlineWidth = 2;
-    } else {
-      outlineColor = 'rgba(168, 85, 247, 0.9)';
-      outlineWidth = 2;
-    }
-  }
+        if (idx === selectedPieceIndex) {
+          outlineColor = '#fbbf24'; // 選中：金色
+          outlineWidth = 3;
+        } else if (swapHighlight) {
+          outlineColor = '#3b82f6'; // 換位：藍色
+          outlineWidth = 3;
+        } else if (attackHighlight) {
+          outlineColor = '#ef4444'; // 攻擊：紅色
+          outlineWidth = 3;
+        } else if (isProtected) {
+          outlineColor = '#06b6d4'; // 守護區：青色
+          outlineWidth = 2.5;
+        } else {
+          if (piece.side === 'white') {
+            outlineColor = 'rgba(229, 231, 235, 0.9)';
+            outlineWidth = 2;
+          } else if (piece.side === 'black') {
+            outlineColor = 'rgba(15, 23, 42, 0.9)';
+            outlineWidth = 2;
+          } else {
+            outlineColor = 'rgba(168, 85, 247, 0.9)';
+            outlineWidth = 2;
+          }
+        }
 
-  ctx.save();
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
-  // 先畫一圈「沿圖案外框」的光暈（跟巫師/刺客一樣做法）
-  if (outlineColor && outlineWidth > 0) {
-    ctx.save();
-    ctx.shadowColor = outlineColor;
-    ctx.shadowBlur = outlineWidth;
+        // 先用 shadow 疊幾次，讓光暈沿著圖案外框
+        if (outlineColor && outlineWidth > 0) {
+          ctx.save();
+          ctx.shadowColor = outlineColor;
+          ctx.shadowBlur = outlineWidth;
 
-    const offsets = [
-      [-1, -1], [0, -1], [1, -1],
-      [-1,  0],          [1,  0],
-      [-1,  1], [0,  1], [1,  1],
-    ];
+          const offsets = [
+            [-1, -1], [0, -1], [1, -1],
+            [-1,  0],          [1,  0],
+            [-1,  1], [0,  1], [1,  1],
+          ];
 
-    offsets.forEach(([dx, dy]) => {
-      ctx.shadowOffsetX = dx;
-      ctx.shadowOffsetY = dy;
-      ctx.drawImage(
-        img,
-        drawX - displaySize / 2,
-        drawY - displaySize / 2,
-        displaySize,
-        displaySize,
-      );
+          offsets.forEach(([dx, dy]) => {
+            ctx.shadowOffsetX = dx;
+            ctx.shadowOffsetY = dy;
+            ctx.drawImage(
+              img,
+              drawX - displaySize / 2,
+              drawY - displaySize / 2,
+              displaySize,
+              displaySize,
+            );
+          });
+
+          ctx.restore();
+        }
+
+        // 再畫一次本體（無陰影）
+        ctx.drawImage(
+          img,
+          drawX - displaySize / 2,
+          drawY - displaySize / 2,
+          displaySize,
+          displaySize,
+        );
+
+        ctx.restore();
+      }
     });
-
-    ctx.restore();
-  }
-
-  // 再畫一次本體（沒有 shadow）
-  ctx.drawImage(
-    img,
-    drawX - displaySize / 2,
-    drawY - displaySize / 2,
-    displaySize,
-    displaySize,
-  );
-
-  ctx.restore();
-}
-
 
     // --- Guard preview glow (Paladin / target / attacker) ---
     if (guardPreview) {
@@ -790,21 +789,18 @@ else {
         ctx.fill();
       };
 
-      // 聖騎士：青色
       drawGuardGlow(
         guardPreview.paladinRow,
         guardPreview.paladinCol,
         'rgba(56, 189, 248, 0.9)',
         26,
       );
-      // 被攻擊目標：金色
       drawGuardGlow(
         guardPreview.targetRow,
         guardPreview.targetCol,
         'rgba(250, 204, 21, 0.9)',
         26,
       );
-      // 攻擊者：紅色
       drawGuardGlow(
         guardPreview.attackerRow,
         guardPreview.attackerCol,
@@ -814,7 +810,7 @@ else {
     }
   };
 
-  // 一般重繪（沒有動畫時）
+  // 沒有動畫時的一般重繪
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || rows.length === 0 || allNodes.length === 0) return;
@@ -822,8 +818,7 @@ else {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 若目前有動畫在跑，交給動畫 Effect 處理
-    if (animStateRef.current) return;
+    if (animStateRef.current) return; // 動畫中交給動畫 effect
 
     drawBoard(ctx);
   }, [
@@ -850,7 +845,7 @@ else {
     guardPreview,
   ]);
 
-  // 動畫 Effect：在 duration 期間用 requestAnimationFrame 補間位置
+  // 動畫 Effect
   useEffect(() => {
     if (!animState) return;
     const canvas = canvasRef.current;
@@ -863,8 +858,7 @@ else {
 
     const step = (time: number) => {
       const t = Math.min(1, (time - startTime) / duration);
-      // ease-out-cubic
-      const eased = 1 - Math.pow(1 - t, 3);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
       const x = fromX + (toX - fromX) * eased;
       const y = fromY + (toY - fromY) * eased;
 
@@ -884,7 +878,20 @@ else {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [animState, rows, allNodes, adjacency, highlights, burnMarks, holyLights, protectionZones, viewerSide, observing, guardPreview, selectedPieceIndex]);
+  }, [
+    animState,
+    rows,
+    allNodes,
+    adjacency,
+    highlights,
+    burnMarks,
+    holyLights,
+    protectionZones,
+    viewerSide,
+    observing,
+    guardPreview,
+    selectedPieceIndex,
+  ]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
