@@ -1,3 +1,5 @@
+// client/src/components/CapturedPiecesPanel.tsx
+
 import {
   Card,
   CardHeader,
@@ -6,16 +8,31 @@ import {
 } from "../components/ui/card";
 import type { Piece } from "@shared/schema";
 
-// ✅ 圖片路徑
-import wizardMoonImg from "../assets/wizard_moon.png";
-import assassinLogoImg from "../assets/assassin_logo.png";
+// === 棋子圖片（跟 GameBoard 用同一套） ===
+import wizardWhitePng from "../assets/wizard_white.png";
+import wizardBlackPng from "../assets/wizard_black.png";
 
-import paladinPng from "../assets/paladin.png";
-import dragonPng from "../assets/dragon.png";
-import rangerPng from "../assets/ranger.png";
-import griffinPng from "../assets/griffin.png";
+import assassinWhitePng from "../assets/assassin_white.png";
+import assassinBlackPng from "../assets/assassin_black.png";
+
+import paladinWhitePng from "../assets/paladin_white.png";
+import paladinBlackPng from "../assets/paladin_black.png";
+
+import dragonWhitePng from "../assets/dragon_white.png";
+import dragonBlackPng from "../assets/dragon_black.png";
+
+import rangerWhitePng from "../assets/ranger_white.png";
+import rangerBlackPng from "../assets/ranger_black.png";
+
+import griffinWhitePng from "../assets/griffin_white.png";
+import griffinBlackPng from "../assets/griffin_black.png";
+
+// bard 只有一張圖
 import bardPng from "../assets/bard.png";
-import apprenticePng from "../assets/apprentice.png";
+
+// apprentice 這裡我也分白黑，跟棋盤一樣
+import apprenticeWhitePng from "../assets/apprentice_white.png";
+import apprenticeBlackPng from "../assets/apprentice_black.png";
 
 interface CapturedPiecesPanelProps {
   capturedPieces: {
@@ -25,74 +42,41 @@ interface CapturedPiecesPanelProps {
   };
 }
 
-// 共用：把一顆棋子畫成圖示（全部用圖片，沒有 emoji）
+// 取得每個棋子對應的圖片 src
+function getPieceImageSrc(piece: Piece): string | null {
+  switch (piece.type) {
+    case "wizard":
+      return piece.side === "black" ? wizardBlackPng : wizardWhitePng;
+    case "assassin":
+      return piece.side === "black" ? assassinBlackPng : assassinWhitePng;
+    case "paladin":
+      return piece.side === "black" ? paladinBlackPng : paladinWhitePng;
+    case "dragon":
+      return piece.side === "black" ? dragonBlackPng : dragonWhitePng;
+    case "ranger":
+      return piece.side === "black" ? rangerBlackPng : rangerWhitePng;
+    case "griffin":
+      return piece.side === "black" ? griffinBlackPng : griffinWhitePng;
+    case "bard":
+      // bard 不分白黑，固定一張
+      return bardPng;
+    case "apprentice":
+      return piece.side === "black" ? apprenticeBlackPng : apprenticeWhitePng;
+    default:
+      return null;
+  }
+}
+
+// 把一顆棋子畫成圖示（全部用圖片）
 function renderCapturedIcon(piece: Piece) {
+  const src = getPieceImageSrc(piece);
   const baseClass = "h-6 w-6 object-contain";
 
-  // 巫師 → wizard_moon.png
-  if (piece.type === "wizard") {
-    return (
-      <img
-        src={wizardMoonImg}
-        alt="巫師"
-        className={baseClass}
-        style={{
-          filter:
-            piece.side === "white"
-              // 白方巫師：亮藍月亮
-              ? "invert(1) sepia(1) saturate(6) hue-rotate(210deg) brightness(1.3)"
-              // 黑方巫師：亮紫月亮
-              : "invert(1) sepia(1) saturate(6) hue-rotate(280deg) brightness(1.2)",
-        }}
-      />
-    );
+  if (src) {
+    return <img src={src} alt={piece.type} className={baseClass} />;
   }
 
-  // 刺客 → assassin_logo.png
-  if (piece.type === "assassin") {
-    return (
-      <img
-        src={assassinLogoImg}
-        alt="刺客"
-        className={baseClass}
-        style={{
-          filter:
-            piece.side === "white"
-              // 白方刺客：偏白線條
-              ? "invert(1) brightness(1.2)"
-              // 黑方刺客：偏紅亮色
-              : "invert(1) sepia(1) saturate(5) hue-rotate(330deg) brightness(1.1)",
-        }}
-      />
-    );
-  }
-
-  // 其他棋子 → 專用 PNG（不再用 emoji）
-  if (piece.type === "paladin") {
-    return <img src={paladinPng} alt="聖騎士" className={baseClass} />;
-  }
-
-  if (piece.type === "dragon") {
-    return <img src={dragonPng} alt="巨龍" className={baseClass} />;
-  }
-
-  if (piece.type === "ranger") {
-    return <img src={rangerPng} alt="遊俠" className={baseClass} />;
-  }
-
-  if (piece.type === "griffin") {
-    return <img src={griffinPng} alt="獅鷲" className={baseClass} />;
-  }
-
-  if (piece.type === "bard") {
-    return <img src={bardPng} alt="吟遊詩人" className={baseClass} />;
-  }
-
-  if (piece.type === "apprentice") {
-    return <img src={apprenticePng} alt="學徒" className={baseClass} />;
-  }
-
-  // 萬一有未知棋種，給個小問號（不是 emoji 的那種圖案也可以之後再換成圖片）
+  // 萬一有未知棋種，先簡單給個問號
   return (
     <span className="text-lg leading-none select-none">?</span>
   );
