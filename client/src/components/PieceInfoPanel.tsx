@@ -1,90 +1,79 @@
-import { useEffect, useRef } from "react";
 import type { Piece } from "@shared/schema";
+import { useMemo } from "react";
+
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
 } from "../components/ui/card";
+
 import {
-  getPieceSymbol,
   PIECE_CHINESE,
   SIDE_CHINESE,
   PIECE_DESCRIPTIONS,
 } from "../lib/gameLogic";
 
-// ✅ 一樣是 ../assets
-import wizardMoonImg from "../assets/wizard_moon.png";
-import assassinLogoImg from "../assets/assassin_logo.png";
-// 👉 下面這些請照你的實際檔名放在 /assets/裡
-import paladinPng from '../assets/paladin.png';
-import dragonPng from '../assets/dragon.png';
-import rangerPng from '../assets/ranger.png';
-import griffinPng from '../assets/griffin.png';
-import bardPng from '../assets/bard.png';
-import apprenticePng from '../assets/apprentice.png';
+// === 棋子圖片（跟 GameBoard 一致） ===
+import wizardWhitePng from "../assets/wizard_white.png";
+import wizardBlackPng from "../assets/wizard_black.png";
+
+import assassinWhitePng from "../assets/assassin_white.png";
+import assassinBlackPng from "../assets/assassin_black.png";
+
+import paladinWhitePng from "../assets/paladin_white.png";
+import paladinBlackPng from "../assets/paladin_black.png";
+
+import dragonWhitePng from "../assets/dragon_white.png";
+import dragonBlackPng from "../assets/dragon_black.png";
+
+import rangerWhitePng from "../assets/ranger_white.png";
+import rangerBlackPng from "../assets/ranger_black.png";
+
+import griffinWhitePng from "../assets/griffin_white.png";
+import griffinBlackPng from "../assets/griffin_black.png";
+
+// ⭐ bard 只有一張
+import bardPng from "../assets/bard.png";
+
+// apprentice（如果你也有白黑兩張）
+import apprenticeWhitePng from "../assets/apprentice_white.png";
+import apprenticeBlackPng from "../assets/apprentice_black.png";
 
 interface PieceInfoPanelProps {
   piece: Piece | null;
 }
 
-function AssassinIcon({ side }: { side: 'white' | 'black' }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+// 依照棋子種類與陣營決定圖片
+function getPieceImage(piece: Piece): string {
+  switch (piece.type) {
+    case "wizard":
+      return piece.side === "black" ? wizardBlackPng : wizardWhitePng;
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    case "assassin":
+      return piece.side === "black" ? assassinBlackPng : assassinWhitePng;
 
-    const size = 64;
-    canvas.width = size;
-    canvas.height = size;
+    case "paladin":
+      return piece.side === "black" ? paladinBlackPng : paladinWhitePng;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    case "dragon":
+      return piece.side === "black" ? dragonBlackPng : dragonWhitePng;
 
-    const img = new Image();
-    img.src = assassinLogoImg;
-    img.onload = () => {
-      ctx.clearRect(0, 0, size, size);
-      ctx.drawImage(img, 0, 0, size, size);
+    case "ranger":
+      return piece.side === "black" ? rangerBlackPng : rangerWhitePng;
 
-      const imageData = ctx.getImageData(0, 0, size, size);
-      const data = imageData.data;
+    case "griffin":
+      return piece.side === "black" ? griffinBlackPng : griffinWhitePng;
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const brightness = (r + g + b) / 3;
+    case "bard":
+      return bardPng;
 
-        if (brightness > 128) {
-          data[i + 3] = 0;
-        } else {
-          if (side === 'white') {
-            data[i] = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-          } else {
-            // Dark gray instead of pure black so it's visible on dark background
-            data[i] = 180;
-            data[i + 1] = 180;
-            data[i + 2] = 180;
-          }
-        }
-      }
+    case "apprentice":
+      return piece.side === "black" ? apprenticeBlackPng : apprenticeWhitePng;
 
-      ctx.putImageData(imageData, 0, 0);
-      
-      // Add white outline for black pieces
-      if (side === 'black') {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, 0, size, size);
-      }
-    };
-  }, [side]);
-
-  return <canvas ref={canvasRef} className="w-16 h-16" data-testid="text-piece-emoji" />;
+    default:
+      return bardPng; // Fallback，不應該進來
+  }
 }
 
 export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
@@ -96,7 +85,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <div className="text-base font-semibold text-foreground" data-testid="text-piece-name">
+            <div className="text-base font-semibold text-foreground">
               未選取棋子
             </div>
             <div className="text-sm text-muted-foreground mt-1">
@@ -108,6 +97,7 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
     );
   }
 
+  const imgSrc = getPieceImage(piece);
   const desc = PIECE_DESCRIPTIONS[piece.type];
 
   return (
@@ -115,37 +105,35 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
       <CardHeader>
         <CardTitle className="text-lg">棋子資訊</CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-4">
+        {/* ===== 棋子圖片 + 基本資訊 ===== */}
         <div className="flex items-center gap-3">
-          {piece.type === 'wizard' ? (
-            <img 
-              src={wizardMoonImg} 
-              alt="巫師月亮"
-              className="w-16 h-16"
-              style={{
-                filter: piece.side === 'white' 
-                  ? 'invert(1) brightness(1.2)' 
-                  : piece.side === 'black' 
-                  ? 'brightness(0.3)'
-                  : 'invert(1) sepia(1) saturate(3) hue-rotate(240deg)'
-              }}
-              data-testid="text-piece-emoji"
-            />
-          ) : piece.type === 'assassin' ? (
-            <AssassinIcon side={piece.side as 'white' | 'black'} />
-          ) : (
-            <div 
-              className="text-5xl font-bold" 
-              style={{ 
-                fontFamily: 'serif',
-                color: piece.side === 'white' ? '#fff' : piece.side === 'black' ? '#000' : '#a855f7',
-                textShadow: piece.side === 'white' ? '0 0 2px #000' : '0 0 2px #fff'
-              }}
-              data-testid="text-piece-emoji"
-            >
-              {getPieceSymbol(piece.type, piece.side)}
-            </div>
-          )}
+          {/* 棋子圖片（統一 PNG） */}
+          <img
+            src={imgSrc}
+            alt={piece.type}
+            className="w-16 h-16 object-contain"
+            data-testid="text-piece-emoji"
+            style={{
+              // 白方圖片 → 白色圖案 + 黑邊框
+              // 黑方圖片 → 黑色圖案 + 白邊框
+              filter:
+                piece.side === "white"
+                  ? "brightness(1.5)"
+                  : piece.side === "black"
+                  ? "brightness(0.6)"
+                  : "brightness(1)",
+              // 外框
+              border:
+                piece.side === "white"
+                  ? "2px solid #000"
+                  : piece.side === "black"
+                  ? "2px solid #fff"
+                  : "2px solid #a855f7",
+            }}
+          />
+
           <div>
             <div className="text-base font-bold text-foreground" data-testid="text-piece-name">
               {desc.name}
@@ -153,19 +141,30 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
             <div className="text-sm text-muted-foreground" data-testid="text-piece-side">
               陣營：{SIDE_CHINESE[piece.side]}
             </div>
-            {piece.type === 'bard' && (
+
+            {/* bard 額外顯示狀態 */}
+            {piece.type === "bard" && (
               <div className="text-sm mt-1" data-testid="text-bard-status">
-                狀態：
-                <span className={piece.activated ? 'text-green-400 font-semibold' : 'text-slate-500'}>
-                  {piece.activated ? '已激活' : '未激活'}
+                狀態：{" "}
+                <span
+                  className={
+                    piece.activated
+                      ? "text-green-400 font-semibold"
+                      : "text-slate-500"
+                  }
+                >
+                  {piece.activated ? "已激活" : "未激活"}
                 </span>
               </div>
             )}
           </div>
         </div>
 
+        {/* ===== 移動方式 ===== */}
         <div className="border-t border-border pt-4">
-          <div className="text-sm font-semibold text-slate-400 mb-2">移動方式</div>
+          <div className="text-sm font-semibold text-slate-400 mb-2">
+            移動方式
+          </div>
           <ul className="space-y-1" data-testid="list-move-desc">
             {desc.move.map((text, i) => (
               <li key={i} className="text-sm text-slate-200 flex gap-2">
@@ -176,8 +175,11 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
           </ul>
         </div>
 
+        {/* ===== 能力 ===== */}
         <div className="border-t border-border pt-4">
-          <div className="text-sm font-semibold text-slate-400 mb-2">能力</div>
+          <div className="text-sm font-semibold text-slate-400 mb-2">
+            能力
+          </div>
           <ul className="space-y-1" data-testid="list-ability-desc">
             {desc.ability.map((text, i) => (
               <li key={i} className="text-sm text-slate-200 flex gap-2">
