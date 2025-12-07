@@ -62,7 +62,7 @@ import bardPng from '../assets/bard.png';
 import apprenticeWhitePng from '../assets/apprentice_white.png';
 import apprenticeBlackPng from '../assets/apprentice_black.png';
 
-const LOGICAL_SIZE = 700;
+const LOGICAL_SIZE = 900;
 const PIECE_SIZE = 34;
 
 // 這個視角是否看得到這顆棋
@@ -479,7 +479,7 @@ export default function GameBoard({
         protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
         false;
 
-      // ⭐ 只保留「狀態用的彩色框」，一般狀態不再依照黑白給外框
+      // 框線顏色 & 粗細
       let outlineColor: string | null = null;
       let outlineWidth = 0;
 
@@ -495,11 +495,16 @@ export default function GameBoard({
       } else if (isProtected) {
         outlineColor = '#06b6d4';
         outlineWidth = 2.5;
+      } else if (piece.type === 'bard') {
+        // 吟遊詩人：平常就有紫色外框
+        outlineColor = 'rgba(168, 85, 247, 0.9)';
+        outlineWidth = 2.5;
       } else {
-        // 一般狀態 → 沒有外框
+        // 其他棋子一般狀態：沒有外框
         outlineColor = null;
         outlineWidth = 0;
       }
+
 
       ctx.save();
       ctx.imageSmoothingEnabled = true;
