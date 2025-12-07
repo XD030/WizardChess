@@ -15,29 +15,9 @@ import {
   NODE_RADIUS,
 } from '../lib/gameLogic';
 
-interface GameBoardProps {
-  pieces: Piece[];
-  selectedPieceIndex: number;
-  highlights: MoveHighlight[];
-  currentPlayer: 'white' | 'black';
-  onNodeClick: (row: number, col: number) => void;
-  burnMarks: BurnMark[];
-  protectionZones: { row: number; col: number }[];
-  holyLights: HolyLight[];
-  viewerSide: 'white' | 'black' | 'spectator';
-  observing: boolean;
-  guardPreview?: {
-    paladinRow: number;
-    paladinCol: number;
-    targetRow: number;
-    targetCol: number;
-    attackerRow: number;
-    attackerCol: number;
-  } | null;
-}
-
 // ------------ 棋子圖片載入 ------------
 
+// 你自己的圖片檔名，如果不同請在這裡改
 import wizardWhitePng from '../assets/wizard_white.png';
 import wizardBlackPng from '../assets/wizard_black.png';
 
@@ -59,10 +39,33 @@ import griffinBlackPng from '../assets/griffin_black.png';
 // ⭐ bard 只有一張圖
 import bardPng from '../assets/bard.png';
 
+// apprentice
 import apprenticeWhitePng from '../assets/apprentice_white.png';
 import apprenticeBlackPng from '../assets/apprentice_black.png';
 
-const LOGICAL_SIZE = 500;
+interface GameBoardProps {
+  pieces: Piece[];
+  selectedPieceIndex: number;
+  highlights: MoveHighlight[];
+  currentPlayer: 'white' | 'black';
+  onNodeClick: (row: number, col: number) => void;
+  burnMarks: BurnMark[];
+  protectionZones: { row: number; col: number }[];
+  holyLights: HolyLight[];
+  viewerSide: 'white' | 'black' | 'spectator';
+  observing: boolean;
+  guardPreview?: {
+    paladinRow: number;
+    paladinCol: number;
+    targetRow: number;
+    targetCol: number;
+    attackerRow: number;
+    attackerCol: number;
+  } | null;
+}
+
+const LOGICAL_SIZE = 700;      // Canvas 基礎尺寸
+const BOARD_SCALE = 1.25;      // ⬅️ 棋盤放大倍率（1.0 = 原本大小）
 const PIECE_SIZE = 34;
 
 // 這個視角是否看得到這顆棋
@@ -71,6 +74,7 @@ function isPieceVisible(
   viewerSide: 'white' | 'black' | 'spectator',
   observing: boolean,
 ): boolean {
+  // 觀察模式：全部顯示
   if (observing) return true;
 
   // 潛行刺客：只有自己看得到
@@ -127,12 +131,15 @@ export default function GameBoard({
   // key：決定用哪張圖
   function keyForPiece(piece: Piece): string {
     if (piece.type === 'bard') {
+      // bard 不分陣營，固定用同一張
       return 'bard';
     }
+
     if (piece.side === 'white' || piece.side === 'black') {
       return `${piece.type}_${piece.side}`;
     }
-    // 中立 → 共用白方圖
+
+    // 中立：先共用白方圖
     return `${piece.type}_white`;
   }
 
@@ -162,6 +169,7 @@ export default function GameBoard({
       griffin_white: griffinWhitePng,
       griffin_black: griffinBlackPng,
 
+      // bard 只有一張圖
       bard: bardPng,
 
       apprentice_white: apprenticeWhitePng,
@@ -177,7 +185,7 @@ export default function GameBoard({
     });
   }, []);
 
-  // 棋盤幾何
+  // 棋盤幾何（含放大）
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -192,11 +200,24 @@ export default function GameBoard({
     if (!ctx) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    const newRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
-    const newNodes = buildAllNodes(newRows);
-    const newAdjacency = buildAdjacency(newRows);
+    // 先用原始座標建棋盤
+    const baseRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
 
-    setRows(newRows);
+    // 以中心點為基準做放大
+    const cx = LOGICAL_SIZE / 2;
+    const cy = LOGICAL_SIZE / 2;
+
+    const scaledRows = baseRows.map((row) =>
+      row.map((p) => ({
+        x: cx + (p.x - cx) * BOARD_SCALE,
+        y: cy + (p.y - cy) * BOARD_SCALE,
+      })),
+    );
+
+    const newNodes = buildAllNodes(scaledRows);
+    const newAdjacency = buildAdjacency(scaledRows);
+
+    setRows(scaledRows);
     setAllNodes(newNodes);
     setAdjacency(newAdjacency);
   }, []);
@@ -210,6 +231,7 @@ export default function GameBoard({
 
     const prev = prevPiecesRef.current;
     if (prev && prev.length === pieces.length) {
+      // 簡單比對：同 index、同 type+side，但 row/col 不同 → 視為該棋移動
       for (let i = 0; i < pieces.length; i++) {
         const pNew = pieces[i];
         const pOld = prev[i];
@@ -229,7 +251,7 @@ export default function GameBoard({
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 200,
+              duration: 200, // 毫秒
             });
           }
           break;
@@ -505,7 +527,6 @@ export default function GameBoard({
         outlineWidth = 0;
       }
 
-
       ctx.save();
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
@@ -521,7 +542,7 @@ export default function GameBoard({
         ctx.globalAlpha = 0.5;
       }
 
-      // 有需要彩色框時，才畫 glow
+      // 先畫外框（shadow 疊圖）
       if (outlineColor && outlineWidth > 0) {
         ctx.save();
         ctx.shadowColor = outlineColor;
