@@ -38,7 +38,6 @@ interface GameBoardProps {
 
 // ------------ 棋子圖片載入 ------------
 
-// 你自己的圖片檔名，如果不同請在這裡改
 import wizardWhitePng from '../assets/wizard_white.png';
 import wizardBlackPng from '../assets/wizard_black.png';
 
@@ -60,7 +59,6 @@ import griffinBlackPng from '../assets/griffin_black.png';
 // ⭐ bard 只有一張圖
 import bardPng from '../assets/bard.png';
 
-// apprentice 如果你也有分白黑就照這樣；只有一張圖也可以再改
 import apprenticeWhitePng from '../assets/apprentice_white.png';
 import apprenticeBlackPng from '../assets/apprentice_black.png';
 
@@ -73,7 +71,6 @@ function isPieceVisible(
   viewerSide: 'white' | 'black' | 'spectator',
   observing: boolean,
 ): boolean {
-  // 觀察模式：全部顯示
   if (observing) return true;
 
   // 潛行刺客：只有自己看得到
@@ -130,15 +127,12 @@ export default function GameBoard({
   // key：決定用哪張圖
   function keyForPiece(piece: Piece): string {
     if (piece.type === 'bard') {
-      // bard 不分陣營，固定用同一張
       return 'bard';
     }
-
     if (piece.side === 'white' || piece.side === 'black') {
       return `${piece.type}_${piece.side}`;
     }
-
-    // 中立：先共用白方圖
+    // 中立 → 共用白方圖
     return `${piece.type}_white`;
   }
 
@@ -168,7 +162,6 @@ export default function GameBoard({
       griffin_white: griffinWhitePng,
       griffin_black: griffinBlackPng,
 
-      // bard 只有一張圖
       bard: bardPng,
 
       apprentice_white: apprenticeWhitePng,
@@ -217,7 +210,6 @@ export default function GameBoard({
 
     const prev = prevPiecesRef.current;
     if (prev && prev.length === pieces.length) {
-      // 簡單比對：同 index、同 type+side，但 row/col 不同 → 視為該棋移動
       for (let i = 0; i < pieces.length; i++) {
         const pNew = pieces[i];
         const pOld = prev[i];
@@ -237,7 +229,7 @@ export default function GameBoard({
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 200, // 毫秒
+              duration: 200,
             });
           }
           break;
@@ -357,398 +349,4 @@ export default function GameBoard({
         if (!adjNode) return;
         ctx.beginPath();
         ctx.moveTo(node.x, node.y);
-        ctx.lineTo(adjNode.x, adjNode.y);
-        ctx.stroke();
-      });
-    });
-
-    // --- 節點圓點 ---
-    allNodes.forEach((node) => {
-      const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? 'rgba(148, 163, 184, 0.4)' : 'rgba(148, 163, 184, 0.2)';
-      ctx.fill();
-    });
-
-    // --- 火焰標記 ---
-    burnMarks.forEach((mark) => {
-      const node = allNodes.find((n) => n.row === mark.row && n.col === mark.col);
-      if (!node) return;
-
-      const g2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
-      g2.addColorStop(0, 'rgba(255, 140, 0, 0.8)');
-      g2.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)');
-      g2.addColorStop(1, 'rgba(255, 69, 0, 0)');
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
-      ctx.fillStyle = g2;
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff4500';
-      ctx.fill();
-    });
-
-    // --- 聖光標記 ---
-    holyLights.forEach((light) => {
-      const node = allNodes.find((n) => n.row === light.row && n.col === light.col);
-      if (!node) return;
-
-      const g3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
-      g3.addColorStop(0, 'rgba(255, 215, 0, 0.9)');
-      g3.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)');
-      g3.addColorStop(1, 'rgba(255, 255, 200, 0)');
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
-      ctx.fillStyle = g3;
-      ctx.fill();
-
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(node.x, node.y - 8);
-      ctx.lineTo(node.x, node.y + 8);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(node.x - 8, node.y);
-      ctx.lineTo(node.x + 8, node.y);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffd700';
-      ctx.fill();
-    });
-
-    // --- 移動高亮 ---
-    highlights.forEach((h) => {
-      if (h.type !== 'move') return;
-      const node = allNodes.find((n) => n.row === h.row && n.col === h.col);
-      if (!node) return;
-      const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
-      const opacity = isHovered ? 0.7 : 0.5;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
-      ctx.fill();
-    });
-
-    // --- 座標標籤 A~I / 1~9 ---
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-
-    const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-    rowLabels.forEach((label, rowIdx) => {
-      if (rowIdx < rows.length && rowIdx <= 8) {
-        const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 10, rightNode.y - 5);
-      }
-    });
-
-    const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    colLabels.forEach((label, rowIdx) => {
-      if (rowIdx < rows.length && rowIdx <= 8) {
-        const leftNode = rows[rowIdx][0];
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, leftNode.x - 10, leftNode.y - 5);
-      }
-    });
-
-    // --- 棋子（全部使用圖片） ---
-    pieces.forEach((piece, idx) => {
-      if (!isPieceVisible(piece, viewerSide, observing)) return;
-
-      const baseImg = getImageForPiece(piece);
-      if (!baseImg) return;
-
-      const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
-      if (!node) return;
-
-      const displaySize = PIECE_SIZE;
-
-      const drawX =
-        overridePos && overridePos.pieceIndex === idx ? overridePos.x : node.x;
-      const drawY =
-        overridePos && overridePos.pieceIndex === idx ? overridePos.y : node.y;
-
-      const swapHighlight = highlights.find(
-        (h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col,
-      );
-      const attackHighlight = highlights.find(
-        (h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col,
-      );
-      const isProtected =
-        protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
-        false;
-
-      // 框線顏色 & 粗細
-      let outlineColor: string | null = null;
-      let outlineWidth = 0;
-
-      if (idx === selectedPieceIndex) {
-        outlineColor = '#fbbf24';
-        outlineWidth = 3;
-      } else if (swapHighlight) {
-        outlineColor = '#3b82f6';
-        outlineWidth = 3;
-      } else if (attackHighlight) {
-        outlineColor = '#ef4444';
-        outlineWidth = 3;
-      } else if (isProtected) {
-        outlineColor = '#06b6d4';
-        outlineWidth = 2.5;
-      } else {
-        // 一般狀態：白方黑框、黑方白框、中立紫框
-        if (piece.side === 'white') {
-          outlineColor = '#000000';
-          outlineWidth = 2.5;
-        } else if (piece.side === 'black') {
-          outlineColor = '#ffffff';
-          outlineWidth = 3.2;
-        } else {
-          outlineColor = 'rgba(168, 85, 247, 0.9)';
-          outlineWidth = 2.5;
-        }
-      }
-
-      ctx.save();
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-
-      // 自己視角的潛行刺客 → 半透明
-      if (
-        piece.type === 'assassin' &&
-        piece.stealthed &&
-        viewerSide !== 'spectator' &&
-        piece.side === viewerSide &&
-        !observing
-      ) {
-        ctx.globalAlpha = 0.5;
-      }
-
-      // 先畫外框（shadow 疊圖）
-      if (outlineColor && outlineWidth > 0) {
-        ctx.save();
-        ctx.shadowColor = outlineColor;
-        ctx.shadowBlur = outlineWidth;
-
-        const offsets = [
-          [-1, -1], [0, -1], [1, -1],
-          [-1,  0],         [1,  0],
-          [-1,  1], [0,  1], [1,  1],
-        ];
-        offsets.forEach(([dx, dy]) => {
-          ctx.shadowOffsetX = dx;
-          ctx.shadowOffsetY = dy;
-          ctx.drawImage(
-            baseImg,
-            0,
-            0,
-            baseImg.width,
-            baseImg.height,
-            drawX - displaySize / 2,
-            drawY - displaySize / 2,
-            displaySize,
-            displaySize,
-          );
-        });
-        ctx.restore();
-      }
-
-      // 再畫一次正常圖片
-      ctx.drawImage(
-        baseImg,
-        0,
-        0,
-        baseImg.width,
-        baseImg.height,
-        drawX - displaySize / 2,
-        drawY - displaySize / 2,
-        displaySize,
-        displaySize,
-      );
-
-      ctx.restore();
-    });
-
-    // --- 聖騎士守護 preview 光暈 ---
-    if (guardPreview) {
-      const drawGuardGlow = (
-        row: number,
-        col: number,
-        color: string,
-        radius: number,
-      ) => {
-        const node = allNodes.find((n) => n.row === row && n.col === col);
-        if (!node) return;
-
-        const g = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius);
-        g.addColorStop(0, color.replace('0.9', '0.0'));
-        g.addColorStop(0.4, color);
-        g.addColorStop(1, color.replace('0.9', '0'));
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = g;
-        ctx.fill();
-      };
-
-      drawGuardGlow(
-        guardPreview.paladinRow,
-        guardPreview.paladinCol,
-        'rgba(56, 189, 248, 0.9)',
-        26,
-      );
-      drawGuardGlow(
-        guardPreview.targetRow,
-        guardPreview.targetCol,
-        'rgba(250, 204, 21, 0.9)',
-        26,
-      );
-      drawGuardGlow(
-        guardPreview.attackerRow,
-        guardPreview.attackerCol,
-        'rgba(248, 113, 113, 0.9)',
-        26,
-      );
-    }
-  };
-
-  // 非動畫時重繪
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || rows.length === 0 || allNodes.length === 0) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    if (animStateRef.current) return;
-    drawBoard(ctx);
-  }, [
-    rows,
-    allNodes,
-    adjacency,
-    pieces,
-    selectedPieceIndex,
-    highlights,
-    hoveredNode,
-    burnMarks,
-    holyLights,
-    protectionZones,
-    viewerSide,
-    observing,
-    guardPreview,
-    pieceImages,
-  ]);
-
-  // 動畫 loop
-  useEffect(() => {
-    if (!animState) return;
-    const canvas = canvasRef.current;
-    if (!canvas || rows.length === 0 || allNodes.length === 0) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const { pieceIndex, fromX, fromY, toX, toY, startTime, duration } = animState;
-
-    const step = (time: number) => {
-      const t = Math.min(1, (time - startTime) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      const x = fromX + (toX - fromX) * eased;
-      const y = fromY + (toY - fromY) * eased;
-
-      drawBoard(ctx, { pieceIndex, x, y });
-
-      if (t < 1 && animStateRef.current) {
-        animationFrameRef.current = requestAnimationFrame(step);
-      } else {
-        setAnimState(null);
-      }
-    };
-
-    animationFrameRef.current = requestAnimationFrame(step);
-
-    return () => {
-      if (animationFrameRef.current != null) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [
-    animState,
-    rows,
-    allNodes,
-    adjacency,
-    highlights,
-    burnMarks,
-    holyLights,
-    protectionZones,
-    viewerSide,
-    observing,
-    guardPreview,
-    selectedPieceIndex,
-    pieceImages,
-  ]);
-
-  // ========= Canvas 事件 =========
-
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
-    const y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
-
-    for (const node of allNodes) {
-      const dx = x - node.x;
-      const dy = y - node.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 20) {
-        onNodeClick(node.row, node.col);
-        return;
-      }
-    }
-  };
-
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
-    const y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
-
-    let found = false;
-    for (const node of allNodes) {
-      const dx = x - node.x;
-      const dy = y - node.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 20) {
-        setHoveredNode({ row: node.row, col: node.col });
-        found = true;
-        break;
-      }
-    }
-    if (!found) setHoveredNode(null);
-  };
-
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <canvas
-        ref={canvasRef}
-        data-testid="canvas-board"
-        className="rounded-2xl shadow-2xl cursor-pointer"
-        onClick={handleCanvasClick}
-        onMouseMove={handleCanvasMouseMove}
-        onMouseLeave={() => setHoveredNode(null)}
-      />
-      <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        綠=移動、藍=換位、紅=攻擊
-      </p>
-    </div>
-  );
-}
+        ctx.lineTo
