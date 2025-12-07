@@ -27,7 +27,9 @@ interface GameBoardProps {
   burnMarks: BurnMark[];
   protectionZones: { row: number; col: number }[];
   holyLights: HolyLight[];
+  // 視角
   viewerSide: 'white' | 'black' | 'spectator';
+  // 是否為觀察模式（遊戲結束後看重播）
   observing: boolean;
   guardPreview?: {
     paladinRow: number;
@@ -57,6 +59,22 @@ function isPieceVisible(
   return true;
 }
 
+type AnimState = {
+  side: Piece['side'];
+  type: Piece['type'];
+  fromRow: number;
+  fromCol: number;
+  toRow: number;
+  toCol: number;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  startTime: number;
+  duration: number;
+  progress: number; // 0~1
+} | null;
+
 export default function GameBoard({
   pieces,
   selectedPieceIndex,
@@ -74,27 +92,16 @@ export default function GameBoard({
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
-  const [adjacency, setAdjacency] = useState<number[][]>([]);
   const [wizardHatImage, setWizardHatImage] = useState<HTMLImageElement | null>(null);
   const [assassinLogoImage, setAssassinLogoImage] = useState<HTMLImageElement | null>(null);
 
   const LOGICAL_SIZE = 700;
 
   // === 動畫相關 ===
-  type MoveAnimState = {
-    pieceIndex: number;
-    fromX: number;
-    fromY: number;
-    toX: number;
-    toY: number;
-    startTime: number;
-    duration: number;
-  } | null;
-
-  const [animState, setAnimState] = useState<MoveAnimState>(null);
-  const animStateRef = useRef<MoveAnimState>(null);
   const prevPiecesRef = useRef<Piece[] | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const [animState, setAnimState] = useState<AnimState>(null);
+  const animStateRef = useRef<AnimState>(null);
+  const rafIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     animStateRef.current = animState;
@@ -128,14 +135,11 @@ export default function GameBoard({
 
     const newRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
     const newNodes = buildAllNodes(newRows);
-    const newAdj = buildAdjacency(newRows);
-
     setRows(newRows);
     setAllNodes(newNodes);
-    setAdjacency(newAdj);
   }, []);
 
-  // 偵測「棋子移動」→ 啟動動畫（只處理：同樣長度陣列、index 相同但 row/col 改變的情況）
+  // 偵測「有哪一顆棋從 A 走到 B」→ 啟動動畫（包含吃子）
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -143,43 +147,106 @@ export default function GameBoard({
     }
 
     const prev = prevPiecesRef.current;
-    if (prev && prev.length === pieces.length) {
-      for (let i = 0; i < pieces.length; i++) {
-        const pNew = pieces[i];
-        const pOld = prev[i];
+    if (!prev) {
+      prevPiecesRef.current = pieces;
+      return;
+    }
 
-        // 同一 index：型別與陣營相同，但座標變動 → 視為移動
+    // 略過差太多（例如重開局）
+    if (Math.abs(prev.length - pieces.length) > 2) {
+      prevPiecesRef.current = pieces;
+      setAnimState(null);
+      return;
+    }
+
+    let found: AnimState = null;
+
+    // 掃「新陣列」，找出和舊陣列 type + side 相同、但 row/col 改變的那顆
+    outer: for (let j = 0; j < pieces.length; j++) {
+      const pNew = pieces[j];
+
+      for (let i = 0; i < prev.length; i++) {
+        const pOld = prev[i];
         if (
           pNew.type === pOld.type &&
           pNew.side === pOld.side &&
           (pNew.row !== pOld.row || pNew.col !== pOld.col)
         ) {
-          const fromNode = allNodes.find((n) => n.row === pOld.row && n.col === pOld.col);
-          const toNode = allNodes.find((n) => n.row === pNew.row && n.col === pNew.col);
+          const fromNode = allNodes.find(
+            (n) => n.row === pOld.row && n.col === pOld.col,
+          );
+          const toNode = allNodes.find(
+            (n) => n.row === pNew.row && n.col === pNew.col,
+          );
           if (fromNode && toNode) {
-            setAnimState({
-              pieceIndex: i,
+            found = {
+              side: pNew.side,
+              type: pNew.type,
+              fromRow: pOld.row,
+              fromCol: pOld.col,
+              toRow: pNew.row,
+              toCol: pNew.col,
               fromX: fromNode.x,
               fromY: fromNode.y,
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 500, // 動畫時間（毫秒）
-            });
+              duration: 400, // 400ms：慢一點
+              progress: 0,
+            };
           }
-          break;
+          break outer;
         }
       }
+    }
+
+    if (found) {
+      setAnimState(found);
+    } else {
+      setAnimState(null);
     }
 
     prevPiecesRef.current = pieces;
   }, [pieces, allNodes]);
 
-  // 實際繪圖函式（可支援「某顆棋」用 override 位置）
-  const drawBoard = (
-    ctx: CanvasRenderingContext2D,
-    overridePos?: { pieceIndex: number; x: number; y: number },
-  ) => {
+  // 用 requestAnimationFrame 更新 progress
+  useEffect(() => {
+    if (!animState) return;
+
+    const { startTime, duration } = animState;
+
+    const tick = (time: number) => {
+      const t = Math.min(1, (time - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
+
+      setAnimState((prev) => (prev ? { ...prev, progress: eased } : prev));
+
+      if (t < 1 && animStateRef.current) {
+        rafIdRef.current = requestAnimationFrame(tick);
+      } else {
+        rafIdRef.current = null;
+        setAnimState(null);
+      }
+    };
+
+    rafIdRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+    // 只在這一輪動畫開始時啟動
+  }, [animState?.startTime]);
+
+  // 繪圖
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || rows.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
     // === 背景 ===
@@ -197,6 +264,8 @@ export default function GameBoard({
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
     // === 三角形棋盤 ===
+    const adjacency = buildAdjacency(rows);
+
     for (let r = 0; r < rows.length - 1; r++) {
       const rowA = rows[r];
       const rowB = rows[r + 1];
@@ -278,9 +347,8 @@ export default function GameBoard({
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
-      adjacency[idx]?.forEach((adjIdx) => {
+      adjacency[idx].forEach((adjIdx) => {
         const adjNode = allNodes[adjIdx];
-        if (!adjNode) return;
         if (idx < adjIdx) {
           ctx.beginPath();
           ctx.moveTo(node.x, node.y);
@@ -401,10 +469,26 @@ export default function GameBoard({
       const node = allNodes.find((n) => n.row === piece.row && n.col === piece.col);
       if (!node) return;
 
-      const drawX =
-        overridePos && overridePos.pieceIndex === idx ? overridePos.x : node.x;
-      const drawY =
-        overridePos && overridePos.pieceIndex === idx ? overridePos.y : node.y;
+      // 預設用節點座標
+      let drawX = node.x;
+      let drawY = node.y;
+
+      // 若這一顆是「正在動畫中的那顆」，就用補間座標（用 side + type + toRow/toCol 辨識，不用 index）
+      if (
+        animState &&
+        animState.progress < 1 &&
+        piece.side === animState.side &&
+        piece.type === animState.type &&
+        piece.row === animState.toRow &&
+        piece.col === animState.toCol
+      ) {
+        drawX =
+          animState.fromX +
+          (animState.toX - animState.fromX) * animState.progress;
+        drawY =
+          animState.fromY +
+          (animState.toY - animState.fromY) * animState.progress;
+      }
 
       const swapHighlight = highlights.find(
         (h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col,
@@ -413,8 +497,7 @@ export default function GameBoard({
         (h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col,
       );
       const isProtected =
-        protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
-        false;
+        protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
 
       const useWizardImage = piece.type === 'wizard' && wizardHatImage;
       const useAssassinImage = piece.type === 'assassin' && assassinLogoImage;
@@ -598,6 +681,7 @@ export default function GameBoard({
             piece.side === viewerSide &&
             !observing
           ) {
+            // 自己視角看到的潛行刺客 → 粉紅框
             outlineColor = '#ff69b4';
             outlineWidth = 3;
           } else if (isProtected) {
@@ -741,24 +825,9 @@ export default function GameBoard({
         26,
       );
     }
-  };
-
-  // 一般重繪（沒有動畫時）
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || rows.length === 0 || allNodes.length === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // 若目前有動畫在跑，交給動畫 Effect 處理
-    if (animStateRef.current) return;
-
-    drawBoard(ctx);
   }, [
     rows,
     allNodes,
-    adjacency,
     pieces,
     selectedPieceIndex,
     highlights,
@@ -771,43 +840,8 @@ export default function GameBoard({
     viewerSide,
     observing,
     guardPreview,
+    animState?.progress, // 每一幀更新時重畫
   ]);
-
-  // 動畫 Effect：在 duration 期間用 requestAnimationFrame 補間位置
-  useEffect(() => {
-    if (!animState) return;
-    const canvas = canvasRef.current;
-    if (!canvas || rows.length === 0 || allNodes.length === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const { pieceIndex, fromX, fromY, toX, toY, startTime, duration } = animState;
-
-    const step = (time: number) => {
-      const t = Math.min(1, (time - startTime) / duration);
-      // ease-out-cubic
-      const eased = 1 - Math.pow(1 - t, 3);
-      const x = fromX + (toX - fromX) * eased;
-      const y = fromY + (toY - fromY) * eased;
-
-      drawBoard(ctx, { pieceIndex, x, y });
-
-      if (t < 1 && animStateRef.current) {
-        animationFrameRef.current = requestAnimationFrame(step);
-      } else {
-        setAnimState(null);
-      }
-    };
-
-    animationFrameRef.current = requestAnimationFrame(step);
-
-    return () => {
-      if (animationFrameRef.current != null) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [animState, rows, allNodes, adjacency, highlights, burnMarks, holyLights, protectionZones, viewerSide, observing, guardPreview, selectedPieceIndex]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
