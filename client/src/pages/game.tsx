@@ -1367,30 +1367,30 @@ export default function Game() {
           swapTarget.type !== "bard" &&
           swapTarget.type !== "dragon"
         ) {
-               const newPieces = [...pieces];
-      const bard = newPieces[bardNeedsSwap.bardIndex];
+          const newPieces = [...pieces];
+          const bard = newPieces[bardNeedsSwap.bardIndex];
 
-      // 吟遊詩人本身不是刺客，不會受 updateAssassinStealth 影響
-      const movedBard = {
-        ...bard,
-        row: swapTarget.row,
-        col: swapTarget.col,
-      };
+          // 吟遊詩人移到被選目標的位置
+          const movedBard: Piece = {
+            ...bard,
+            row: swapTarget.row,
+            col: swapTarget.col,
+          };
 
-      let swappedPiece = {
-        ...swapTarget,
-        row: bardNeedsSwap.bardRow,
-        col: bardNeedsSwap.bardCol,
-      };
+          // 目標棋子換到原本吟遊詩人的位置
+          let swappedPiece: Piece = {
+            ...swapTarget,
+            row: bardNeedsSwap.bardRow,
+            col: bardNeedsSwap.bardCol,
+          };
 
-      // 如果被換的是刺客 → 強制現形
-      if (swappedPiece.type === "assassin") {
-        swappedPiece = { ...swappedPiece, stealthed: false };
-      }
+          // 若被換的是刺客 → 強制現形
+          if (swappedPiece.type === "assassin") {
+            swappedPiece = { ...swappedPiece, stealthed: false };
+          }
 
-      newPieces[bardNeedsSwap.bardIndex] = movedBard;
-      newPieces[clickedPieceIdx] = swappedPiece;
-
+          newPieces[bardNeedsSwap.bardIndex] = movedBard;
+          newPieces[clickedPieceIdx] = swappedPiece;
 
           const bardCoord = getNodeCoordinate(
             bardNeedsSwap.bardRow,
@@ -1910,7 +1910,7 @@ export default function Game() {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       }
 
-      // 龍移動才處理灼痕（這段維持原本的）
+      // 龍移動才處理灼痕
       if (selectedPiece.type === "dragon") {
         const path = calculateDragonPath(
           selectedPiece.row,
@@ -1949,59 +1949,41 @@ export default function Game() {
           }
         }
       }
-
-
-        for (const pathNode of path) {
-          if (!(pathNode.row === row && pathNode.col === col)) {
-            if (
-              !updatedBurnMarks.some(
-                (b) => b.row === pathNode.row && b.col === pathNode.col
-              )
-            ) {
-              updatedBurnMarks.push({
-                row: pathNode.row,
-                col: pathNode.col,
-                createdBy: currentPlayer,
-              });
-            }
-          }
-        }
-      
     } else if (highlight.type === "swap") {
-  const targetIdx = clickedPieceIdx!;
-  const targetPiece = pieces[targetIdx];
+      const targetIdx = clickedPieceIdx!;
+      const targetPiece = pieces[targetIdx];
 
-  // 先照原本規則算刺客黑白格移動
-  let movedPiece = updateAssassinStealth(
-    { ...selectedPiece, row, col },
-    selectedPiece.row,
-    selectedPiece.col,
-    row,
-    col
-  );
-  let swappedPiece = updateAssassinStealth(
-    {
-      ...targetPiece,
-      row: selectedPiece.row,
-      col: selectedPiece.col,
-    },
-    targetPiece.row,
-    targetPiece.col,
-    selectedPiece.row,
-    selectedPiece.col
-  );
+      // 先照原本規則算刺客黑白格移動
+      let movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row, col },
+        selectedPiece.row,
+        selectedPiece.col,
+        row,
+        col
+      );
+      let swappedPiece = updateAssassinStealth(
+        {
+          ...targetPiece,
+          row: selectedPiece.row,
+          col: selectedPiece.col,
+        },
+        targetPiece.row,
+        targetPiece.col,
+        selectedPiece.row,
+        selectedPiece.col
+      );
 
-  // ⭐ 規則：只要是「交換位置」，刺客一律現形
-  if (movedPiece.type === "assassin") {
-    movedPiece = { ...movedPiece, stealthed: false };
-    movedAssassinFinal = movedPiece;
-  }
-  if (swappedPiece.type === "assassin") {
-    swappedPiece = { ...swappedPiece, stealthed: false };
-  }
+      // ⭐ 規則：只要是「交換位置」，刺客一律現形
+      if (movedPiece.type === "assassin") {
+        movedPiece = { ...movedPiece, stealthed: false };
+        movedAssassinFinal = movedPiece;
+      }
+      if (swappedPiece.type === "assassin") {
+        swappedPiece = { ...swappedPiece, stealthed: false };
+      }
 
-  newPieces[selectedPieceIndex] = movedPiece;
-  newPieces[targetIdx] = swappedPiece;
+      newPieces[selectedPieceIndex] = movedPiece;
+      newPieces[targetIdx] = swappedPiece;
 
       if (movedPiece.type === "paladin") {
         const zones = calculatePaladinProtectionZone(
@@ -2337,13 +2319,12 @@ export default function Game() {
           pendingGuard: null,
         } as SyncedState);
 
-    // 是否輪到「我」這一方
+  // 是否輪到「我」這一方
   const isMyTurn =
     !winner &&
     gameStarted &&
     localSide !== "spectator" &&
     localSide === boardState.currentPlayer;
-
 
   const displayPieces: Piece[] = isObserving
     ? boardState.pieces.map((p) =>
@@ -2353,7 +2334,7 @@ export default function Game() {
 
   const effectivePiecesForPanel = boardState.pieces;
 
-  const selectedPiece =
+  const selectedPieceForPanel =
     selectedPieceIndex !== -1
       ? effectivePiecesForPanel[selectedPieceIndex]
       : null;
@@ -2649,7 +2630,7 @@ export default function Game() {
           )}
         </div>
 
-                {/* 回合與玩家狀態列 */}
+        {/* 回合與玩家狀態列 */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-3">
           <div
             className={`px-3 py-1 rounded-full text-xs sm:text-sm border ${
@@ -2671,12 +2652,11 @@ export default function Game() {
           </div>
         </div>
 
-
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-6 items-start">
           {/* 左邊：被吃掉的棋子（上） + 棋子資訊（下） */}
           <div className="order-2 lg:order-1 flex flex-col gap-4">
             <CapturedPiecesPanel capturedPieces={boardState.capturedPieces} />
-            <PieceInfoPanel piece={selectedPiece || null} />
+            <PieceInfoPanel piece={selectedPieceForPanel || null} />
           </div>
 
           {/* 中間：棋盤 */}
@@ -2694,9 +2674,6 @@ export default function Game() {
               observing={isObserving}
             />
           </div>
-
-
-
 
           {/* 右邊：回合資訊 + 歷史 */}
           <div className="order-3 flex flex-col gap-3">
