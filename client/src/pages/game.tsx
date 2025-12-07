@@ -1799,45 +1799,48 @@ export default function Game() {
     let updatedBurnMarks = [...burnMarks];
     let localCaptured = cloneCaptured(capturedPieces);
 
-if (highlight.type === "move") {
-  const actualTargetIdx = getPieceAt(pieces, row, col);
+    if (highlight.type === "move") {
+      const actualTargetIdx = getPieceAt(pieces, row, col);
 
-  if (actualTargetIdx !== -1) {
-    const targetPiece = pieces[actualTargetIdx];
+      if (actualTargetIdx !== -1) {
+        const targetPiece = pieces[actualTargetIdx];
 
-        // ⭐ 規則：吟遊詩人走到「敵方潛行刺客」的位置：
-    //    1. 互換位置
-    //    2. 使該刺客現形（stealthed = false）
-    if (
-      selectedPiece.type === "bard" &&
-      targetPiece.type === "assassin" &&
-      targetPiece.side !== selectedPiece.side &&
-      targetPiece.stealthed
-    ) {
-      const bardIdx = selectedPieceIndex;
-      const assassinIdx = actualTargetIdx;
+        // 1) 目標是己方棋子 → 一律不能走（包含己方潛行刺客）
+        if (targetPiece.side === selectedPiece.side) {
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          return;
+        }
 
-      // 吟遊詩人走到原本刺客的格子
-      const newBard: Piece = {
-        ...selectedPiece,
-        row,
-        col,
-      };
+        // 2) 吟遊詩人踩「敵方潛行刺客」：交換位置並讓刺客現形
+        if (
+          selectedPiece.type === "bard" &&
+          targetPiece.type === "assassin" &&
+          targetPiece.side !== selectedPiece.side &&
+          targetPiece.stealthed
+        ) {
+          const bardIdx = selectedPieceIndex;
+          const assassinIdx = actualTargetIdx;
 
-      // 刺客換到吟遊詩人原本的位置，並且「現形」
-      const newAssassin: Piece = {
-        ...targetPiece,
-        row: selectedPiece.row,
-        col: selectedPiece.col,
-        stealthed: false,
-      };
+          const newBard: Piece = {
+            ...selectedPiece,
+            row,
+            col,
+          };
 
-      newPieces[bardIdx] = newBard;
-      newPieces[assassinIdx] = newAssassin;
+          const newAssassin: Piece = {
+            ...targetPiece,
+            row: selectedPiece.row,
+            col: selectedPiece.col,
+            stealthed: false, // ★ 這裡讓刺客現形
+          };
 
-      // 這步是交換，不是吃子，不啟動 bard 強制啟動（activateAllBards 不用管）
-      moveDesc = `${PIECE_CHINESE["bard"]} ${fromCoord} ⇄ 刺客 ${toCoord}`;
+          newPieces[bardIdx] = newBard;
+          newPieces[assassinIdx] = newAssassin;
 
+          moveDesc = `${PIECE_CHINESE["bard"]} ${fromCoord} ⇄ 刺客 ${toCoord}（現形）`;
         } else if (targetPiece.type === "bard") {
           // 吟遊詩人不能被吃，這步當作無效
           setSelectedPieceIndex(-1);
@@ -1846,7 +1849,7 @@ if (highlight.type === "move") {
           setProtectionZones([]);
           return;
         } else {
-          // 其他情況：正常吃子邏輯
+          // 3) 其他情況：正常吃子（這裡一定是敵方棋子）
           localCaptured = addCaptured(localCaptured, targetPiece);
 
           newPieces.splice(actualTargetIdx, 1);
@@ -1907,6 +1910,7 @@ if (highlight.type === "move") {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       }
 
+      // 龍移動才處理灼痕（這段維持原本的）
       if (selectedPiece.type === "dragon") {
         const path = calculateDragonPath(
           selectedPiece.row,
@@ -1928,6 +1932,24 @@ if (highlight.type === "move") {
             createdBy: currentPlayer,
           });
         }
+
+        for (const pathNode of path) {
+          if (!(pathNode.row === row && pathNode.col === col)) {
+            if (
+              !updatedBurnMarks.some(
+                (b) => b.row === pathNode.row && b.col === pathNode.col
+              )
+            ) {
+              updatedBurnMarks.push({
+                row: pathNode.row,
+                col: pathNode.col,
+                createdBy: currentPlayer,
+              });
+            }
+          }
+        }
+      }
+
 
         for (const pathNode of path) {
           if (!(pathNode.row === row && pathNode.col === col)) {
