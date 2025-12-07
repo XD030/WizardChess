@@ -8,20 +8,6 @@ import type {
   BurnMark,
 } from '@shared/schema';
 
-// Chess piece symbols (white/black versions)
-export const PIECE_SYMBOLS: Record<
-  PieceType,
-  { white: string; black: string }
-> = {
-  wizard: { white: '♕', black: '♛' }, // Queen
-  apprentice: { white: '♙', black: '♟' }, // Pawn
-  dragon: { white: '♕', black: '♛' }, // Rook
-  ranger: { white: '♘', black: '♞' }, // Knight
-  paladin: { white: '♗', black: '♝' }, // Bishop
-  assassin: { white: '♘', black: '♞' }, // Knight (alternative)
-  bard: { white: '♔', black: '♚' }, // King
-  griffin: { white: '♖', black: '♜' }, // Rook (alternative)
-};
 
 export function getPieceSymbol(type: PieceType, side: Side): string {
   if (side === 'neutral') return PIECE_SYMBOLS[type].white;
@@ -111,7 +97,7 @@ export const PIECE_DESCRIPTIONS: Record<
       '激活機制：當任意棋子被吃掉時，吟遊詩人會被激活。',
       '強制交換：移動後必須與己方棋子（除龍外）交換位置。',
       '可作為巫師導線的一部分。',
-      '與敵方潛行刺客重疊時，會與其交換位置並使其現形。',
+      '與敵方潛行重疊時，會與其交換位置並使其現形。',
     ],
   },
   griffin: {
