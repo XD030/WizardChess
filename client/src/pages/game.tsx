@@ -1367,19 +1367,30 @@ export default function Game() {
           swapTarget.type !== "bard" &&
           swapTarget.type !== "dragon"
         ) {
-          const newPieces = [...pieces];
-          const bard = newPieces[bardNeedsSwap.bardIndex];
+               const newPieces = [...pieces];
+      const bard = newPieces[bardNeedsSwap.bardIndex];
 
-          newPieces[bardNeedsSwap.bardIndex] = {
-            ...bard,
-            row: swapTarget.row,
-            col: swapTarget.col,
-          };
-          newPieces[clickedPieceIdx] = {
-            ...swapTarget,
-            row: bardNeedsSwap.bardRow,
-            col: bardNeedsSwap.bardCol,
-          };
+      // 吟遊詩人本身不是刺客，不會受 updateAssassinStealth 影響
+      const movedBard = {
+        ...bard,
+        row: swapTarget.row,
+        col: swapTarget.col,
+      };
+
+      let swappedPiece = {
+        ...swapTarget,
+        row: bardNeedsSwap.bardRow,
+        col: bardNeedsSwap.bardCol,
+      };
+
+      // 如果被換的是刺客 → 強制現形
+      if (swappedPiece.type === "assassin") {
+        swappedPiece = { ...swappedPiece, stealthed: false };
+      }
+
+      newPieces[bardNeedsSwap.bardIndex] = movedBard;
+      newPieces[clickedPieceIdx] = swappedPiece;
+
 
           const bardCoord = getNodeCoordinate(
             bardNeedsSwap.bardRow,
@@ -1929,65 +1940,40 @@ export default function Game() {
         }
       }
     } else if (highlight.type === "swap") {
-      const targetIdx = clickedPieceIdx!;
-      const targetPiece = pieces[targetIdx];
+  const targetIdx = clickedPieceIdx!;
+  const targetPiece = pieces[targetIdx];
 
-      let movedPiece = updateAssassinStealth(
-        { ...selectedPiece, row, col },
-        selectedPiece.row,
-        selectedPiece.col,
-        row,
-        col
-      );
-      let swappedPiece = updateAssassinStealth(
-        {
-          ...targetPiece,
-          row: selectedPiece.row,
-          col: selectedPiece.col,
-        },
-        targetPiece.row,
-        targetPiece.col,
-        selectedPiece.row,
-        selectedPiece.col
-      );
+  // 先照原本規則算刺客黑白格移動
+  let movedPiece = updateAssassinStealth(
+    { ...selectedPiece, row, col },
+    selectedPiece.row,
+    selectedPiece.col,
+    row,
+    col
+  );
+  let swappedPiece = updateAssassinStealth(
+    {
+      ...targetPiece,
+      row: selectedPiece.row,
+      col: selectedPiece.col,
+    },
+    targetPiece.row,
+    targetPiece.col,
+    selectedPiece.row,
+    selectedPiece.col
+  );
 
-      if (movedPiece.type === "assassin" && movedPiece.stealthed) {
-        const enemySide =
-          movedPiece.side === "white" ? "black" : "white";
-        if (
-          isInProtectionZone(
-            row,
-            col,
-            newPieces,
-            enemySide,
-            adjacency,
-            allNodes
-          )
-        ) {
-          movedPiece = { ...movedPiece, stealthed: false };
-        }
-        movedAssassinFinal = movedPiece;
-      }
+  // ⭐ 規則：只要是「交換位置」，刺客一律現形
+  if (movedPiece.type === "assassin") {
+    movedPiece = { ...movedPiece, stealthed: false };
+    movedAssassinFinal = movedPiece;
+  }
+  if (swappedPiece.type === "assassin") {
+    swappedPiece = { ...swappedPiece, stealthed: false };
+  }
 
-      if (swappedPiece.type === "assassin" && swappedPiece.stealthed) {
-        const enemySide =
-          swappedPiece.side === "white" ? "black" : "white";
-        if (
-          isInProtectionZone(
-            selectedPiece.row,
-            selectedPiece.col,
-            newPieces,
-            enemySide,
-            adjacency,
-            allNodes
-          )
-        ) {
-          swappedPiece = { ...swappedPiece, stealthed: false };
-        }
-      }
-
-      newPieces[selectedPieceIndex] = movedPiece;
-      newPieces[targetIdx] = swappedPiece;
+  newPieces[selectedPieceIndex] = movedPiece;
+  newPieces[targetIdx] = swappedPiece;
 
       if (movedPiece.type === "paladin") {
         const zones = calculatePaladinProtectionZone(
