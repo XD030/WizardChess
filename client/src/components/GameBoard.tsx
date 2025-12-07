@@ -9,7 +9,6 @@ import type {
   HolyLight,
 } from '@shared/schema';
 import {
-  getPieceSymbol,
   buildRows,
   buildAllNodes,
   buildAdjacency,
@@ -17,6 +16,14 @@ import {
 } from '../lib/gameLogic';
 import wizardMoonImg from '../assets/wizard_moon.png';
 import assassinLogoImg from '../assets/assassin_logo.png';
+
+// 👉 下面這些請照你的實際檔名放在 /assets/pieces/ 裡
+import paladinPng from '../assets/pieces/paladin.png';
+import dragonPng from '../assets/pieces/dragon.png';
+import rangerPng from '../assets/pieces/ranger.png';
+import griffinPng from '../assets/pieces/griffin.png';
+import bardPng from '../assets/pieces/bard.png';
+import apprenticePng from '../assets/pieces/apprentice.png';
 
 interface GameBoardProps {
   pieces: Piece[];
@@ -75,8 +82,18 @@ export default function GameBoard({
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
+
+  // 巫師 / 刺客原本的圖片
   const [wizardHatImage, setWizardHatImage] = useState<HTMLImageElement | null>(null);
   const [assassinLogoImage, setAssassinLogoImage] = useState<HTMLImageElement | null>(null);
+
+  // 其他棋子的圖片
+  const [paladinImage, setPaladinImage] = useState<HTMLImageElement | null>(null);
+  const [dragonImage, setDragonImage] = useState<HTMLImageElement | null>(null);
+  const [rangerImage, setRangerImage] = useState<HTMLImageElement | null>(null);
+  const [griffinImage, setGriffinImage] = useState<HTMLImageElement | null>(null);
+  const [bardImage, setBardImage] = useState<HTMLImageElement | null>(null);
+  const [apprenticeImage, setApprenticeImage] = useState<HTMLImageElement | null>(null);
 
   const LOGICAL_SIZE = 700;
 
@@ -100,15 +117,22 @@ export default function GameBoard({
     animStateRef.current = animState;
   }, [animState]);
 
-  // 載入圖片
+  // 載入所有圖片
   useEffect(() => {
-    const wizardImg = new Image();
-    wizardImg.src = wizardMoonImg;
-    wizardImg.onload = () => setWizardHatImage(wizardImg);
+    const loadImage = (src: string, cb: (img: HTMLImageElement) => void) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => cb(img);
+    };
 
-    const assassinImg = new Image();
-    assassinImg.src = assassinLogoImg;
-    assassinImg.onload = () => setAssassinLogoImage(assassinImg);
+    loadImage(wizardMoonImg, setWizardHatImage);
+    loadImage(assassinLogoImg, setAssassinLogoImage);
+    loadImage(paladinPng, setPaladinImage);
+    loadImage(dragonPng, setDragonImage);
+    loadImage(rangerPng, setRangerImage);
+    loadImage(griffinPng, setGriffinImage);
+    loadImage(bardPng, setBardImage);
+    loadImage(apprenticePng, setApprenticeImage);
   }, []);
 
   // 棋盤幾何
@@ -135,7 +159,7 @@ export default function GameBoard({
     setAdjacency(newAdj);
   }, []);
 
-  // 偵測「棋子移動」→ 啟動動畫（只處理：同樣長度陣列、index 相同但 row/col 改變的情況）
+  // 偵測「棋子移動」→ 啟動動畫（同 index、type/side 一樣但 row/col 改變）
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -148,7 +172,6 @@ export default function GameBoard({
         const pNew = pieces[i];
         const pOld = prev[i];
 
-        // 同一 index：型別與陣營相同，但座標變動 → 視為移動
         if (
           pNew.type === pOld.type &&
           pNew.side === pOld.side &&
@@ -164,7 +187,7 @@ export default function GameBoard({
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 450, // 動畫時間（毫秒）
+              duration: 200,
             });
           }
           break;
@@ -175,7 +198,27 @@ export default function GameBoard({
     prevPiecesRef.current = pieces;
   }, [pieces, allNodes]);
 
-  // 實際繪圖函式（可支援「某顆棋」用 override 位置）
+  // 幫其他棋子選對 image + size
+  function getImageForPiece(piece: Piece): { img: HTMLImageElement | null; size: number } {
+    switch (piece.type) {
+      case 'paladin':
+        return { img: paladinImage, size: 30 };
+      case 'dragon':
+        return { img: dragonImage, size: 32 };
+      case 'ranger':
+        return { img: rangerImage, size: 28 };
+      case 'griffin':
+        return { img: griffinImage, size: 30 };
+      case 'bard':
+        return { img: bardImage, size: 26 };
+      case 'apprentice':
+        return { img: apprenticeImage, size: 26 };
+      default:
+        return { img: null, size: 28 };
+    }
+  }
+
+  // 實際繪圖函式（支援某顆棋 override 位置）
   const drawBoard = (
     ctx: CanvasRenderingContext2D,
     overridePos?: { pieceIndex: number; x: number; y: number },
@@ -388,11 +431,7 @@ export default function GameBoard({
       }
     });
 
-    // === 棋子 ===
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 28px serif';
-
+    // === 棋子（全部圖片版） ===
     pieces.forEach((piece, idx) => {
       if (!isPieceVisible(piece, viewerSide, observing)) {
         return;
@@ -416,11 +455,8 @@ export default function GameBoard({
         protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
         false;
 
-      const useWizardImage = piece.type === 'wizard' && wizardHatImage;
-      const useAssassinImage = piece.type === 'assassin' && assassinLogoImage;
-
-      // === 巫師（月亮 icon） ===
-      if (useWizardImage && wizardHatImage) {
+      // === 巫師：保持原本 moon icon 效果 ===
+      if (piece.type === 'wizard' && wizardHatImage) {
         const displaySize = 30;
         const highResSize = 128;
         ctx.save();
@@ -525,8 +561,8 @@ export default function GameBoard({
 
         ctx.restore();
       }
-      // === 刺客（logo） ===
-      else if (useAssassinImage && assassinLogoImage) {
+      // === 刺客：保持原本 logo + 上色 效果 ===
+      else if (piece.type === 'assassin' && assassinLogoImage) {
         const displaySize = 28;
         const highResSize = 128;
         ctx.save();
@@ -646,47 +682,57 @@ export default function GameBoard({
 
         ctx.restore();
       }
-      // === 其他棋子（字元） ===
+      // === 其他棋子：全部用 PNG 畫 ===
       else {
-        const symbol = getPieceSymbol(piece.type, piece.side);
+        const { img, size: displaySize } = getImageForPiece(piece);
+        if (!img) return;
 
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // 先畫圖片
+        ctx.drawImage(
+          img,
+          drawX - displaySize / 2,
+          drawY - displaySize / 2,
+          displaySize,
+          displaySize,
+        );
+
+        // 外框顏色：沿用你原本的邏輯
         let outlineColor = '#000';
-        let outlineWidth = 1.2;
+        let outlineWidth = 1.5;
 
         if (idx === selectedPieceIndex) {
           outlineColor = '#fbbf24';
-          outlineWidth = 2.5;
+          outlineWidth = 3;
         } else if (swapHighlight) {
           outlineColor = '#3b82f6';
-          outlineWidth = 2.5;
+          outlineWidth = 3;
         } else if (attackHighlight) {
           outlineColor = '#ef4444';
-          outlineWidth = 2.5;
+          outlineWidth = 3;
         } else if (isProtected) {
           outlineColor = '#06b6d4';
           outlineWidth = 2.5;
         } else {
           if (piece.side === 'white') {
-            outlineColor = '#000';
+            outlineColor = '#e5e7eb';
           } else if (piece.side === 'black') {
-            outlineColor = '#fff';
+            outlineColor = '#0f172a';
           } else {
-            outlineColor = '#000';
+            outlineColor = '#a855f7';
           }
         }
 
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, displaySize / 2 + 2, 0, Math.PI * 2);
         ctx.strokeStyle = outlineColor;
         ctx.lineWidth = outlineWidth;
-        ctx.strokeText(symbol, drawX, drawY);
+        ctx.stroke();
 
-        if (piece.side === 'white') {
-          ctx.fillStyle = '#fff';
-        } else if (piece.side === 'black') {
-          ctx.fillStyle = '#000';
-        } else {
-          ctx.fillStyle = '#a855f7';
-        }
-        ctx.fillText(symbol, drawX, drawY);
+        ctx.restore();
       }
     });
 
@@ -767,6 +813,12 @@ export default function GameBoard({
     holyLights,
     wizardHatImage,
     assassinLogoImage,
+    paladinImage,
+    dragonImage,
+    rangerImage,
+    griffinImage,
+    bardImage,
+    apprenticeImage,
     protectionZones,
     viewerSide,
     observing,
