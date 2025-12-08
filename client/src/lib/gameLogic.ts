@@ -1396,6 +1396,7 @@ export function calculateBardMoves(
   pieces: Piece[],
   adjacency: number[][],
   allNodes: NodePosition[],
+  controllerSide: Side,                 // ★ 新增：這一回合的操控方（white/black）
   holyLights: HolyLight[] = [],
   burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
@@ -1419,9 +1420,9 @@ export function calculateBardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
-    // 聖光 / 灼痕擋住就不能去
+    // 聖光 / 灼痕擋住就不能去（用 friendlySide）
     if (
-      !canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
+      !canOccupyNode(adjNode.row, adjNode.col, friendlySide, holyLights, burnMarks)
     ) {
       continue;
     }
@@ -1443,7 +1444,7 @@ export function calculateBardMoves(
         continue;
       }
 
-      // 只能踩「敵方潛行刺客」
+      // ✅ 可以踩「敵方潛行刺客」
       if (
         targetPiece.type === 'assassin' &&
         targetPiece.stealthed &&
@@ -1468,11 +1469,9 @@ export function calculateBardMoves(
     // 未啟動吟遊詩人不能當跳板
     if (overPiece.type === 'bard' && !overPiece.activated) continue;
 
-     // **新增檢查**：潛行刺客不能當跳板（不論敵我）
-    if (overPiece.type === 'assassin' && overPiece.stealthed) {
-      continue;
-    }
-    
+    // 潛行刺客不能當跳板（不論敵我）
+    if (overPiece.type === 'assassin' && overPiece.stealthed) continue;
+
     // 方向向量（從 bard 指向第一個被跳過的棋）
     const dRow = firstJumpNode.row - piece.row;
     const dCol = firstJumpNode.col - piece.col;
@@ -1493,7 +1492,7 @@ export function calculateBardMoves(
       !canOccupyNode(
         landingNode.row,
         landingNode.col,
-        piece.side,
+        friendlySide,             // 用 friendlySide
         holyLights,
         burnMarks,
       )
@@ -1526,7 +1525,7 @@ export function calculateBardMoves(
         continue;
       }
 
-      // 特例：落點是敵方潛行刺客 → 可以跳上去
+      // ✅ 特例：落點是敵方潛行刺客 → 可以跳上去
       if (
         landingPiece.type === 'assassin' &&
         landingPiece.stealthed &&
