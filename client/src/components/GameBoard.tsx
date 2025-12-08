@@ -517,8 +517,8 @@ export default function GameBoard({
       } else if (isProtected) {
         outlineColor = '#06b6d4';
         outlineWidth = 2.5;
-      } else if (piece.type === 'bard') {
-        // 吟遊詩人：平常就有紫色外框
+      } else if (piece.type === 'bard'&& piece.activated) {
+        // 吟遊詩人：激活才有紫色外框
         outlineColor = 'rgba(168, 85, 247, 0.9)';
         outlineWidth = 2.5;
       } else {
