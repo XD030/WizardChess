@@ -1396,7 +1396,6 @@ export function calculateBardMoves(
   pieces: Piece[],
   adjacency: number[][],
   allNodes: NodePosition[],
-  controllerSide: Side,
   holyLights: HolyLight[] = [],
   burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
