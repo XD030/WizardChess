@@ -65,7 +65,7 @@ interface GameBoardProps {
 }
 
 const LOGICAL_SIZE = 700;      // Canvas 基礎尺寸
-const BOARD_SCALE = 1.5;      // ⬅️ 棋盤放大倍率（1.0 = 原本大小）
+const BOARD_SCALE = 2.5;      // ⬅️ 棋盤放大倍率（1.0 = 原本大小）
 const PIECE_SIZE = 34;
 
 // 這個視角是否看得到這顆棋
