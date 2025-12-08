@@ -278,21 +278,6 @@ export default function Game() {
   // 是否處於「觀察模式」（勝負已分且關掉結束視窗）
   const isObserving = !!winner && !showEndModal;
   
-  // 新增 helper：判斷某顆 piece（假設是 bard）在本機是否屬於己方，且是否為敵方回合（此時不應顯示路徑）
-function isOwnBardOutOfTurnForPiece(piece: Piece | null): boolean {
-  if (!piece) return false;
-  // 只對吟遊詩人生效
-  if (piece.type !== 'bard') return false;
-  // 當前 client 若為觀戰者，就不套用這個限制（觀戰者可看所有）
-  if (localSide === 'spectator') return false;
-  // 如果該 piece 不屬於本機玩家，也不套用（因為本機點選敵方吟遊詩人要看路徑是允許的）
-  if (piece.side !== localSide) return false;
-  // 若現在不是本機回合，則不顯示路徑
-  return currentPlayer !== localSide;
-}
-
-
-
   // ====== 歷史回放：找出某 snapshot 相對於前一個 snapshot 是哪幾顆棋移動 ======
   function findMovedPieceIndicesForSnapshot(
     snapshotIndex: number
