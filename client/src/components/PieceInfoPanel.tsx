@@ -114,13 +114,8 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
             className="w-16 h-16 object-contain"
             data-testid="text-piece-emoji"
             style={{
-              filter:
-                piece.side === "white"
-                  ? "brightness(1.4)"
-                  : piece.side === "black"
-                  ? "brightness(0.7)"
-                  : "brightness(1)",
-            }}
+                    filter: 'none'
+                  }}
           />
 
           <div>
