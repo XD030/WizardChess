@@ -102,7 +102,6 @@ function isOwnBardOutOfTurnForPiece(piece: Piece | null): boolean {
   return currentPlayer !== localSide;
 }
 
-
 // Helper：吃子時啟動所有吟遊詩人
 function activateAllBards(pieces: Piece[]): Piece[] {
   return pieces.map((piece) =>
@@ -143,6 +142,7 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
       blackText: text,
     };
   }
+  
 
   // movedPiece 是潛行刺客（最後棋面仍是潛行狀態）
   const hiddenMsg = "刺客 ? → ?";
