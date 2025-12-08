@@ -1631,7 +1631,6 @@ function isOwnBardOutOfTurnForPiece(piece: Piece | null): boolean {
                 effectivePieces,
                 adjacency,
                 allNodes,
-                boardState.currentPlayer,  // ★ 或 currentPlayer，兩個在非觀戰時是一樣的
                 holyLights,
                 burnMarks
               );
