@@ -111,12 +111,15 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
           <img
             src={imgSrc}
             alt={piece.type}
-            className="w-16 h-16 object-contain"
+            className="object-contain"
             data-testid="text-piece-emoji"
             style={{
-                    filter: 'none'
-                  }}
+              maxWidth: "128px",
+              maxHeight: "128px",
+              filter: "none",
+            }}
           />
+
 
           <div>
             <div
