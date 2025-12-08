@@ -1,6 +1,7 @@
 // client/src/components/GameBoard.tsx
 
 import { useEffect, useRef, useState } from 'react';
+import type React from 'react';
 import type {
   Piece,
   MoveHighlight,
@@ -17,7 +18,6 @@ import {
 
 // ------------ 棋子圖片載入 ------------
 
-// 你自己的圖片檔名，如果不同請在這裡改
 import wizardWhitePng from '../assets/wizard_white.png';
 import wizardBlackPng from '../assets/wizard_black.png';
 
@@ -36,7 +36,7 @@ import rangerBlackPng from '../assets/ranger_black.png';
 import griffinWhitePng from '../assets/griffin_white.png';
 import griffinBlackPng from '../assets/griffin_black.png';
 
-// ⭐ bard 只有一張圖
+// bard 只有一張
 import bardPng from '../assets/bard.png';
 
 // apprentice
@@ -64,9 +64,22 @@ interface GameBoardProps {
   } | null;
 }
 
-const LOGICAL_SIZE = 1000;      // Canvas 基礎尺寸
-const BOARD_SCALE = 2;      // ⬅️ 棋盤放大倍率（1.0 = 原本大小）
+const LOGICAL_SIZE = 1000; // Canvas 基礎尺寸
+const BOARD_SCALE = 2; // 棋盤放大倍率（1 = 原本大小）
 const PIECE_SIZE = 40;
+
+// === 棋盤主題顏色（之後想換皮膚只要改這裡） ===
+const BOARD_THEME = {
+  bgInner: '#020617', // 背景中心
+  bgOuter: '#000000', // 背景外圈
+  triDark: 'rgba(15, 23, 42, 0.95)', // 深色三角
+  triLight: 'rgba(51, 65, 85, 0.8)', // 淺色三角
+  triBorder: 'rgba(148, 163, 184, 0.5)', // 三角邊框
+  linkLine: 'rgba(148, 163, 184, 0.2)', // 節點連線
+  nodeNormal: 'rgba(148, 163, 184, 0.3)', // 節點圓點（一般）
+  nodeHover: 'rgba(248, 250, 252, 0.7)', // 節點圓點（滑過）
+  labelText: 'rgba(148, 163, 184, 0.8)', // 座標文字
+};
 
 // 這個視角是否看得到這顆棋
 function isPieceVisible(
@@ -100,13 +113,17 @@ export default function GameBoard({
   guardPreview,
 }: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(
+    null,
+  );
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
 
   // ===== 棋子圖片 =====
-  const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement | null>>({});
+  const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement | null>>(
+    {},
+  );
 
   // ===== 移動動畫 =====
   type MoveAnimState = {
@@ -130,15 +147,10 @@ export default function GameBoard({
 
   // key：決定用哪張圖
   function keyForPiece(piece: Piece): string {
-    if (piece.type === 'bard') {
-      // bard 不分陣營，固定用同一張
-      return 'bard';
-    }
-
+    if (piece.type === 'bard') return 'bard';
     if (piece.side === 'white' || piece.side === 'black') {
       return `${piece.type}_${piece.side}`;
     }
-
     // 中立：先共用白方圖
     return `${piece.type}_white`;
   }
@@ -169,7 +181,6 @@ export default function GameBoard({
       griffin_white: griffinWhitePng,
       griffin_black: griffinBlackPng,
 
-      // bard 只有一張圖
       bard: bardPng,
 
       apprentice_white: apprenticeWhitePng,
@@ -231,7 +242,6 @@ export default function GameBoard({
 
     const prev = prevPiecesRef.current;
     if (prev && prev.length === pieces.length) {
-      // 簡單比對：同 index、同 type+side，但 row/col 不同 → 視為該棋移動
       for (let i = 0; i < pieces.length; i++) {
         const pNew = pieces[i];
         const pOld = prev[i];
@@ -241,7 +251,9 @@ export default function GameBoard({
           pNew.side === pOld.side &&
           (pNew.row !== pOld.row || pNew.col !== pOld.col)
         ) {
-          const fromNode = allNodes.find((n) => n.row === pOld.row && n.col === pOld.col);
+          const fromNode = allNodes.find(
+            (n) => n.row === pOld.row && n.col === pOld.col,
+          );
           const toNode = allNodes.find((n) => n.row === pNew.row && n.col === pNew.col);
           if (fromNode && toNode) {
             setAnimState({
@@ -251,7 +263,7 @@ export default function GameBoard({
               toX: toNode.x,
               toY: toNode.y,
               startTime: performance.now(),
-              duration: 200, // 毫秒
+              duration: 200,
             });
           }
           break;
@@ -278,8 +290,8 @@ export default function GameBoard({
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE * 0.7,
     );
-    bgGrad.addColorStop(0, 'hsl(222, 47%, 7%)');
-    bgGrad.addColorStop(1, 'hsl(222, 47%, 4%)');
+    bgGrad.addColorStop(0, BOARD_THEME.bgInner);
+    bgGrad.addColorStop(1, BOARD_THEME.bgOuter);
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
@@ -300,9 +312,9 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.fillStyle = BOARD_THEME.triDark;
           ctx.fill();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.strokeStyle = BOARD_THEME.triBorder;
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
@@ -317,9 +329,9 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.fillStyle = BOARD_THEME.triLight;
           ctx.fill();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.strokeStyle = BOARD_THEME.triBorder;
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
@@ -335,9 +347,9 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.fillStyle = BOARD_THEME.triLight;
           ctx.fill();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.strokeStyle = BOARD_THEME.triBorder;
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
@@ -352,9 +364,9 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.fillStyle = BOARD_THEME.triDark;
           ctx.fill();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+          ctx.strokeStyle = BOARD_THEME.triBorder;
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
@@ -362,7 +374,7 @@ export default function GameBoard({
     }
 
     // --- 節點連線 ---
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+    ctx.strokeStyle = BOARD_THEME.linkLine;
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
       adjacency[idx]?.forEach((adjIdx) => {
@@ -381,7 +393,7 @@ export default function GameBoard({
       const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
       ctx.beginPath();
       ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? 'rgba(148, 163, 184, 0.4)' : 'rgba(148, 163, 184, 0.2)';
+      ctx.fillStyle = isHovered ? BOARD_THEME.nodeHover : BOARD_THEME.nodeNormal;
       ctx.fill();
     });
 
@@ -452,7 +464,7 @@ export default function GameBoard({
 
     // --- 座標標籤 A~I / 1~9 ---
     ctx.font = 'bold 14px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+    ctx.fillStyle = BOARD_THEME.labelText;
 
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     rowLabels.forEach((label, rowIdx) => {
@@ -501,7 +513,6 @@ export default function GameBoard({
         protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) ||
         false;
 
-      // 框線顏色 & 粗細
       let outlineColor: string | null = null;
       let outlineWidth = 0;
 
@@ -517,12 +528,10 @@ export default function GameBoard({
       } else if (isProtected) {
         outlineColor = '#06b6d4';
         outlineWidth = 2.5;
-      } else if (piece.type === 'bard'&& piece.activated) {
-        // 吟遊詩人：激活才有紫色外框
+      } else if (piece.type === 'bard' && piece.activated) {
         outlineColor = 'rgba(168, 85, 247, 0.9)';
         outlineWidth = 2.5;
       } else {
-        // 其他棋子一般狀態：沒有外框
         outlineColor = null;
         outlineWidth = 0;
       }
@@ -531,7 +540,6 @@ export default function GameBoard({
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // 自己視角的潛行刺客 → 半透明
       if (
         piece.type === 'assassin' &&
         piece.stealthed &&
@@ -549,9 +557,14 @@ export default function GameBoard({
         ctx.shadowBlur = outlineWidth;
 
         const offsets = [
-          [-1, -1], [0, -1], [1, -1],
-          [-1,  0],         [1,  0],
-          [-1,  1], [0,  1], [1,  1],
+          [-1, -1],
+          [0, -1],
+          [1, -1],
+          [-1, 0],
+          [1, 0],
+          [-1, 1],
+          [0, 1],
+          [1, 1],
         ];
         offsets.forEach(([dx, dy]) => {
           ctx.shadowOffsetX = dx;
