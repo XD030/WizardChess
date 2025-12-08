@@ -1469,6 +1469,11 @@ export function calculateBardMoves(
     // 未啟動吟遊詩人不能當跳板
     if (overPiece.type === 'bard' && !overPiece.activated) continue;
 
+     // **新增檢查**：潛行刺客不能當跳板（不論敵我）
+    if (overPiece.type === 'assassin' && overPiece.stealthed) {
+      continue;
+    }
+    
     // 方向向量（從 bard 指向第一個被跳過的棋）
     const dRow = firstJumpNode.row - piece.row;
     const dCol = firstJumpNode.col - piece.col;
