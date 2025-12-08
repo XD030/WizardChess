@@ -1388,14 +1388,15 @@ function findNextInDirection(
 }
 
 // ---- Bard ----
-// 吟遊詩人：單步 + 直線跳「一次」，不能踩己方潛行刺客，可以踩敵方潛行刺客（之後在 Game.tsx 處理交換＋現形）
+// 吟遊詩人：單步 + 直線跳「一次」，不能踩「這一回合操控方」的潛行刺客，
+// 但可以踩敵方潛行刺客（之後在 Game.tsx 處理交換＋現形）
 export function calculateBardMoves(
   piece: Piece,
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
   allNodes: NodePosition[],
-  controllerSide: Side,                  // ★ 新增：這一步是誰的回合
+  controllerSide: Side,
   holyLights: HolyLight[] = [],
   burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
@@ -1411,6 +1412,10 @@ export function calculateBardMoves(
   );
   if (nodeIdx === -1) return highlights;
 
+  // 這一回合「把吟遊詩人當作誰的隊友」
+  const friendlySide: Side =
+    piece.side === 'neutral' ? controllerSide : piece.side;
+
   // ===== 1. 單步相鄰移動 =====
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
@@ -1424,34 +1429,32 @@ export function calculateBardMoves(
 
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
 
-        if (targetPieceIdx === -1) {
+    if (targetPieceIdx === -1) {
       // 空格 → 可以走
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else {
       const targetPiece = pieces[targetPieceIdx];
 
-      // 🚫 不能踩「己方潛行刺客」
+      // 🚫 不能踩「己方潛行刺客」（friendlySide）
       if (
-        targetPiece &&
-        targetPiece.side === ownSide &&
         targetPiece.type === 'assassin' &&
-        targetPiece.stealthed
+        targetPiece.stealthed &&
+        targetPiece.side === friendlySide
       ) {
         continue;
       }
 
-      // ✅ 只能踩「敵方潛行刺客」（而且不能是 neutral）
+      // 只能踩「敵方潛行刺客」
       if (
         targetPiece.type === 'assassin' &&
-        targetPiece.side !== ownSide &&
-        targetPiece.side !== 'neutral' &&
-        targetPiece.stealthed
+        targetPiece.stealthed &&
+        targetPiece.side !== friendlySide
       ) {
         highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
       }
-      // 其他棋子（包含己方潛行刺客、任意可見棋子）都不能單步踩上去
+      // 其他棋子都不能單步踩上去
     }
-
+  }
 
   // ===== 2. 直線跳一次 =====
   for (const firstJumpIdx of adjacency[nodeIdx]) {
@@ -1500,7 +1503,7 @@ export function calculateBardMoves(
       landingNode.col,
     );
 
-        if (landingPieceIdx === -1) {
+    if (landingPieceIdx === -1) {
       // 落點是空格 → 可以跳到這格
       highlights.push({
         type: 'move',
@@ -1510,21 +1513,20 @@ export function calculateBardMoves(
     } else {
       const landingPiece = pieces[landingPieceIdx];
 
-      // 🚫 不能落在「己方潛行刺客」
+      // 🚫 不能落在己方潛行刺客
       if (
         landingPiece.type === 'assassin' &&
-        landingPiece.side === ownSide &&
-        landingPiece.stealthed
+        landingPiece.stealthed &&
+        landingPiece.side === friendlySide
       ) {
         continue;
       }
 
-      // ✅ 落點是「敵方潛行刺客」→ 可以跳上去，之後在 Game.tsx 做交換＋現形
+      // 特例：落點是敵方潛行刺客 → 可以跳上去
       if (
         landingPiece.type === 'assassin' &&
-        landingPiece.side !== ownSide &&
-        landingPiece.side !== 'neutral' &&
-        landingPiece.stealthed
+        landingPiece.stealthed &&
+        landingPiece.side !== friendlySide
       ) {
         highlights.push({
           type: 'move',
@@ -1532,8 +1534,9 @@ export function calculateBardMoves(
           col: landingNode.col,
         });
       }
-      // 其他情況都不能落在這格（包含己方潛行刺客、可見棋子）
+      // 其他情況都不能落在這格
     }
+  }
 
   return highlights;
 }
