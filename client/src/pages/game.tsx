@@ -239,6 +239,16 @@ export default function Game() {
   const [localSide, setLocalSide] = useState<
     "white" | "black" | "spectator"
   >("spectator");
+
+    const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
+    if (!piece) return false;
+    if (piece.type !== "bard") return false;
+    if (localSide === "spectator") return false;
+    if (piece.side !== localSide) return false;
+    return currentPlayer !== localSide;
+  };
+
+  
   const [seatError, setSeatError] = useState<string | null>(null);
 
   // 只有「不是觀戰」且「本機顏色 = 當前回合」且「尚未勝負且已開始」才能真的下子
@@ -281,15 +291,6 @@ function isOwnBardOutOfTurnForPiece(piece: Piece | null): boolean {
   return currentPlayer !== localSide;
 }
 
-    // 本機視角：判斷「己方吟遊詩人，在敵方回合時」→ 不顯示路徑
-  const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
-    if (!piece) return false;
-    if (piece.type !== "bard") return false;
-    if (isObserving) return false;             // 觀戰模式照樣可以看
-    if (localSide === "spectator") return false;
-    if (piece.side !== localSide) return false; // 只管己方吟遊詩人
-    return currentPlayer !== localSide;         // 輪到別人回合才擋
-  };
 
 
   // ====== 歷史回放：找出某 snapshot 相對於前一個 snapshot 是哪幾顆棋移動 ======
