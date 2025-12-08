@@ -1357,90 +1357,117 @@ export default function Game() {
     const clickedPieceIdx = getPieceAt(effectivePieces, row, col);
     let movedAssassinFinal: Piece | null = null;
 
-    // ---- 若正在等吟遊詩人第二段換位 ----
-    if (bardNeedsSwap && !isObserving) {
-      if (clickedPieceIdx !== -1) {
-        const swapTarget = pieces[clickedPieceIdx];
+   // ---- 若正在等吟遊詩人第二段換位 ----
+  if (bardNeedsSwap && !isObserving) {
+  if (clickedPieceIdx !== -1) {
+    const swapTarget = pieces[clickedPieceIdx];
 
-        if (
-          swapTarget.side === currentPlayer &&
-          swapTarget.type !== "bard" &&
-          swapTarget.type !== "dragon"
-        ) {
-          const newPieces = [...pieces];
-          const bard = newPieces[bardNeedsSwap.bardIndex];
+    if (
+      swapTarget.side === currentPlayer &&
+      swapTarget.type !== "bard" &&
+      swapTarget.type !== "dragon"
+    ) {
+      const newPieces = [...pieces];
+      const bard = newPieces[bardNeedsSwap.bardIndex];
 
-          // 吟遊詩人移到被選目標的位置
-          const movedBard: Piece = {
-            ...bard,
-            row: swapTarget.row,
-            col: swapTarget.col,
-          };
+      // 吟遊詩人本身不是刺客，不會受 updateAssassinStealth 影響
+      const movedBard = {
+        ...bard,
+        row: swapTarget.row,
+        col: swapTarget.col,
+      };
 
-          // 目標棋子換到原本吟遊詩人的位置
-          let swappedPiece: Piece = {
-            ...swapTarget,
-            row: bardNeedsSwap.bardRow,
-            col: bardNeedsSwap.bardCol,
-          };
+      let swappedPiece = {
+        ...swapTarget,
+        row: bardNeedsSwap.bardRow,
+        col: bardNeedsSwap.bardCol,
+      };
 
-          // 若被換的是刺客 → 強制現形
-          if (swappedPiece.type === "assassin") {
-            swappedPiece = { ...swappedPiece, stealthed: false };
+      // 如果被換的是刺客 → 強制現形
+      if (swappedPiece.type === "assassin") {
+        swappedPiece = { ...swappedPiece, stealthed: false };
+      }
+
+      newPieces[bardNeedsSwap.bardIndex] = movedBard;
+      newPieces[clickedPieceIdx] = swappedPiece;
+
+      // ===== 新增：若交換後任一顆是聖騎士，揭露其守護範圍內的潛行刺客 =====
+      const paladinIndicesToCheck: number[] = [];
+      if (movedBard.type === "paladin") {
+        paladinIndicesToCheck.push(bardNeedsSwap.bardIndex);
+      }
+      if (swappedPiece.type === "paladin") {
+        paladinIndicesToCheck.push(clickedPieceIdx);
+      }
+
+      if (paladinIndicesToCheck.length > 0) {
+        for (const pi of paladinIndicesToCheck) {
+          const pal = newPieces[pi];
+          const zones = calculatePaladinProtectionZone(
+            pal,
+            newPieces,
+            adjacency,
+            allNodes
+          );
+          const revealedPieces = revealAssassinsInSpecificZone(
+            newPieces,
+            zones,
+            pal.side
+          );
+          // apply revealed results
+          for (let i = 0; i < newPieces.length; i++) {
+            newPieces[i] = revealedPieces[i];
           }
-
-          newPieces[bardNeedsSwap.bardIndex] = movedBard;
-          newPieces[clickedPieceIdx] = swappedPiece;
-
-          const bardCoord = getNodeCoordinate(
-            bardNeedsSwap.bardRow,
-            bardNeedsSwap.bardCol
-          );
-          const swapCoord = getNodeCoordinate(
-            swapTarget.row,
-            swapTarget.col
-          );
-          const moveDesc = `${PIECE_CHINESE["bard"]} ${bardCoord} ⇄ ${
-            PIECE_CHINESE[swapTarget.type]
-          } ${swapCoord}`;
-
-          const record = makeMoveRecord(moveDesc, null);
-          const newMoveHistory = [record, ...moveHistory];
-
-          const result = checkWizardWin(newPieces);
-          const nextPlayer: PlayerSide =
-            currentPlayer === "white" ? "black" : "white";
-
-          const remainingBurnMarks = burnMarks.filter(
-            (mark) => mark.createdBy !== nextPlayer
-          );
-          const remainingHolyLights = holyLights.filter(
-            (light) => light.createdBy !== nextPlayer
-          );
-
-          const syncState: SyncedState = {
-            pieces: newPieces,
-            currentPlayer: result ? currentPlayer : nextPlayer,
-            moveHistory: newMoveHistory,
-            burnMarks: remainingBurnMarks,
-            holyLights: remainingHolyLights,
-            capturedPieces,
-            winner: result ?? winner,
-            seats,
-            startingPlayer,
-            startingMode,
-            ready,
-            gameStarted,
-            pendingGuard: null,
-          };
-
-          setBardNeedsSwap(null);
-          applySyncedState(syncState);
-          broadcastState(syncState);
         }
       }
-      return;
+      // ===== 新增結束 =====
+
+      const bardCoord = getNodeCoordinate(
+        bardNeedsSwap.bardRow,
+        bardNeedsSwap.bardCol
+      );
+      const swapCoord = getNodeCoordinate(swapTarget.row, swapTarget.col);
+      const moveDesc = `${PIECE_CHINESE["bard"]} ${bardCoord} ⇄ ${
+        PIECE_CHINESE[swapTarget.type]
+      } ${swapCoord}`;
+
+      const record = makeMoveRecord(moveDesc, null);
+      const newMoveHistory = [record, ...moveHistory];
+
+      const result = checkWizardWin(newPieces);
+      const nextPlayer: PlayerSide =
+        currentPlayer === "white" ? "black" : "white";
+
+      const remainingBurnMarks = burnMarks.filter(
+        (mark) => mark.createdBy !== nextPlayer
+      );
+      const remainingHolyLights = holyLights.filter(
+        (light) => light.createdBy !== nextPlayer
+      );
+
+      const syncState: SyncedState = {
+        pieces: newPieces,
+        currentPlayer: result ? currentPlayer : nextPlayer,
+        moveHistory: newMoveHistory,
+        burnMarks: remainingBurnMarks,
+        holyLights: remainingHolyLights,
+        capturedPieces,
+        winner: result ?? winner,
+        seats,
+        startingPlayer,
+        startingMode,
+        ready,
+        gameStarted,
+        pendingGuard: null,
+      };
+
+      setBardNeedsSwap(null);
+      applySyncedState(syncState);
+      broadcastState(syncState);
     }
+  }
+  return;
+}
 
     // ====== 還沒選棋子：嘗試選取一顆 ======
     if (selectedPieceIndex === -1) {
