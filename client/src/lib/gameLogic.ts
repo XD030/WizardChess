@@ -235,10 +235,18 @@ export function hasEnemyHolyLight(
   row: number,
   col: number,
   pieceSide: Side,
-  holyLights: HolyLight[],
+  holyLights: HolyLight[] | HolyLight | undefined,
 ): boolean {
-  return holyLights.some(
+  // 確保一定是陣列
+  const list: HolyLight[] = Array.isArray(holyLights)
+    ? holyLights
+    : holyLights
+    ? [holyLights]
+    : [];
+
+  return list.some(
     (light) =>
+      light &&
       light.row === row &&
       light.col === col &&
       light.createdBy !== pieceSide &&
@@ -246,26 +254,35 @@ export function hasEnemyHolyLight(
   );
 }
 
+
 export function canOccupyNode(
   row: number,
   col: number,
   pieceSide: Side,
-  holyLights: HolyLight[],
-  burnMarks: { row: number; col: number }[] = [],
+  holyLights: HolyLight[] | HolyLight | undefined,
+  burnMarks: { row: number; col: number }[] | { row: number; col: number } | undefined = [],
 ): boolean {
-  const hasBurnMark = burnMarks.some(
-    (b) => b.row === row && b.col === col,
+  const burnList: { row: number; col: number }[] = Array.isArray(burnMarks)
+    ? burnMarks
+    : burnMarks
+    ? [burnMarks]
+    : [];
+
+  const hasBurnMark = burnList.some(
+    (b) => b && b.row === row && b.col === col,
   );
   if (hasBurnMark) {
     console.log(
       `🔥 Burn mark blocking position (${row}, ${col}). BurnMarks:`,
-      burnMarks,
+      burnList,
     );
     return false;
   }
 
+  // 這裡會呼叫上面的防呆版 hasEnemyHolyLight
   return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
 }
+
 
 export function filterHighlightsForHolyLight(
   piece: Piece,
