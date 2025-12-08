@@ -1388,15 +1388,14 @@ function findNextInDirection(
 }
 
 // ---- Bard ----
-// 吟遊詩人：單步 + 直線跳「一次」，不能踩「這一回合操控方」的潛行刺客，
-// 但可以踩敵方潛行刺客（之後在 Game.tsx 處理交換＋現形）
+// 吟遊詩人：單步 + 直線跳「一次」，不能踩己方潛行刺客，
+// 可以踩敵方潛行刺客（之後在 Game.tsx 處理交換＋現形）
 export function calculateBardMoves(
   piece: Piece,
   pieceIndex: number,
   pieces: Piece[],
   adjacency: number[][],
   allNodes: NodePosition[],
-  controllerSide: Side,                 // ★ 新增：這一回合的操控方（white/black）
   holyLights: HolyLight[] = [],
   burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
@@ -1412,15 +1411,13 @@ export function calculateBardMoves(
   );
   if (nodeIdx === -1) return highlights;
 
-  // 這一回合「把吟遊詩人當作誰的隊友」
-  const friendlySide: Side =
-    piece.side === 'neutral' ? controllerSide : piece.side;
+  const friendlySide: Side = piece.side;
 
   // ===== 1. 單步相鄰移動 =====
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
-    // 聖光 / 灼痕擋住就不能去（用 friendlySide）
+    // 聖光 / 灼痕擋住就不能去
     if (
       !canOccupyNode(adjNode.row, adjNode.col, friendlySide, holyLights, burnMarks)
     ) {
@@ -1435,7 +1432,7 @@ export function calculateBardMoves(
     } else {
       const targetPiece = pieces[targetPieceIdx];
 
-      // 🚫 不能踩「己方潛行刺客」（friendlySide）
+      // 🚫 不能踩「己方潛行刺客」
       if (
         targetPiece.type === 'assassin' &&
         targetPiece.stealthed &&
@@ -1492,7 +1489,7 @@ export function calculateBardMoves(
       !canOccupyNode(
         landingNode.row,
         landingNode.col,
-        friendlySide,             // 用 friendlySide
+        friendlySide,
         holyLights,
         burnMarks,
       )
