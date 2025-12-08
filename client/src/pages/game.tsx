@@ -1624,6 +1624,7 @@ export default function Game() {
                 adjacency,
                 allNodes,
                 currentPlayer,
+                boardState.currentPlayer,   // ★ 這一回合的操控方
                 holyLights,
                 burnMarks
               );
@@ -1794,6 +1795,7 @@ export default function Game() {
                 adjacency,
                 allNodes,
                 currentPlayer,
+                boardState.currentPlayer,   // ★ 這一回合的操控方
                 holyLights,
                 burnMarks
               );
