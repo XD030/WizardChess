@@ -1616,14 +1616,12 @@ export default function Game() {
                 setPieces(revealedPieces);
               }
             } else if (piece.type === "bard") {
-              // ★ 修正 1：這裡補上 currentPlayer 當作 controllerSide
               const moves = calculateBardMoves(
                 piece,
                 clickedPieceIdx,
                 effectivePieces,
                 adjacency,
                 allNodes,
-                currentPlayer,
                 holyLights,
                 burnMarks
               );
@@ -1785,15 +1783,13 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
-            } else if (piece.type === "bard") {
-              // ★ 修正 2：這裡也同樣使用 currentPlayer 當 controllerSide
+           } else if (piece.type === "bard") {
               const moves = calculateBardMoves(
                 piece,
                 clickedPieceIdx,
                 effectivePieces,
                 adjacency,
                 allNodes,
-                currentPlayer,
                 holyLights,
                 burnMarks
               );
