@@ -114,11 +114,12 @@ export default function PieceInfoPanel({ piece }: PieceInfoPanelProps) {
             className="object-contain"
             data-testid="text-piece-emoji"
             style={{
-              maxWidth: "128px",
-              maxHeight: "128px",
+              width: "auto",
+              height: "auto",
               filter: "none",
             }}
           />
+
 
 
           <div>
