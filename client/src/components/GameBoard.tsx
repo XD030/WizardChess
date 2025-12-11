@@ -82,8 +82,9 @@ const BOARD_THEME = {
 
   // ==== 線條與節點 ====
   linkLine: 'rgba(255, 255, 255, 0.15)',
-  nodeNormal: 'rgba(255, 255, 255, 0.35)',
-  nodeHover: 'rgba(255, 240, 120, 0.95)',
+  nodeNormal: 'rgba(255, 255, 255, 0.75)',   // 提升透明度讓節點非常明顯
+  nodeHover:  'rgba(255, 240, 150, 1.0)',    // 柔和金光，落點非常清楚
+
 
   // ==== 座標文字 ====
   labelText: 'rgba(255, 255, 255, 0.85)',
