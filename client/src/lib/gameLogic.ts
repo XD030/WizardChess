@@ -109,7 +109,7 @@ export const PIECE_DESCRIPTIONS: Record<
 export const N = 8;
 export const STEP = 40;
 export const VSTEP = STEP * 0.5;
-export const NODE_RADIUS = 8;
+export const NODE_RADIUS = 5;
 
 export function buildRows(
   W: number,
