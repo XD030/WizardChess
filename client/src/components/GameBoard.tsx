@@ -73,25 +73,17 @@ const BOARD_THEME = {
   bgInner: '#0c0c0e',
   bgOuter: '#050506',
 
-  // ==== 三角形填色（使用你給的棋盤顏色） ====
-  triDark: 'rgba(134, 160, 106, 0.95)',  // 深綠 #86a06a
-  triLight: 'rgba(240, 220, 179, 0.95)', // 奶油白 #f0dcb3
-
-  // ==== 邊框 ==== 
+  // ==== 邊框（保留輪廓線） ====
   triBorder: 'rgba(255, 255, 255, 0.35)',
-  // ==== 線條與節點 ==== 
-  linkLine: 'rgba(255, 255, 255, 0.15)',
-  nodeNormal: 'rgba(255, 255, 255, 0.75)',   // 提升透明度讓節點非常明顯
-  nodeHover:  'rgba(255, 240, 150, 1.0)',    // 柔和金光，落點非常清楚
 
+  // ==== 線條與節點 ====
+  linkLine: 'rgba(255, 255, 255, 0.15)',
+  nodeNormal: 'rgba(255, 255, 255, 0.75)', // 提升透明度讓節點非常明顯
+  nodeHover: 'rgba(255, 240, 150, 1.0)', // 柔和金光，落點非常清楚
 
   // ==== 座標文字 ====
   labelText: 'rgba(255, 255, 255, 0.85)',
 };
-
-
-
-
 
 // 這個視角是否看得到這顆棋
 function isPieceVisible(
@@ -307,7 +299,10 @@ export default function GameBoard({
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // --- 棋盤三角形 ---
+    // --- 棋盤三角形（已移除填色，只保留輪廓線） ---
+    ctx.strokeStyle = BOARD_THEME.triBorder;
+    ctx.lineWidth = 1.5;
+
     for (let r = 0; r < rows.length - 1; r++) {
       const rowA = rows[r];
       const rowB = rows[r + 1];
@@ -324,10 +319,6 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = BOARD_THEME.triDark;
-          ctx.fill();
-          ctx.strokeStyle = BOARD_THEME.triBorder;
-          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
 
@@ -341,10 +332,6 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = BOARD_THEME.triLight;
-          ctx.fill();
-          ctx.strokeStyle = BOARD_THEME.triBorder;
-          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
       } else if (rowA.length === rowB.length + 1) {
@@ -359,10 +346,6 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = BOARD_THEME.triLight;
-          ctx.fill();
-          ctx.strokeStyle = BOARD_THEME.triBorder;
-          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
 
@@ -376,10 +359,6 @@ export default function GameBoard({
           ctx.lineTo(p2.x, p2.y);
           ctx.lineTo(p3.x, p3.y);
           ctx.closePath();
-          ctx.fillStyle = BOARD_THEME.triDark;
-          ctx.fill();
-          ctx.strokeStyle = BOARD_THEME.triBorder;
-          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
       }
