@@ -70,8 +70,8 @@ const PIECE_SIZE = 40;
 
 const BOARD_THEME = {
   // ==== 背景（我保持偏深，讓格線與棋子更凸顯） ====
-  bgInner: '#0c0c0e',
-  bgOuter: '#050506',
+  bgInner: '#2a2622',
+  bgOuter: '#1a1714',
 
   // ==== 邊框（保留輪廓線） ====
   triBorder: 'rgba(255, 255, 255, 0.35)',
