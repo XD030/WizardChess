@@ -3,6 +3,15 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
+// vite.config.ts
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  build: {
+    sourcemap: true,
+  },
+});
+
 
 // ⭐ 這三行取代 __dirname，完全符合 ESM 規範
 const __filename = fileURLToPath(import.meta.url);
