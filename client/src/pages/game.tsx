@@ -1980,124 +1980,142 @@ export default function Game() {
         }
       }
     } else if (highlight.type === "swap") {
-      // ✅ 只允許：學徒 <-> 巫師（同陣營）
-      // 且每個 apprentice 只能用一次（不論誰發起）
-      const isApprenticeWizardSwap =
-        (selectedPiece.type === "apprentice" && targetPiece.type === "wizard") ||
-        (selectedPiece.type === "wizard" && targetPiece.type === "apprentice");
-      
-      if (!isApprenticeWizardSwap) {
-        // 不是這對組合，一律不給換
-        setSelectedPieceIndex(-1);
-        setHighlights([]);
-        setDragonPathNodes([]);
-        setProtectionZones([]);
-        return;
-      }
-      
-      // 同陣營才行
-      if (selectedPiece.side !== targetPiece.side) {
-        setSelectedPieceIndex(-1);
-        setHighlights([]);
-        setDragonPathNodes([]);
-        setProtectionZones([]);
-        return;
-      }
-      
-      // 找出那顆 apprentice（不管是誰點的）
-      const apprentice =
-        selectedPiece.type === "apprentice" ? selectedPiece : targetPiece;
-      
-      if (apprentice.swapUsed) {
-        // 已用過就不能再換
-        setSelectedPieceIndex(-1);
-        setHighlights([]);
-        setDragonPathNodes([]);
-        setProtectionZones([]);
-        return;
-      }
+  const targetIdx = clickedPieceIdx!;
+  const targetPiece = pieces[targetIdx];
 
-      const targetIdx = clickedPieceIdx!;
-      const targetPiece = pieces[targetIdx];
+  // =========================
+  // ✅ 學徒交換規則（新）
+  // 每個 apprentice 只能和「己方 wizard」交換 1 次
+  // 注意：wizard 也能主動點 apprentice 交換，但一樣算該 apprentice 用掉一次
+  // =========================
 
-      // 先照原本規則算刺客黑白格移動
-      let movedPiece = updateAssassinStealth(
-        { ...selectedPiece, row, col },
-        selectedPiece.row,
-        selectedPiece.col,
-        row,
-        col
+  const isWizardApprenticeSwap =
+    (selectedPiece.type === "wizard" &&
+      targetPiece.type === "apprentice" &&
+      targetPiece.side === selectedPiece.side) ||
+    (selectedPiece.type === "apprentice" &&
+      targetPiece.type === "wizard" &&
+      targetPiece.side === selectedPiece.side);
+
+  if (isWizardApprenticeSwap) {
+    // 找出 apprentice 那顆（不管是被點的還是選到的）
+    const apprenticeIdx =
+      selectedPiece.type === "apprentice" ? selectedPieceIndex : targetIdx;
+    const wizardIdx =
+      selectedPiece.type === "wizard" ? selectedPieceIndex : targetIdx;
+
+    const apprentice = pieces[apprenticeIdx];
+    const wizard = pieces[wizardIdx];
+
+    // 若已用過交換 -> 直接取消這次操作
+    if (apprentice.swapUsed) {
+      setSelectedPieceIndex(-1);
+      setHighlights([]);
+      setDragonPathNodes([]);
+      setProtectionZones([]);
+      return;
+    }
+
+    // 交換位置
+    const movedWizard = {
+      ...wizard,
+      row: apprentice.row,
+      col: apprentice.col,
+    };
+
+    const movedApprentice = {
+      ...apprentice,
+      row: wizard.row,
+      col: wizard.col,
+      swapUsed: true, // ★ 用掉一次
+    };
+
+    // 刺客交換立即現形（這裡不會遇到，但保留一致性）
+    // if (movedWizard.type === "assassin") movedWizard.stealthed = false;
+    // if (movedApprentice.type === "assassin") movedApprentice.stealthed = false;
+
+    newPieces[wizardIdx] = movedWizard;
+    newPieces[apprenticeIdx] = movedApprentice;
+
+    moveDesc = `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⇄ ${PIECE_CHINESE["apprentice"]} ${toCoord}`;
+
+  } else {
+    // =========================
+    // 原本的「通用 swap」：給吟遊詩人第二段換位用
+    // =========================
+
+    // 先照原本規則算刺客黑白格移動
+    let movedPiece = updateAssassinStealth(
+      { ...selectedPiece, row, col },
+      selectedPiece.row,
+      selectedPiece.col,
+      row,
+      col
+    );
+    let swappedPiece = updateAssassinStealth(
+      {
+        ...targetPiece,
+        row: selectedPiece.row,
+        col: selectedPiece.col,
+      },
+      targetPiece.row,
+      targetPiece.col,
+      selectedPiece.row,
+      selectedPiece.col
+    );
+
+    // ⭐ 規則：只要是「交換位置」，刺客一律現形
+    if (movedPiece.type === "assassin") {
+      movedPiece = { ...movedPiece, stealthed: false };
+      movedAssassinFinal = movedPiece;
+    }
+    if (swappedPiece.type === "assassin") {
+      swappedPiece = { ...swappedPiece, stealthed: false };
+    }
+
+    newPieces[selectedPieceIndex] = movedPiece;
+    newPieces[targetIdx] = swappedPiece;
+
+    if (movedPiece.type === "paladin") {
+      const zones = calculatePaladinProtectionZone(
+        movedPiece,
+        newPieces,
+        adjacency,
+        allNodes
       );
-      let swappedPiece = updateAssassinStealth(
-        {
-          ...targetPiece,
-          row: selectedPiece.row,
-          col: selectedPiece.col,
-        },
-        targetPiece.row,
-        targetPiece.col,
-        selectedPiece.row,
-        selectedPiece.col
+      const revealedPieces = revealAssassinsInSpecificZone(
+        newPieces,
+        zones,
+        movedPiece.side
       );
+      for (let i = 0; i < newPieces.length; i++) {
+        newPieces[i] = revealedPieces[i];
+      }
+    }
 
-      // ⭐ 規則：只要是「交換位置」，刺客一律現形
-      if (movedPiece.type === "assassin") {
-        movedPiece = { ...movedPiece, stealthed: false };
-        movedAssassinFinal = movedPiece;
+    if (swappedPiece.type === "paladin") {
+      const zones = calculatePaladinProtectionZone(
+        swappedPiece,
+        newPieces,
+        adjacency,
+        allNodes
+      );
+      const revealedPieces = revealAssassinsInSpecificZone(
+        newPieces,
+        zones,
+        swappedPiece.side
+      );
+      for (let i = 0; i < newPieces.length; i++) {
+        newPieces[i] = revealedPieces[i];
       }
-      if (swappedPiece.type === "assassin") {
-        swappedPiece = { ...swappedPiece, stealthed: false };
-      }
+    }
 
-      // ✅ 一旦發生 apprentice<->wizard swap：apprentice 的 swapUsed 變 true
-      if (movedPiece.type === "apprentice") {
-        movedPiece = { ...movedPiece, swapUsed: true };
-      }
-      if (swappedPiece.type === "apprentice") {
-        swappedPiece = { ...swappedPiece, swapUsed: true };
-      }
-      
-      newPieces[selectedPieceIndex] = movedPiece;
-      newPieces[targetIdx] = swappedPiece;
-
-      if (movedPiece.type === "paladin") {
-        const zones = calculatePaladinProtectionZone(
-          movedPiece,
-          newPieces,
-          adjacency,
-          allNodes
-        );
-        const revealedPieces = revealAssassinsInSpecificZone(
-          newPieces,
-          zones,
-          movedPiece.side
-        );
-        for (let i = 0; i < newPieces.length; i++) {
-          newPieces[i] = revealedPieces[i];
-        }
-      }
-
-      if (swappedPiece.type === "paladin") {
-        const zones = calculatePaladinProtectionZone(
-          swappedPiece,
-          newPieces,
-          adjacency,
-          allNodes
-        );
-        const revealedPieces = revealAssassinsInSpecificZone(
-          newPieces,
-          zones,
-          swappedPiece.side
-        );
-        for (let i = 0; i < newPieces.length; i++) {
-          newPieces[i] = revealedPieces[i];
-        }
-      }
-
-      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${
-        PIECE_CHINESE[targetPiece.type]
-      } ${toCoord}`;
-    } else if (highlight.type === "attack") {
+    moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${
+      PIECE_CHINESE[targetPiece.type]
+    } ${toCoord}`;
+  }
+}
+ else if (highlight.type === "attack") {
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
