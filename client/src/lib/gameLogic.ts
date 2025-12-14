@@ -41,13 +41,8 @@ export const PIECE_DESCRIPTIONS: Record<
   },
   apprentice: {
     name: '《學徒》',
-    move: [
-      '僅能朝敵方方向，沿節點連線移動 1 節點',
-      '能與己方巫師交換位置 1 次',
-    ],
-    ability: [
-      '導體：導體間最多能空 1 空格連接（需為一直線），不能有其他棋子，能轉換方向',
-    ],
+    move: ['僅能朝敵方方向，沿節點連線移動 1 節點', '能與己方巫師交換位置 1 次'],
+    ability: ['導體：導體間最多能空 1 空格連接（需為一直線），不能有其他棋子，能轉換方向'],
   },
   dragon: {
     name: '《龍》',
@@ -91,11 +86,7 @@ export const PIECE_DESCRIPTIONS: Record<
   },
   bard: {
     name: '《吟遊詩人》',
-    move: [
-      '沿節點連線移動 1 節點',
-      '跳棋移動方式直線跳躍 1 次',
-      '移動後必須跟己方棋子交換位置，龍跟巫師除外',
-    ],
+    move: ['沿節點連線移動 1 節點', '跳棋移動方式直線跳躍 1 次', '移動後必須跟己方棋子交換位置，龍跟巫師除外'],
     ability: [
       '導體：導體間最多能空 1 空格連接（需為一直線），不能有其他棋子，能轉換方向',
       '黃金鎮魂曲：位於棋盤正中央，當第 1 枚棋子被擊殺時才可使用，未被激活時該點無法停留或穿越',
@@ -105,10 +96,7 @@ export const PIECE_DESCRIPTIONS: Record<
   },
   griffin: {
     name: '《獅鷲》',
-    move: [
-      '或者沿對角線方向前後移動 1 節點。',
-      '沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子',
-    ],
+    move: ['或者沿對角線方向前後移動 1 節點。', '沿橫向直線方向前進，距離不限，不可轉換方向或穿越其他棋子'],
     ability: ['無'],
   },
 };
@@ -119,10 +107,7 @@ export const STEP = 40;
 export const VSTEP = STEP * 0.5;
 export const NODE_RADIUS = 5;
 
-export function buildRows(
-  W: number,
-  H: number,
-): { x: number; y: number }[][] {
+export function buildRows(W: number, H: number): { x: number; y: number }[][] {
   const CX = W / 2;
   const CY = H / 2;
   const rows: { x: number; y: number }[][] = [];
@@ -144,9 +129,7 @@ export function buildRows(
   return rows;
 }
 
-export function buildAllNodes(
-  rows: { x: number; y: number }[][],
-): NodePosition[] {
+export function buildAllNodes(rows: { x: number; y: number }[][]): NodePosition[] {
   const allNodes: NodePosition[] = [];
   for (let ri = 0; ri < rows.length; ri++) {
     for (let ci = 0; ci < rows[ri].length; ci++) {
@@ -173,7 +156,6 @@ export function getNodeCoordinate(row: number, col: number): string {
 
   const file = String.fromCharCode(65 + x);
   const rank = y + 1;
-
   return `${file}${rank}`;
 }
 
@@ -182,8 +164,7 @@ export function isBlackTriangle(row: number, col: number): boolean {
   return (row + col) % 2 === 1;
 }
 
-// ---- Assassin stealth ----
-
+// ---- Rotated coordinate helper (single source of truth) ----
 function getRotatedCoords(row: number, col: number): { x: number; y: number } {
   if (row <= 8) {
     const x = col;
@@ -197,6 +178,7 @@ function getRotatedCoords(row: number, col: number): { x: number; y: number } {
   }
 }
 
+// ---- Assassin stealth ----
 export function updateAssassinStealth(
   piece: Piece,
   fromRow: number,
@@ -214,38 +196,24 @@ export function updateAssassinStealth(
   const deltaSum = deltaX + deltaY;
 
   if (piece.side === 'white') {
-    if (deltaSum === -1) {
-      return { ...piece, stealthed: true };
-    }
-    if (deltaSum === 1) {
-      return { ...piece, stealthed: false };
-    }
+    if (deltaSum === -1) return { ...piece, stealthed: true };
+    if (deltaSum === 1) return { ...piece, stealthed: false };
   } else {
-    if (deltaSum === 1) {
-      return { ...piece, stealthed: true };
-    }
-    if (deltaSum === -1) {
-      return { ...piece, stealthed: false };
-    }
+    if (deltaSum === 1) return { ...piece, stealthed: true };
+    if (deltaSum === -1) return { ...piece, stealthed: false };
   }
 
   return piece;
 }
 
 // ---- Holy light / burn mark helpers ----
-
 export function hasEnemyHolyLight(
   row: number,
   col: number,
   pieceSide: Side,
   holyLights: HolyLight[] | HolyLight | undefined,
 ): boolean {
-  const list: HolyLight[] = Array.isArray(holyLights)
-    ? holyLights
-    : holyLights
-      ? [holyLights]
-      : [];
-
+  const list: HolyLight[] = Array.isArray(holyLights) ? holyLights : holyLights ? [holyLights] : [];
   return list.some(
     (light) =>
       light &&
@@ -261,10 +229,7 @@ export function canOccupyNode(
   col: number,
   pieceSide: Side,
   holyLights: HolyLight[] | HolyLight | undefined,
-  burnMarks:
-    | { row: number; col: number }[]
-    | { row: number; col: number }
-    | undefined = [],
+  burnMarks: { row: number; col: number }[] | { row: number; col: number } | undefined = [],
 ): boolean {
   const burnList: { row: number; col: number }[] = Array.isArray(burnMarks)
     ? burnMarks
@@ -284,13 +249,10 @@ export function filterHighlightsForHolyLight(
   holyLights: HolyLight[],
   burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
-  return highlights.filter((h) =>
-    canOccupyNode(h.row, h.col, piece.side, holyLights, burnMarks),
-  );
+  return highlights.filter((h) => canOccupyNode(h.row, h.col, piece.side, holyLights, burnMarks));
 }
 
 // ---- Assassin reveal in paladin zone ----
-
 export function revealAssassinsInSpecificZone(
   pieces: Piece[],
   protectionZone: { row: number; col: number }[],
@@ -300,19 +262,14 @@ export function revealAssassinsInSpecificZone(
 
   return pieces.map((piece) => {
     if (piece.type === 'assassin' && piece.stealthed && piece.side === enemySide) {
-      const isInZone = protectionZone.some(
-        (zone) => zone.row === piece.row && zone.col === piece.col,
-      );
-      if (isInZone) {
-        return { ...piece, stealthed: false };
-      }
+      const isInZone = protectionZone.some((zone) => zone.row === piece.row && zone.col === piece.col);
+      if (isInZone) return { ...piece, stealthed: false };
     }
     return piece;
   });
 }
 
 // ---- Adjacency ----
-
 export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
   const rcToIndex: Record<string, number> = {};
   let idx = 0;
@@ -362,7 +319,6 @@ export function buildAdjacency(rows: { x: number; y: number }[][]): number[][] {
 }
 
 // ---- Initial pieces ----
-
 export function getInitialPieces(): Piece[] {
   const whiteBasePieces: Pick<Piece, 'type' | 'row' | 'col'>[] = [
     { type: 'wizard', row: 16, col: 0 },
@@ -389,12 +345,8 @@ export function getInitialPieces(): Piece[] {
   for (const p of whiteBasePieces) {
     const piece: Piece = { ...p, side: 'white' };
 
-    if (p.type === 'assassin') {
-      piece.stealthed = false;
-    }
-    if (p.type === 'bard') {
-      piece.activated = false;
-    }
+    if (p.type === 'assassin') piece.stealthed = false;
+    if (p.type === 'bard') piece.activated = false;
 
     // ✅ apprentice：一開始都還沒用過交換
     if (p.type === 'apprentice') {
@@ -413,12 +365,8 @@ export function getInitialPieces(): Piece[] {
       col: p.col,
     };
 
-    if (p.type === 'assassin') {
-      piece.stealthed = false;
-    }
-    if (p.type === 'bard') {
-      piece.activated = false;
-    }
+    if (p.type === 'assassin') piece.stealthed = false;
+    if (p.type === 'bard') piece.activated = false;
 
     // ✅ apprentice：一開始都還沒用過交換
     if (p.type === 'apprentice') {
@@ -441,7 +389,6 @@ export function getInitialPieces(): Piece[] {
 }
 
 // ---- Piece lookup ----
-
 export function getPieceAt(pieces: Piece[], row: number, col: number): number {
   return pieces.findIndex((p) => p.row === row && p.col === col);
 }
@@ -455,12 +402,7 @@ export function getVisiblePieceAt(
 ): number {
   return pieces.findIndex((p) => {
     if (p.row !== row || p.col !== col) return false;
-    if (
-      p.type === 'assassin' &&
-      p.stealthed &&
-      p.side !== currentPieceSide &&
-      p.side !== 'neutral'
-    ) {
+    if (p.type === 'assassin' && p.stealthed && p.side !== currentPieceSide && p.side !== 'neutral') {
       return false;
     }
     return true;
@@ -468,7 +410,6 @@ export function getVisiblePieceAt(
 }
 
 // ---- Wizard ----
-
 export function calculateWizardMoves(
   piece: Piece,
   pieceIndex: number,
@@ -486,10 +427,7 @@ export function calculateWizardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
-    if (
-      targetPieceIdx === -1 &&
-      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
-    ) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     }
   }
@@ -503,7 +441,7 @@ export function calculateWizardMoves(
     }
   }
 
-  // Line-of-sight attacks（你原本的邏輯保留）
+  // Line-of-sight attacks（保留原本 BFS 導線）
   const visited = new Set<number>();
   const queue: { nodeIdx: number; path: number[] }[] = [{ nodeIdx, path: [nodeIdx] }];
   visited.add(nodeIdx);
@@ -521,18 +459,11 @@ export function calculateWizardMoves(
 
       const targetPiece = pieces[targetPieceIdx];
 
-      if (
-        targetPiece.side !== piece.side &&
-        targetPiece.side !== 'neutral' &&
-        targetPiece.type !== 'bard'
-      ) {
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
         if (!hasEnemyHolyLight(adjNode.row, adjNode.col, piece.side, holyLights)) {
           highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
         }
-      } else if (
-        targetPiece.side === piece.side &&
-        (targetPiece.type === 'apprentice' || targetPiece.type === 'bard')
-      ) {
+      } else if (targetPiece.side === piece.side && (targetPiece.type === 'apprentice' || targetPiece.type === 'bard')) {
         visited.add(adjIdx);
         queue.push({ nodeIdx: adjIdx, path: [...current.path, adjIdx] });
       }
@@ -543,7 +474,6 @@ export function calculateWizardMoves(
 }
 
 // ---- Apprentice ----
-
 export function calculateApprenticeMoves(
   piece: Piece,
   pieceIndex: number,
@@ -557,20 +487,16 @@ export function calculateApprenticeMoves(
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   if (nodeIdx === -1) return highlights;
 
-  // forward 1-step moves / attack（保留你原本的）
+  // forward 1-step moves / attack
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
-    const isValidDirection =
-      piece.side === 'white' ? adjNode.row < piece.row : adjNode.row > piece.row;
+    const isValidDirection = piece.side === 'white' ? adjNode.row < piece.row : adjNode.row > piece.row;
     if (!isValidDirection) continue;
 
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    if (
-      targetPieceIdx === -1 &&
-      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
-    ) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -585,12 +511,10 @@ export function calculateApprenticeMoves(
     }
   }
 
-  // ✅ 交換能力（新規則）
-  // 每個學徒只能與己方巫師交換位置 1 次
+  // ✅ 交換能力（新規則）：每個學徒只能與己方巫師交換位置 1 次
   if (!piece.swapUsed) {
     const wizard = pieces.find((p) => p.type === 'wizard' && p.side === piece.side);
     if (wizard) {
-      // 交換 highlight 是點「巫師那格」
       highlights.push({ type: 'swap', row: wizard.row, col: wizard.col });
     }
   }
@@ -599,14 +523,6 @@ export function calculateApprenticeMoves(
 }
 
 // ---- Ranger ----
-//（以下全部維持你原本貼的內容，我不改動）
-// ⚠️ 你原檔很長，我後面維持不動，照原本貼的即可。
-
-// ==========================
-// 下面開始：原本內容 그대로
-// （我只省略中段註解，程式本體照你貼的）
-// ==========================
-
 export function calculateRangerMoves(
   piece: Piece,
   pieceIndex: number,
@@ -624,10 +540,7 @@ export function calculateRangerMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    if (
-      targetPieceIdx === -1 &&
-      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
-    ) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -672,15 +585,9 @@ export function calculateRangerMoves(
     const jump = rayPieces[0];
     const target = rayPieces[1];
 
-    if (jump.piece.type === 'bard' && !jump.piece.activated) {
-      continue;
-    }
+    if (jump.piece.type === 'bard' && !jump.piece.activated) continue;
 
-    if (
-      target.piece.side !== piece.side &&
-      target.piece.side !== 'neutral' &&
-      target.piece.type !== 'bard'
-    ) {
+    if (target.piece.side !== piece.side && target.piece.side !== 'neutral' && target.piece.type !== 'bard') {
       const targetNode = allNodes[target.nodeIdx];
       if (canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks)) {
         highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
@@ -692,7 +599,6 @@ export function calculateRangerMoves(
 }
 
 // ---- Griffin ----
-
 export function calculateGriffinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -708,6 +614,7 @@ export function calculateGriffinMoves(
 
   const currentCoords = getRotatedCoords(piece.row, piece.col);
 
+  // Horizontal rays (same row)
   for (const firstAdjIdx of adjacency[nodeIdx]) {
     const firstAdjNode = allNodes[firstAdjIdx];
     if (firstAdjNode.row !== piece.row) continue;
@@ -719,19 +626,13 @@ export function calculateGriffinMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks)) {
-        break;
-      }
+      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
 
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
-        if (
-          targetPiece.side !== piece.side &&
-          targetPiece.side !== 'neutral' &&
-          targetPiece.type !== 'bard'
-        ) {
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
           highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
         }
         break;
@@ -743,6 +644,7 @@ export function calculateGriffinMoves(
     }
   }
 
+  // Diagonal 1-step in rotated square coords: (x±1, y±1)
   for (const direction of [-1, 1]) {
     const targetX = currentCoords.x + direction;
     const targetY = currentCoords.y + direction;
@@ -756,22 +658,16 @@ export function calculateGriffinMoves(
       }
     }
 
-    if (
-      targetNode &&
-      canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks)
-    ) {
-      const targetPieceIdx = getVisiblePieceAt(pieces, targetNode.row, targetNode.col, piece.side);
-      if (targetPieceIdx === -1) {
-        highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
-      } else {
-        const targetPiece = pieces[targetPieceIdx];
-        if (
-          targetPiece.side !== piece.side &&
-          targetPiece.side !== 'neutral' &&
-          targetPiece.type !== 'bard'
-        ) {
-          highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
-        }
+    if (!targetNode) continue;
+    if (!canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks)) continue;
+
+    const targetPieceIdx = getVisiblePieceAt(pieces, targetNode.row, targetNode.col, piece.side);
+    if (targetPieceIdx === -1) {
+      highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
+    } else {
+      const targetPiece = pieces[targetPieceIdx];
+      if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
+        highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
       }
     }
   }
@@ -780,7 +676,6 @@ export function calculateGriffinMoves(
 }
 
 // ---- Assassin ----
-
 export function calculateAssassinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -816,30 +711,16 @@ export function calculateAssassinMoves(
 
             const adj1Blocked = hasEnemyHolyLight(adj1.row, adj1.col, piece.side, holyLights);
             const adj2Blocked = hasEnemyHolyLight(adj2.row, adj2.col, piece.side, holyLights);
-            const targetBlocked = hasEnemyHolyLight(
-              targetNode.row,
-              targetNode.col,
-              piece.side,
-              holyLights,
-            );
+            const targetBlocked = hasEnemyHolyLight(targetNode.row, targetNode.col, piece.side, holyLights);
 
             if (!adj1Blocked && !adj2Blocked && !targetBlocked) {
-              const targetPieceIdx = getVisiblePieceAt(
-                pieces,
-                targetNode.row,
-                targetNode.col,
-                piece.side,
-              );
+              const targetPieceIdx = getVisiblePieceAt(pieces, targetNode.row, targetNode.col, piece.side);
 
               if (targetPieceIdx === -1) {
                 highlights.push({ type: 'move', row: targetNode.row, col: targetNode.col });
               } else {
                 const targetPiece = pieces[targetPieceIdx];
-                if (
-                  targetPiece.side !== piece.side &&
-                  targetPiece.side !== 'neutral' &&
-                  targetPiece.type !== 'bard'
-                ) {
+                if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
                   highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
                 }
               }
@@ -854,7 +735,6 @@ export function calculateAssassinMoves(
 }
 
 // ---- Paladin ----
-
 export function calculatePaladinMoves(
   piece: Piece,
   pieceIndex: number,
@@ -872,10 +752,7 @@ export function calculatePaladinMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    if (
-      targetPieceIdx === -1 &&
-      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
-    ) {
+    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -967,24 +844,15 @@ export function findGuardingPaladins(
 
       const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
       const canGuard = zones.some((zone) => zone.row === targetRow && zone.col === targetCol);
-      if (canGuard) {
-        guardingPaladinIndices.push(idx);
-      }
+      if (canGuard) guardingPaladinIndices.push(idx);
     }
   });
 
   return guardingPaladinIndices;
 }
 
-
 // ---- Bard helper: jump target ----
-
-function findJumpTarget(
-  fromIdx: number,
-  overIdx: number,
-  adjacency: number[][],
-  allNodes: NodePosition[],
-): number {
+function findJumpTarget(fromIdx: number, overIdx: number, adjacency: number[][], allNodes: NodePosition[]): number {
   const fromNode = allNodes[fromIdx];
   const overNode = allNodes[overIdx];
 
@@ -996,16 +864,13 @@ function findJumpTarget(
 
   for (const adjIdx of adjacency[overIdx]) {
     const adjNode = allNodes[adjIdx];
-    if (adjNode.row === landRow && adjNode.col === landCol) {
-      return adjIdx;
-    }
+    if (adjNode.row === landRow && adjNode.col === landCol) return adjIdx;
   }
 
   return -1;
 }
 
 // ---- Dragon ----
-
 export function calculateDragonMoves(
   piece: Piece,
   pieceIndex: number,
@@ -1014,17 +879,12 @@ export function calculateDragonMoves(
   allNodes: NodePosition[],
   burnMarks: { row: number; col: number }[],
   holyLights: HolyLight[] = [],
-): {
-  highlights: MoveHighlight[];
-  pathNodes: { row: number; col: number }[];
-} {
+): { highlights: MoveHighlight[]; pathNodes: { row: number; col: number }[] } {
   console.log(`🐉 Dragon calculateMoves called with burnMarks:`, burnMarks);
   const highlights: MoveHighlight[] = [];
   const pathNodes: { row: number; col: number }[] = [];
 
-  const nodeIdx = allNodes.findIndex(
-    (n) => n.row === piece.row && n.col === piece.col,
-  );
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   if (nodeIdx === -1) return { highlights, pathNodes };
 
   for (const firstAdjIdx of adjacency[nodeIdx]) {
@@ -1035,64 +895,29 @@ export function calculateDragonMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      if (
-        !canOccupyNode(
-          nextNode.row,
-          nextNode.col,
-          piece.side,
-          holyLights,
-          burnMarks,
-        )
-      ) {
-        break;
-      }
+      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks)) break;
 
-      const targetPieceIdx = getVisiblePieceAt(
-        pieces,
-        nextNode.row,
-        nextNode.col,
-        piece.side,
-      );
-      const hasBurnMark = burnMarks.some(
-        (b) => b.row === nextNode.row && b.col === nextNode.col,
-      );
+      const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
+      const hasBurnMark = burnMarks.some((b) => b.row === nextNode.row && b.col === nextNode.col);
 
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
 
-        if (
-          targetPiece.side !== piece.side &&
-          targetPiece.side !== 'neutral' &&
-          targetPiece.type !== 'bard'
-        ) {
-          highlights.push({
-            type: 'attack',
-            row: nextNode.row,
-            col: nextNode.col,
-          });
+        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
+          highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
         }
         break;
       }
 
       if (hasBurnMark) {
         currentIdx = nextIdx;
-        nextIdx = findNextInDirection(
-          currentIdx,
-          direction,
-          adjacency,
-          allNodes,
-        );
+        nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
         continue;
       }
 
       highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
       currentIdx = nextIdx;
-      nextIdx = findNextInDirection(
-        currentIdx,
-        direction,
-        adjacency,
-        allNodes,
-      );
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
     }
   }
 
@@ -1109,12 +934,8 @@ export function calculateDragonPath(
 ): { row: number; col: number }[] {
   const path: { row: number; col: number }[] = [];
 
-  const startIdx = allNodes.findIndex(
-    (n) => n.row === startRow && n.col === startCol,
-  );
-  const targetIdx = allNodes.findIndex(
-    (n) => n.row === targetRow && n.col === targetCol,
-  );
+  const startIdx = allNodes.findIndex((n) => n.row === startRow && n.col === startCol);
+  const targetIdx = allNodes.findIndex((n) => n.row === targetRow && n.col === targetCol);
   if (startIdx === -1 || targetIdx === -1) return path;
 
   for (const firstAdjIdx of adjacency[startIdx]) {
@@ -1127,34 +948,17 @@ export function calculateDragonPath(
       const nextNode = allNodes[nextIdx];
       currentPath.push({ row: nextNode.row, col: nextNode.col });
 
-      if (nextNode.row === targetRow && nextNode.col === targetCol) {
-        return currentPath;
-      }
+      if (nextNode.row === targetRow && nextNode.col === targetCol) return currentPath;
 
       currentIdx = nextIdx;
-      nextIdx = findNextInDirection(
-        currentIdx,
-        direction,
-        adjacency,
-        allNodes,
-      );
+      nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
     }
   }
 
   return path;
 }
 
-// ---- Rotated coordinates / direction ----
-
-function toRotatedSquare(row: number, col: number): { x: number; y: number } {
-  if (row <= 8) {
-    return { x: col, y: row - col };
-  } else {
-    const offset = row - 8;
-    return { x: col + offset, y: 8 - col };
-  }
-}
-
+// ---- Direction helper (single declaration; used by dragon/ranger/griffin) ----
 function findNextInDirection(
   currentIdx: number,
   direction: { from: number; to: number },
@@ -1165,9 +969,9 @@ function findNextInDirection(
   const toNode = allNodes[direction.to];
   const currentNode = allNodes[currentIdx];
 
-  const fromXY = toRotatedSquare(fromNode.row, fromNode.col);
-  const toXY = toRotatedSquare(toNode.row, toNode.col);
-  const currentXY = toRotatedSquare(currentNode.row, currentNode.col);
+  const fromXY = getRotatedCoords(fromNode.row, fromNode.col);
+  const toXY = getRotatedCoords(toNode.row, toNode.col);
+  const currentXY = getRotatedCoords(currentNode.row, currentNode.col);
 
   let lineType: 'x' | 'y' | 'diagonal' | null = null;
   let dirSign = 0;
@@ -1187,23 +991,14 @@ function findNextInDirection(
 
   for (const adjIdx of adjacency[currentIdx]) {
     const adjNode = allNodes[adjIdx];
-    const adjXY = toRotatedSquare(adjNode.row, adjNode.col);
+    const adjXY = getRotatedCoords(adjNode.row, adjNode.col);
 
     if (lineType === 'x') {
-      if (adjXY.x === currentXY.x && adjXY.y - currentXY.y === dirSign) {
-        return adjIdx;
-      }
+      if (adjXY.x === currentXY.x && adjXY.y - currentXY.y === dirSign) return adjIdx;
     } else if (lineType === 'y') {
-      if (adjXY.y === currentXY.y && adjXY.x - currentXY.x === dirSign) {
-        return adjIdx;
-      }
+      if (adjXY.y === currentXY.y && adjXY.x - currentXY.x === dirSign) return adjIdx;
     } else if (lineType === 'diagonal') {
-      if (
-        adjXY.x + adjXY.y === currentXY.x + currentXY.y &&
-        adjXY.x - currentXY.x === dirSign
-      ) {
-        return adjIdx;
-      }
+      if (adjXY.x + adjXY.y === currentXY.x + currentXY.y && adjXY.x - currentXY.x === dirSign) return adjIdx;
     }
   }
 
@@ -1225,13 +1020,9 @@ export function calculateBardMoves(
   const highlights: MoveHighlight[] = [];
 
   // 只有啟動後才可以移動
-  if (!piece.activated) {
-    return highlights;
-  }
+  if (!piece.activated) return highlights;
 
-  const nodeIdx = allNodes.findIndex(
-    (n) => n.row === piece.row && n.col === piece.col,
-  );
+  const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   if (nodeIdx === -1) return highlights;
 
   const friendlySide: Side = piece.side;
@@ -1240,39 +1031,22 @@ export function calculateBardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
-    // 聖光 / 灼痕擋住就不能去
-    if (
-      !canOccupyNode(adjNode.row, adjNode.col, friendlySide, holyLights, burnMarks)
-    ) {
-      continue;
-    }
+    if (!canOccupyNode(adjNode.row, adjNode.col, friendlySide, holyLights, burnMarks)) continue;
 
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
 
     if (targetPieceIdx === -1) {
-      // 空格 → 可以走
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else {
       const targetPiece = pieces[targetPieceIdx];
 
       // 🚫 不能踩「己方潛行刺客」
-      if (
-        targetPiece.type === 'assassin' &&
-        targetPiece.stealthed &&
-        targetPiece.side === friendlySide
-      ) {
-        continue;
-      }
+      if (targetPiece.type === 'assassin' && targetPiece.stealthed && targetPiece.side === friendlySide) continue;
 
       // ✅ 可以踩「敵方潛行刺客」
-      if (
-        targetPiece.type === 'assassin' &&
-        targetPiece.stealthed &&
-        targetPiece.side !== friendlySide
-      ) {
+      if (targetPiece.type === 'assassin' && targetPiece.stealthed && targetPiece.side !== friendlySide) {
         highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
       }
-      // 其他棋子都不能單步踩上去
     }
   }
 
@@ -1297,67 +1071,27 @@ export function calculateBardMoves(
     const dCol = firstJumpNode.col - piece.col;
 
     // 落點：被跳過棋子後面那一格
-    const landingIdx = findNodeInDirection(
-      firstJumpIdx,
-      dRow,
-      dCol,
-      adjacency,
-      allNodes,
-    );
+    const landingIdx = findNodeInDirection(firstJumpIdx, dRow, dCol, adjacency, allNodes);
     if (landingIdx === -1) continue;
 
     const landingNode = allNodes[landingIdx];
 
-    if (
-      !canOccupyNode(
-        landingNode.row,
-        landingNode.col,
-        friendlySide,
-        holyLights,
-        burnMarks,
-      )
-    ) {
-      continue;
-    }
+    if (!canOccupyNode(landingNode.row, landingNode.col, friendlySide, holyLights, burnMarks)) continue;
 
-    const landingPieceIdx = getPieceAt(
-      pieces,
-      landingNode.row,
-      landingNode.col,
-    );
+    const landingPieceIdx = getPieceAt(pieces, landingNode.row, landingNode.col);
 
     if (landingPieceIdx === -1) {
-      // 落點是空格 → 可以跳到這格
-      highlights.push({
-        type: 'move',
-        row: landingNode.row,
-        col: landingNode.col,
-      });
+      highlights.push({ type: 'move', row: landingNode.row, col: landingNode.col });
     } else {
       const landingPiece = pieces[landingPieceIdx];
 
       // 🚫 不能落在己方潛行刺客
-      if (
-        landingPiece.type === 'assassin' &&
-        landingPiece.stealthed &&
-        landingPiece.side === friendlySide
-      ) {
-        continue;
-      }
+      if (landingPiece.type === 'assassin' && landingPiece.stealthed && landingPiece.side === friendlySide) continue;
 
       // ✅ 特例：落點是敵方潛行刺客 → 可以跳上去
-      if (
-        landingPiece.type === 'assassin' &&
-        landingPiece.stealthed &&
-        landingPiece.side !== friendlySide
-      ) {
-        highlights.push({
-          type: 'move',
-          row: landingNode.row,
-          col: landingNode.col,
-        });
+      if (landingPiece.type === 'assassin' && landingPiece.stealthed && landingPiece.side !== friendlySide) {
+        highlights.push({ type: 'move', row: landingNode.row, col: landingNode.col });
       }
-      // 其他情況都不能落在這格
     }
   }
 
@@ -1378,9 +1112,7 @@ function findNodeInDirection(
 
   for (const adjIdx of adjacency[fromIdx]) {
     const adjNode = allNodes[adjIdx];
-    if (adjNode.row === targetRow && adjNode.col === targetCol) {
-      return adjIdx;
-    }
+    if (adjNode.row === targetRow && adjNode.col === targetCol) return adjIdx;
   }
 
   return -1;
