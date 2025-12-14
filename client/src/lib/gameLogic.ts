@@ -976,63 +976,6 @@ export function findGuardingPaladins(
   return guardingPaladinIndices;
 }
 
-function toRotatedSquare(row: number, col: number): { x: number; y: number } {
-  if (row <= 8) return { x: col, y: row - col };
-  const offset = row - 8;
-  return { x: col + offset, y: 8 - col };
-}
-
-function findNextInDirection(
-  currentIdx: number,
-  direction: { from: number; to: number },
-  adjacency: number[][],
-  allNodes: NodePosition[],
-): number {
-  const fromNode = allNodes[direction.from];
-  const toNode = allNodes[direction.to];
-  const currentNode = allNodes[currentIdx];
-
-  const fromXY = toRotatedSquare(fromNode.row, fromNode.col);
-  const toXY = toRotatedSquare(toNode.row, toNode.col);
-  const currentXY = toRotatedSquare(currentNode.row, currentNode.col);
-
-  let lineType: 'x' | 'y' | 'diagonal' | null = null;
-  let dirSign = 0;
-
-  if (fromXY.x === toXY.x) {
-    lineType = 'x';
-    dirSign = toXY.y > fromXY.y ? 1 : -1;
-  } else if (fromXY.y === toXY.y) {
-    lineType = 'y';
-    dirSign = toXY.x > fromXY.x ? 1 : -1;
-  } else if (fromXY.x + fromXY.y === toXY.x + toXY.y) {
-    lineType = 'diagonal';
-    dirSign = toXY.x > fromXY.x ? 1 : -1;
-  }
-
-  if (!lineType) return -1;
-
-  for (const adjIdx of adjacency[currentIdx]) {
-    const adjNode = allNodes[adjIdx];
-    const adjXY = toRotatedSquare(adjNode.row, adjNode.col);
-
-    if (lineType === 'x') {
-      if (adjXY.x === currentXY.x && adjXY.y - currentXY.y === dirSign) return adjIdx;
-    } else if (lineType === 'y') {
-      if (adjXY.y === currentXY.y && adjXY.x - currentXY.x === dirSign) return adjIdx;
-    } else if (lineType === 'diagonal') {
-      if (
-        adjXY.x + adjXY.y === currentXY.x + currentXY.y &&
-        adjXY.x - currentXY.x === dirSign
-      ) {
-        return adjIdx;
-      }
-    }
-  }
-
-  return -1;
-}
-
 
 // ---- Bard helper: jump target ----
 
