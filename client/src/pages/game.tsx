@@ -1980,6 +1980,43 @@ export default function Game() {
         }
       }
     } else if (highlight.type === "swap") {
+      // ✅ 只允許：學徒 <-> 巫師（同陣營）
+      // 且每個 apprentice 只能用一次（不論誰發起）
+      const isApprenticeWizardSwap =
+        (selectedPiece.type === "apprentice" && targetPiece.type === "wizard") ||
+        (selectedPiece.type === "wizard" && targetPiece.type === "apprentice");
+      
+      if (!isApprenticeWizardSwap) {
+        // 不是這對組合，一律不給換
+        setSelectedPieceIndex(-1);
+        setHighlights([]);
+        setDragonPathNodes([]);
+        setProtectionZones([]);
+        return;
+      }
+      
+      // 同陣營才行
+      if (selectedPiece.side !== targetPiece.side) {
+        setSelectedPieceIndex(-1);
+        setHighlights([]);
+        setDragonPathNodes([]);
+        setProtectionZones([]);
+        return;
+      }
+      
+      // 找出那顆 apprentice（不管是誰點的）
+      const apprentice =
+        selectedPiece.type === "apprentice" ? selectedPiece : targetPiece;
+      
+      if (apprentice.swapUsed) {
+        // 已用過就不能再換
+        setSelectedPieceIndex(-1);
+        setHighlights([]);
+        setDragonPathNodes([]);
+        setProtectionZones([]);
+        return;
+      }
+
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2012,6 +2049,14 @@ export default function Game() {
         swappedPiece = { ...swappedPiece, stealthed: false };
       }
 
+      // ✅ 一旦發生 apprentice<->wizard swap：apprentice 的 swapUsed 變 true
+      if (movedPiece.type === "apprentice") {
+        movedPiece = { ...movedPiece, swapUsed: true };
+      }
+      if (swappedPiece.type === "apprentice") {
+        swappedPiece = { ...swappedPiece, swapUsed: true };
+      }
+      
       newPieces[selectedPieceIndex] = movedPiece;
       newPieces[targetIdx] = swappedPiece;
 
