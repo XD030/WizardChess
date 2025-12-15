@@ -35,7 +35,6 @@ export const PIECE_DESCRIPTIONS: Record<
     ability: [
       '範例：巫師→空格→導體（可轉換方向）→導體→敵人',
       '導線：只能由巫師當作起始點，中間導體，最後要是導體接敵人',
-      '導線是每回合自動形成，遇到分支就會停止',
       '導線射擊不會使巫師移動，會在敵方回合結束才發動（施法時間）',
     ],
   },
@@ -433,12 +432,15 @@ function hasAnyPieceAt(pieces: Piece[], row: number, col: number): boolean {
 }
 
 // =====================================================
-// ✅ Wizard beam（新導線規則，分支即停止）
-// - 起點：巫師
-// - 中間：導體（己方學徒、已激活吟遊詩人(己方/中立)）
-// - 導體間：同一直線，距離 1 或 2（可隔 1 空格），中間不得有任何棋子
-// - 終點：必須是「導體接敵人」→ 從某導體能連到敵方棋子才可射擊
-// - 分支：任一步可連到的導體 != 1 或 可連到的敵人 != 1 → 停止、不射擊
+// ✅ Wizard beam（修正版：用「直線射線」+「導體可轉彎」）
+//
+// 你之前那版會算出亂彎路徑的原因：把導線當成一般 BFS 走格。
+// 正確應該是：
+// - 從巫師/導體出發，沿著 6 個方向做 ray-cast（保持同方向一路走）
+// - 只能在「導體」處轉彎（apprentice / activated bard(同側或中立)）
+// - 最後命中「第一個敵方棋子」（bard 不算）
+// - HolyLight(敵方) 視為牆：射線不可穿越
+// - 依照規則：「巫師必須經過至少 1 個導體」才可打到敵人
 // =====================================================
 
 export type BeamEdge = {
@@ -452,235 +454,223 @@ export type WizardBeamResult = {
   target?: { row: number; col: number };
 };
 
-type LineType = 'x' | 'y' | 'diagonal';
-
 function isConductorForWizard(wizardSide: Side, p: Piece): boolean {
-  // 只有「己方學徒」與「已激活吟遊詩人」能當導體
+  // 己方學徒、已激活吟遊詩人（己方或中立）才是導體
   if (p.type === 'apprentice') return p.side === wizardSide;
   if (p.type === 'bard') return !!p.activated && (p.side === wizardSide || p.side === 'neutral');
   return false;
 }
 
-function getLineTypeBetween(
-  a: { row: number; col: number },
-  b: { row: number; col: number },
-): LineType | null {
-  const A = getRotatedCoords(a.row, a.col);
-  const B = getRotatedCoords(b.row, b.col);
-
-  if (A.x === B.x) return 'x';
-  if (A.y === B.y) return 'y';
-  if (A.x + A.y === B.x + B.y) return 'diagonal';
-  return null;
+function isEnemyForWizard(wizardSide: Side, p: Piece): boolean {
+  return p.side !== 'neutral' && p.side !== wizardSide;
 }
 
-function lineDistance(
-  a: { row: number; col: number },
-  b: { row: number; col: number },
-  line: LineType,
-): number {
-  const A = getRotatedCoords(a.row, a.col);
-  const B = getRotatedCoords(b.row, b.col);
-  if (line === 'x') return Math.abs(B.y - A.y);
-  if (line === 'y') return Math.abs(B.x - A.x);
-  return Math.abs(B.x - A.x); // diagonal
-}
-
-function getNodeByRotatedXY(allNodes: NodePosition[], x: number, y: number): NodePosition | null {
-  for (const node of allNodes) {
-    const xy = getRotatedCoords(node.row, node.col);
-    if (xy.x === x && xy.y === y) return node;
-  }
-  return null;
-}
-
-function getLinkMiddleIfValid(
-  wizardSide: Side,
-  a: { row: number; col: number },
-  b: { row: number; col: number },
-  allNodes: NodePosition[],
-  pieces: Piece[],
-  holyLights: HolyLight[],
-): { middle: { row: number; col: number } | null } | null {
-  const line = getLineTypeBetween(a, b);
-  if (!line) return null;
-
-  const dist = lineDistance(a, b, line);
-  if (dist !== 1 && dist !== 2) return null;
-
-  // 目標點若是敵方 HolyLight：不可穿越/不可到達
-  if (hasEnemyHolyLight(b.row, b.col, wizardSide, holyLights)) return null;
-
-  if (dist === 1) return { middle: null };
-
-  // dist===2：中間格必須存在且無棋子，且不是敵方 HolyLight
-  const A = getRotatedCoords(a.row, a.col);
-  const B = getRotatedCoords(b.row, b.col);
-  const midX = (A.x + B.x) / 2;
-  const midY = (A.y + B.y) / 2;
-
-  if (!Number.isInteger(midX) || !Number.isInteger(midY)) return null;
-
-  const midNode = getNodeByRotatedXY(allNodes, midX, midY);
-  if (!midNode) return null;
-
-  if (hasEnemyHolyLight(midNode.row, midNode.col, wizardSide, holyLights)) return null;
-  if (hasAnyPieceAt(pieces, midNode.row, midNode.col)) return null;
-
-  return { middle: { row: midNode.row, col: midNode.col } };
-}
-
-function getLinkedConductors(
-  wizardSide: Side,
-  from: { row: number; col: number },
-  conductors: Piece[],
-  allNodes: NodePosition[],
-  pieces: Piece[],
-  holyLights: HolyLight[],
-): Piece[] {
-  const out: Piece[] = [];
-  for (const c of conductors) {
-    if (c.row === from.row && c.col === from.col) continue;
-    const ok = getLinkMiddleIfValid(wizardSide, from, { row: c.row, col: c.col }, allNodes, pieces, holyLights);
-    if (ok) out.push(c);
-  }
-  return out;
-}
-
-function getLinkedEnemyTargets(
-  wizardSide: Side,
-  fromConductor: { row: number; col: number },
-  enemyPieces: Piece[],
-  allNodes: NodePosition[],
-  pieces: Piece[],
-  holyLights: HolyLight[],
-): Piece[] {
-  const out: Piece[] = [];
-  for (const e of enemyPieces) {
-    if (e.type === 'bard') continue;
-    const ok = getLinkMiddleIfValid(
-      wizardSide,
-      fromConductor,
-      { row: e.row, col: e.col },
-      allNodes,
-      pieces,
-      holyLights,
-    );
-    if (ok) out.push(e);
-  }
-  return out;
+function angleBetween(ax: number, ay: number, bx: number, by: number): number {
+  const da = Math.hypot(ax, ay);
+  const db = Math.hypot(bx, by);
+  if (da === 0 || db === 0) return Math.PI;
+  const cos = (ax * bx + ay * by) / (da * db);
+  const c = Math.max(-1, Math.min(1, cos));
+  return Math.acos(c);
 }
 
 export function computeWizardBeam(
   wizard: Piece,
   pieces: Piece[],
   allNodes: NodePosition[],
+  adjacency: number[][],
   holyLights: HolyLight[] = [],
 ): WizardBeamResult {
   const res: WizardBeamResult = { pathNodes: [], pathEdges: [] };
   if (wizard.type !== 'wizard') return res;
 
-  const side = wizard.side;
-  const conductors = pieces.filter((p) => isConductorForWizard(side, p));
+  const keyOf = (r: number, c: number) => `${r},${c}`;
 
-  const enemySide: Side = side === 'white' ? 'black' : 'white';
-  const enemies = pieces.filter((p) => p.side === enemySide);
+  const nodeIdxByKey = new Map<string, number>();
+  for (let i = 0; i < allNodes.length; i++) {
+    nodeIdxByKey.set(keyOf(allNodes[i].row, allNodes[i].col), i);
+  }
 
-  res.pathNodes.push({ row: wizard.row, col: wizard.col });
+  const startIdx = nodeIdxByKey.get(keyOf(wizard.row, wizard.col));
+  if (startIdx == null) return res;
 
-  // 第一步：巫師可接導體必須唯一
-  const firstCandidates = getLinkedConductors(
-    side,
-    { row: wizard.row, col: wizard.col },
-    conductors,
-    allNodes,
-    pieces,
-    holyLights,
-  );
+  const pieceByKey = new Map<string, Piece>();
+  for (const p of pieces) pieceByKey.set(keyOf(p.row, p.col), p);
 
-  if (firstCandidates.length !== 1) return res;
+  const wizardSide = wizard.side;
+  const enemySide: Side = wizardSide === 'white' ? 'black' : 'white';
 
-  let prev = { row: wizard.row, col: wizard.col };
-  let current: Piece = firstCandidates[0];
+  // 導體集合（用 nodeIdx 當節點）
+  const conductorIdxSet = new Set<number>();
+  for (const p of pieces) {
+    if (!isConductorForWizard(wizardSide, p)) continue;
+    const idx = nodeIdxByKey.get(keyOf(p.row, p.col));
+    if (idx != null) conductorIdxSet.add(idx);
+  }
 
-  while (true) {
-    const link = getLinkMiddleIfValid(
-      side,
-      prev,
-      { row: current.row, col: current.col },
-      allNodes,
-      pieces,
-      holyLights,
-    );
-    if (!link) return res;
+  // 允許射線穿越：灼痕不擋；棋子會擋（命中第一顆棋就停）
+  // HolyLight：敵方視為牆（不可穿越）
+  const blockedByEnemyHolyLight = (row: number, col: number) =>
+    hasEnemyHolyLight(row, col, wizardSide, holyLights);
 
-    if (link.middle) {
-      res.pathNodes.push({ row: link.middle.row, col: link.middle.col });
-      res.pathEdges.push({ from: { ...prev }, to: { ...link.middle } });
-      res.pathEdges.push({ from: { ...link.middle }, to: { row: current.row, col: current.col } });
-    } else {
-      res.pathEdges.push({ from: { ...prev }, to: { row: current.row, col: current.col } });
-    }
+  // 從 fromIdx 走到 firstStepIdx 之後，保持方向一直射到碰到第一顆棋 or 被牆擋 or 出界
+  // 回傳 hitIdx / hitPiece / line(包含 fromIdx->...->hitIdx)
+  function castRay(fromIdx: number, firstStepIdx: number): { hitIdx: number; hitPiece: Piece; line: number[] } | null {
+    const from = allNodes[fromIdx];
+    const first = allNodes[firstStepIdx];
 
-    res.pathNodes.push({ row: current.row, col: current.col });
+    // 牆：第一格就被敵方 HolyLight 擋
+    if (blockedByEnemyHolyLight(first.row, first.col)) return null;
 
-    // 目標：導體接敵人必須唯一
-    const enemyTargets = getLinkedEnemyTargets(
-      side,
-      { row: current.row, col: current.col },
-      enemies,
-      allNodes,
-      pieces,
-      holyLights,
-    );
+    const dirX = first.x - from.x;
+    const dirY = first.y - from.y;
 
-    if (enemyTargets.length === 1) {
-      const target = enemyTargets[0];
+    const line: number[] = [fromIdx, firstStepIdx];
 
-      const last = getLinkMiddleIfValid(
-        side,
-        { row: current.row, col: current.col },
-        { row: target.row, col: target.col },
-        allNodes,
-        pieces,
-        holyLights,
-      );
+    // 第一步就撞到棋子
+    const firstPiece = pieceByKey.get(keyOf(first.row, first.col));
+    if (firstPiece) return { hitIdx: firstStepIdx, hitPiece: firstPiece, line };
 
-      if (last) {
-        if (last.middle) {
-          res.pathNodes.push({ row: last.middle.row, col: last.middle.col });
-          res.pathEdges.push({ from: { row: current.row, col: current.col }, to: { ...last.middle } });
-          res.pathEdges.push({ from: { ...last.middle }, to: { row: target.row, col: target.col } });
-        } else {
-          res.pathEdges.push({
-            from: { row: current.row, col: current.col },
-            to: { row: target.row, col: target.col },
-          });
+    let prev = fromIdx;
+    let cur = firstStepIdx;
+
+    while (true) {
+      const curNode = allNodes[cur];
+      const neigh = adjacency[cur] ?? [];
+
+      let best: number | null = null;
+      let bestAngle = Infinity;
+
+      for (const nxt of neigh) {
+        if (nxt === prev) continue;
+        const nxtNode = allNodes[nxt];
+        const vx = nxtNode.x - curNode.x;
+        const vy = nxtNode.y - curNode.y;
+        const a = angleBetween(dirX, dirY, vx, vy);
+        if (a < bestAngle) {
+          bestAngle = a;
+          best = nxt;
         }
       }
 
-      res.target = { row: target.row, col: target.col };
-      return res;
+      // 角度太大表示離開直線（不再同方向）
+      if (best == null || bestAngle > 0.35) break; // 約 20° 容忍（避免浮點誤差）
+
+      const nextNode = allNodes[best];
+
+      // 牆：敵方 HolyLight 擋住射線
+      if (blockedByEnemyHolyLight(nextNode.row, nextNode.col)) break;
+
+      prev = cur;
+      cur = best;
+      line.push(cur);
+
+      const hit = pieceByKey.get(keyOf(nextNode.row, nextNode.col));
+      if (hit) return { hitIdx: cur, hitPiece: hit, line };
     }
 
-    // 分支或無敵人 → 停止、不射擊
-    if (enemyTargets.length !== 0) return res;
-
-    // 下一個導體：必須唯一（排除上一個導體）
-    const nextCandidates = getLinkedConductors(
-      side,
-      { row: current.row, col: current.col },
-      conductors,
-      allNodes,
-      pieces,
-      holyLights,
-    ).filter((c) => !(c.row === prev.row && c.col === prev.col));
-
-    if (nextCandidates.length !== 1) return res;
-
-    prev = { row: current.row, col: current.col };
-    current = nextCandidates[0];
+    return null;
   }
+
+  // BFS 狀態：只能在導體上「停下並轉彎」
+  // 且「巫師必須先到導體」之後才能命中敵人
+  type StateKey = string; // `${nodeIdx}|${usedConductor}`
+  const makeKey = (idx: number, used: boolean) => `${idx}|${used ? 1 : 0}`;
+
+  const q: Array<{ idx: number; usedConductor: boolean }> = [{ idx: startIdx, usedConductor: false }];
+  const seen = new Set<StateKey>([makeKey(startIdx, false)]);
+
+  // prev map：用 stateKey 當 key，存上一個 stateKey + 這一跳的 line
+  const prevState = new Map<StateKey, StateKey>();
+  const prevLine = new Map<StateKey, number[]>(); // line nodeIdxs (含 from->hit)
+
+  // 終點狀態
+  let endStateKey: StateKey | null = null;
+  let endTargetIdx: number | null = null;
+
+  while (q.length > 0 && !endStateKey) {
+    const cur = q.shift()!;
+    const neigh = adjacency[cur.idx] ?? [];
+
+    for (const stepIdx of neigh) {
+      const ray = castRay(cur.idx, stepIdx);
+      if (!ray) continue;
+
+      const hit = ray.hitPiece;
+
+      // bard 永遠不可被擊殺：視為阻擋（射線到此停止，但不算 target，也不能當導體）
+      if (hit.type === 'bard') {
+        continue;
+      }
+
+      // 命中敵人：需要「已經用過導體」才成立（巫師必須經過至少一個導體）
+      if (hit.side === enemySide && isEnemyForWizard(wizardSide, hit)) {
+        if (!cur.usedConductor) continue;
+
+        endStateKey = makeKey(ray.hitIdx, true);
+        endTargetIdx = ray.hitIdx;
+
+        // 用 endStateKey 當作終點 state，記 prev
+        const curKey = makeKey(cur.idx, cur.usedConductor);
+        prevState.set(endStateKey, curKey);
+        prevLine.set(endStateKey, ray.line);
+        break;
+      }
+
+      // 命中導體：允許入隊（轉彎點）
+      if (isConductorForWizard(wizardSide, hit)) {
+        const nextUsed = true;
+        const nextKey = makeKey(ray.hitIdx, nextUsed);
+        if (seen.has(nextKey)) continue;
+
+        seen.add(nextKey);
+        const curKey = makeKey(cur.idx, cur.usedConductor);
+        prevState.set(nextKey, curKey);
+        prevLine.set(nextKey, ray.line);
+        q.push({ idx: ray.hitIdx, usedConductor: nextUsed });
+        continue;
+      }
+
+      // 命中其他己方棋：阻擋，不可穿越，也不入隊
+    }
+  }
+
+  if (!endStateKey || endTargetIdx == null) return res;
+
+  // 還原完整 nodeIdx path：把每一跳的 line 接起來
+  const fullIdxs: number[] = [];
+  let curKey = endStateKey;
+
+  while (true) {
+    const line = prevLine.get(curKey);
+    const pkey = prevState.get(curKey);
+
+    if (!line || !pkey) break;
+
+    // line 是 [from ... to]，往前拼接時避免重複點
+    if (fullIdxs.length === 0) {
+      fullIdxs.unshift(...line);
+    } else {
+      fullIdxs.unshift(...line.slice(1));
+    }
+
+    curKey = pkey;
+    if (curKey === makeKey(startIdx, false)) break;
+  }
+
+  // fullIdxs 可能沒把起點加進來（保險）
+  if (fullIdxs[0] !== startIdx) fullIdxs.unshift(startIdx);
+
+  const pathNodes = fullIdxs.map((i) => ({ row: allNodes[i].row, col: allNodes[i].col }));
+  const pathEdges: BeamEdge[] = [];
+  for (let i = 0; i < pathNodes.length - 1; i++) {
+    pathEdges.push({ from: pathNodes[i], to: pathNodes[i + 1] });
+  }
+
+  res.pathNodes = pathNodes;
+  res.pathEdges = pathEdges;
+  res.target = { row: allNodes[endTargetIdx].row, col: allNodes[endTargetIdx].col };
+  return res;
 }
 
 // ---- Wizard ----
@@ -718,8 +708,8 @@ export function calculateWizardMoves(
     }
   }
 
-  // New wizard beam target
-  const beam = computeWizardBeam(piece, pieces, allNodes, holyLights);
+  // ✅ New wizard beam target (修正：必須傳 adjacency)
+  const beam = computeWizardBeam(piece, pieces, allNodes, adjacency, holyLights);
   if (beam.target) {
     highlights.push({ type: 'attack', row: beam.target.row, col: beam.target.col });
   }
