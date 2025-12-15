@@ -133,8 +133,7 @@ function ensureDragonTags(pieces: Piece[]): Piece[] {
     const p: any = piece;
     if (p.dragonTag) return piece;
 
-    const tag =
-      piece.side === "white" ? `dragon-white-${wCount++}` : `dragon-black-${bCount++}`;
+    const tag = piece.side === "white" ? `dragon-white-${wCount++}` : `dragon-black-${bCount++}`;
 
     return { ...(piece as any), dragonTag: tag } as Piece;
   });
@@ -972,10 +971,6 @@ export default function Game() {
   };
 
   const handleGuardConfirm = () => {
-    // ...（以下完全照你原本的，太長我不動，省略提示：你這段我沒改任何邏輯）
-    // ⚠️ 你貼的檔案從這裡開始還很長，而且你後面內容我已完整保留。
-    // ✅ 為了不在聊天窗爆字數，我先把「未改動」的大段原碼保持原樣貼回去。
-    // ---------------------------------------------------------
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
 
@@ -1190,7 +1185,6 @@ export default function Game() {
   };
 
   const handleGuardDecline = () => {
-    //（未改動：完整保留你原本程式）
     if (!guardRequest) return;
     if (winner) return;
 
@@ -1500,7 +1494,6 @@ export default function Game() {
 
     // ---- 若正在等吟遊詩人第二段換位 ----
     if (bardNeedsSwap && !isObserving) {
-      //（未改動：完整保留你原本程式）
       if (clickedPieceIdx !== -1) {
         const swapTarget = pieces[clickedPieceIdx];
 
@@ -1926,10 +1919,6 @@ export default function Game() {
     if (!canPlay) return;
 
     // ====== 以下開始「真的改棋盤」 ======
-    //（從這裡開始到檔案結尾，我完全照你原本貼的程式保留不動）
-    // ✅ 你的擊殺邏輯本來就 OK，只差 highlights 讓你點得到 attack
-    // ---------------------------------------------------------
-
     let newPieces = [...pieces];
     let moveDesc = "";
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
@@ -2074,10 +2063,6 @@ export default function Game() {
         updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
       }
     } else if (highlight.type === "swap") {
-      // ...（以下到檔案結尾照你原本的，完整保留）
-      // 你貼的內容非常長，我已經把「關鍵修正」完整加進去了。
-      // 如果你要我把剩下部分也完整貼滿到最後一行（真的逐字貼完），
-      // 你再回我一句「要」我就會把後半段也全部貼出來。
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2164,8 +2149,6 @@ export default function Game() {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
     } else if (highlight.type === "attack") {
-      // ✅ 你原本的 attack / splice 邏輯就是在這裡，所以現在導線末端能點到 attack，就會真的擊殺
-      // ...（此段以下照你原本完整保留）
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2318,7 +2301,9 @@ export default function Game() {
     if (selectedPiece.type === "paladin") {
       const movedPaladin =
         newPieces[
-          highlight.type === "attack" && clickedPieceIdx! < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex
+          highlight.type === "attack" && clickedPieceIdx! < selectedPieceIndex
+            ? selectedPieceIndex - 1
+            : selectedPieceIndex
         ];
 
       if (movedPaladin) {
@@ -2341,11 +2326,7 @@ export default function Game() {
 
         const swapHighlights: MoveHighlight[] = newPieces
           .filter(
-            (p) =>
-              p.side === currentPlayer &&
-              p.type !== "bard" &&
-              p.type !== "dragon" &&
-              p.type !== "wizard"
+            (p) => p.side === currentPlayer && p.type !== "bard" && p.type !== "dragon" && p.type !== "wizard"
           )
           .map((p) => ({ type: "swap" as const, row: p.row, col: p.col }));
 
@@ -2468,8 +2449,6 @@ export default function Game() {
   }
 
   // ================== UI ==================
-  //（以下 UI 區塊：照你原本完整保留）
-
   // -------------- 未進房：輸入房間密碼 --------------
   if (!inRoom) {
     return (
@@ -2751,7 +2730,6 @@ export default function Game() {
           </div>
         </div>
       )}
-
 
       {/* 聖騎士守護視窗：只在「防守方」那台機器顯示 */}
       <GuardDialog
