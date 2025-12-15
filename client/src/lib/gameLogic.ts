@@ -224,12 +224,20 @@ export function hasEnemyHolyLight(
   );
 }
 
+/**
+ * ✅ 重要修正：
+ * - 一般棋子：灼痕不能停留
+ * - 聖騎士：可以停留在灼痕上
+ * - 龍：需要「可穿越灼痕」→ allowBurnThrough=true 時，不因灼痕而被擋住
+ */
 export function canOccupyNode(
   row: number,
   col: number,
   pieceSide: Side,
   holyLights: HolyLight[] | HolyLight | undefined,
   burnMarks: { row: number; col: number }[] | { row: number; col: number } | undefined = [],
+  pieceType?: PieceType,
+  allowBurnThrough: boolean = false,
 ): boolean {
   const burnList: { row: number; col: number }[] = Array.isArray(burnMarks)
     ? burnMarks
@@ -238,7 +246,20 @@ export function canOccupyNode(
       : [];
 
   const hasBurnMark = burnList.some((b) => b && b.row === row && b.col === col);
-  if (hasBurnMark) return false;
+
+  // 灼痕處理
+  if (hasBurnMark) {
+    // 聖騎士可以站上去
+    if (pieceType === 'paladin') {
+      return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
+    }
+    // 允許穿越（例如龍）
+    if (allowBurnThrough) {
+      return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
+    }
+    // 其他棋子不能停留
+    return false;
+  }
 
   return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
 }
@@ -249,7 +270,7 @@ export function filterHighlightsForHolyLight(
   holyLights: HolyLight[],
   burnMarks: { row: number; col: number }[] = [],
 ): MoveHighlight[] {
-  return highlights.filter((h) => canOccupyNode(h.row, h.col, piece.side, holyLights, burnMarks));
+  return highlights.filter((h) => canOccupyNode(h.row, h.col, piece.side, holyLights, burnMarks, piece.type));
 }
 
 // ---- Assassin reveal in paladin zone ----
@@ -427,7 +448,10 @@ export function calculateWizardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
-    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
+    if (
+      targetPieceIdx === -1 &&
+      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
+    ) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     }
   }
@@ -496,7 +520,10 @@ export function calculateApprenticeMoves(
 
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
+    if (
+      targetPieceIdx === -1 &&
+      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
+    ) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -504,7 +531,7 @@ export function calculateApprenticeMoves(
         targetPiece.side !== piece.side &&
         targetPiece.side !== 'neutral' &&
         targetPiece.type !== 'bard' &&
-        canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
+        canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
       ) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
@@ -540,7 +567,10 @@ export function calculateRangerMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
+    if (
+      targetPieceIdx === -1 &&
+      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
+    ) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -548,7 +578,7 @@ export function calculateRangerMoves(
         targetPiece.side !== piece.side &&
         targetPiece.side !== 'neutral' &&
         targetPiece.type !== 'bard' &&
-        canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
+        canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
       ) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
@@ -589,7 +619,7 @@ export function calculateRangerMoves(
 
     if (target.piece.side !== piece.side && target.piece.side !== 'neutral' && target.piece.type !== 'bard') {
       const targetNode = allNodes[target.nodeIdx];
-      if (canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks)) {
+      if (canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks, piece.type)) {
         highlights.push({ type: 'attack', row: targetNode.row, col: targetNode.col });
       }
     }
@@ -626,7 +656,7 @@ export function calculateGriffinMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks)) break;
+      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
 
@@ -659,7 +689,7 @@ export function calculateGriffinMoves(
     }
 
     if (!targetNode) continue;
-    if (!canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks)) continue;
+    if (!canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks, piece.type)) continue;
 
     const targetPieceIdx = getVisiblePieceAt(pieces, targetNode.row, targetNode.col, piece.side);
     if (targetPieceIdx === -1) {
@@ -752,7 +782,11 @@ export function calculatePaladinMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    if (targetPieceIdx === -1 && canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)) {
+    // ✅ 這裡關鍵：piece.type='paladin' 會允許站在灼痕上
+    if (
+      targetPieceIdx === -1 &&
+      canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
+    ) {
       highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
     } else if (targetPieceIdx !== -1) {
       const targetPiece = pieces[targetPieceIdx];
@@ -760,7 +794,7 @@ export function calculatePaladinMoves(
         targetPiece.side !== piece.side &&
         targetPiece.side !== 'neutral' &&
         targetPiece.type !== 'bard' &&
-        canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks)
+        canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
       ) {
         highlights.push({ type: 'attack', row: adjNode.row, col: adjNode.col });
       }
@@ -895,7 +929,8 @@ export function calculateDragonMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks)) break;
+      // ✅ 允許「穿越灼痕」：allowBurnThrough=true
+      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type, true)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
       const hasBurnMark = burnMarks.some((b) => b.row === nextNode.row && b.col === nextNode.col);
@@ -909,6 +944,7 @@ export function calculateDragonMoves(
         break;
       }
 
+      // ✅ 灼痕：不能停留，但可以繼續往前走
       if (hasBurnMark) {
         currentIdx = nextIdx;
         nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
@@ -1031,7 +1067,7 @@ export function calculateBardMoves(
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
-    if (!canOccupyNode(adjNode.row, adjNode.col, friendlySide, holyLights, burnMarks)) continue;
+    if (!canOccupyNode(adjNode.row, adjNode.col, friendlySide, holyLights, burnMarks, piece.type)) continue;
 
     const targetPieceIdx = getPieceAt(pieces, adjNode.row, adjNode.col);
 
@@ -1076,7 +1112,7 @@ export function calculateBardMoves(
 
     const landingNode = allNodes[landingIdx];
 
-    if (!canOccupyNode(landingNode.row, landingNode.col, friendlySide, holyLights, burnMarks)) continue;
+    if (!canOccupyNode(landingNode.row, landingNode.col, friendlySide, holyLights, burnMarks, piece.type)) continue;
 
     const landingPieceIdx = getPieceAt(pieces, landingNode.row, landingNode.col);
 
