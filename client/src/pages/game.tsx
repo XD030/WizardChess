@@ -40,7 +40,6 @@ import {
   isInProtectionZone,
   findGuardingPaladins,
   PIECE_CHINESE,
-  // ✅ 原本的 computeWizardBeam 仍然 import
   computeWizardBeam,
   type WizardBeamResult,
 } from "../lib/gameLogic";
@@ -85,11 +84,11 @@ interface SyncedState {
   capturedPieces: CapturedMap;
   winner: Side | null;
   seats: Seats;
-  startingPlayer: PlayerSide; // 本局設定的先攻方
-  startingMode: StartingMode; // manual / random（顯示用）
-  ready: ReadyState; // 雙方是否按下「開始遊戲」
-  gameStarted: boolean; // 是否已從準備階段進入對局
-  pendingGuard: PendingGuard | null; // ★ 等待聖騎士守護決定
+  startingPlayer: PlayerSide;
+  startingMode: StartingMode;
+  ready: ReadyState;
+  gameStarted: boolean;
+  pendingGuard: PendingGuard | null;
 }
 
 // =========================
@@ -240,8 +239,11 @@ function mergeWizardBeamAttackHighlights(args: {
 }
 
 /* =========================================================
-   ✅✅✅ 修正重點（只動 Game.tsx，不要求你改 gameLogic.ts）
-   目的：避免「敵方學徒/未啟動吟遊詩人」被當導體造成亂射
+   ✅✅✅ 巫師導線修正（只動 Game.tsx）
+   目的：
+   1) 導體嚴格：己方學徒、已啟動吟遊詩人（己方或中立）
+   2) 轉向只能在導體上
+   3) 最後一格必須是導體，且要「導體直接連到敵人」
    ========================================================= */
 
 function isWizardConductorStrict(wizardSide: Side, p: Piece): boolean {
@@ -257,123 +259,117 @@ function normalizeBeamForUI(wizard: Piece): WizardBeamResult {
   return { pathNodes: [{ row: wizard.row, col: wizard.col }], pathEdges: [] };
 }
 
+function getNodeIdx(allNodes: NodePosition[], r: number, c: number): number {
+  return allNodes.findIndex((n) => n.row === r && n.col === c);
+}
+
+function isAdjacentByGraph(
+  a: { row: number; col: number },
+  b: { row: number; col: number },
+  allNodes: NodePosition[],
+  adjacency: number[][]
+): boolean {
+  const ai = getNodeIdx(allNodes, a.row, a.col);
+  const bi = getNodeIdx(allNodes, b.row, b.col);
+  if (ai === -1 || bi === -1) return false;
+  return !!adjacency[ai]?.includes(bi);
+}
+
 /**
  * ✅ 安全版導線：
  * - 仍然呼叫 gameLogic.ts 的 computeWizardBeam
- * - 但會「二次驗證」導線路徑上的棋子：
+ * - 但會「二次驗證」導線路徑上的棋子與轉彎規則：
  *   只允許：己方學徒、已啟動的己方/中立吟遊詩人 作為導體
- * - 如果發現敵方學徒 / 未啟動吟遊詩人被當導體 → 直接視為「沒有導線」
+ *   且「轉彎只能在導體格上」
+ *   且「最後一格必須是導體，導體直接連到敵人」
+ * - 不符合 → 視為沒有導線（只顯示巫師自己）
  */
 function computeWizardBeamSafe(
   wizard: Piece,
   pieces: Piece[],
   allNodes: NodePosition[],
+  adjacency: number[][],
   holyLights: HolyLight[] = []
 ): WizardBeamResult {
   const raw = computeWizardBeam(wizard, pieces, allNodes, holyLights);
   if (!raw?.target) return raw ?? normalizeBeamForUI(wizard);
 
-  // target 必須存在且是敵方且非 bard
+  // 0) pathNodes 必須以巫師為起點
+  const nodes = raw.pathNodes ?? [];
+  const start = nodes[0];
+  if (!start || start.row !== wizard.row || start.col !== wizard.col) {
+    return normalizeBeamForUI(wizard);
+  }
+
+  // 1) target 必須存在且是敵方且非 bard
   const tIdx = getPieceAt(pieces, raw.target.row, raw.target.col);
   if (tIdx === -1) return normalizeBeamForUI(wizard);
+
   const tp = pieces[tIdx];
   if (tp.side === wizard.side) return normalizeBeamForUI(wizard);
   if (tp.type === "bard") return normalizeBeamForUI(wizard);
 
-  // 路徑上所有「有棋子」的節點（除 wizard / target）都必須是合法導體
-  for (const n of raw.pathNodes) {
+  // 2) 最後一個非 wizard/target 節點必須是導體，且要直接相鄰 target
+  const lastNonWT = [...nodes]
+    .reverse()
+    .find(
+      (n) =>
+        !(n.row === wizard.row && n.col === wizard.col) &&
+        !(n.row === raw.target!.row && n.col === raw.target!.col)
+    );
+
+  if (!lastNonWT) {
+    // 沒有任何中繼節點，不符合「中間導體、最後導體接敵人」
+    return normalizeBeamForUI(wizard);
+  }
+
+  const lastIdx = getPieceAt(pieces, lastNonWT.row, lastNonWT.col);
+  if (lastIdx === -1) return normalizeBeamForUI(wizard);
+  if (!isWizardConductorStrict(wizard.side, pieces[lastIdx])) return normalizeBeamForUI(wizard);
+
+  if (!isAdjacentByGraph(lastNonWT, raw.target, allNodes, adjacency)) {
+    return normalizeBeamForUI(wizard);
+  }
+
+  // 3) 路徑上所有「有棋子」的節點（除 wizard / target）都必須是合法導體
+  for (const n of nodes) {
     const isWizard = n.row === wizard.row && n.col === wizard.col;
-    const isTarget = raw.target && n.row === raw.target.row && n.col === raw.target.col;
+    const isTarget = n.row === raw.target.row && n.col === raw.target.col;
     if (isWizard || isTarget) continue;
 
     const idx = getPieceAt(pieces, n.row, n.col);
-    if (idx === -1) continue; // 中間空節點允許（你允許導體間隔一空格時會出現）
+    if (idx === -1) continue; // 空節點允許存在於路徑中（例：巫師→空格→導體）
     const p = pieces[idx];
 
     if (!isWizardConductorStrict(wizard.side, p)) {
-      // ❌ 這就是你說的：敵方學徒/未啟動吟遊詩人被當導體
       return normalizeBeamForUI(wizard);
     }
   }
 
+  // 4) 轉向規則：只有「導體格」可以轉彎（空格不能轉彎）
+  const dir = (a: NodePosition, b: NodePosition) => ({ dr: b.row - a.row, dc: b.col - a.col });
+
+  for (let i = 1; i < nodes.length - 1; i++) {
+    const prev = nodes[i - 1];
+    const cur = nodes[i];
+    const next = nodes[i + 1];
+
+    const isCurWizard = cur.row === wizard.row && cur.col === wizard.col;
+    const isCurTarget = cur.row === raw.target.row && cur.col === raw.target.col;
+    if (isCurWizard || isCurTarget) continue;
+
+    const d1 = dir(prev, cur);
+    const d2 = dir(cur, next);
+
+    const turned = d1.dr !== d2.dr || d1.dc !== d2.dc;
+    if (!turned) continue;
+
+    const idx = getPieceAt(pieces, cur.row, cur.col);
+    if (idx === -1) return normalizeBeamForUI(wizard); // 空格不能轉彎
+    if (!isWizardConductorStrict(wizard.side, pieces[idx])) return normalizeBeamForUI(wizard);
+  }
+
   return raw;
-}
-
-// =========================
-// ✅ 巫師導線：自動射擊（敵方回合結束觸發）
-//  - 改用 computeWizardBeamSafe（二次驗證，避免亂射）
-// =========================
-function applyWizardAutoShotIfAny(params: {
-  pieces: Piece[];
-  currentPlayer: PlayerSide;
-  allNodes: NodePosition[];
-  burnMarks: BurnMark[];
-  holyLights: HolyLight[];
-  capturedPieces: CapturedMap;
-  moveHistory: MoveRecord[];
-}): {
-  pieces: Piece[];
-  burnMarks: BurnMark[];
-  holyLights: HolyLight[];
-  capturedPieces: CapturedMap;
-  moveHistory: MoveRecord[];
-  didShoot: boolean;
-} {
-  const { pieces, currentPlayer, allNodes, burnMarks, holyLights, capturedPieces, moveHistory } = params;
-
-  const wizardIdx = pieces.findIndex((p) => p.type === "wizard" && p.side === currentPlayer);
-  if (wizardIdx === -1) {
-    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
-  }
-
-  const wizard = pieces[wizardIdx];
-  const beam = computeWizardBeamSafe(wizard, pieces, allNodes, holyLights);
-  if (!beam?.target) {
-    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
-  }
-
-  const targetIndex = getPieceAt(pieces, beam.target.row, beam.target.col);
-  if (targetIndex === -1) {
-    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
-  }
-
-  const targetPiece = pieces[targetIndex];
-
-  // bard 不可被擊殺
-  if (targetPiece.type === "bard") {
-    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
-  }
-
-  let newPieces = [...pieces];
-  let newCaptured = cloneCaptured(capturedPieces);
-  let newBurnMarks = [...burnMarks];
-
-  if (targetPiece.type === "dragon") {
-    const tag = getDragonTag(targetPiece);
-    if (tag) newBurnMarks = removeBurnMarksByDragonTag(newBurnMarks, tag);
-  }
-
-  newCaptured = addCaptured(newCaptured, targetPiece);
-
-  newPieces.splice(targetIndex, 1);
-  newPieces = activateAllBards(newPieces);
-  newPieces = ensureDragonTags(newPieces);
-
-  const fromCoord = getNodeCoordinate(wizard.row, wizard.col);
-  const toCoord = getNodeCoordinate(beam.target.row, beam.target.col);
-
-  const desc = `${PIECE_CHINESE["wizard"]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}（導線自動射擊）`;
-  const rec = makeMoveRecord(desc, null);
-  const newHistory = [rec, ...moveHistory];
-
-  return {
-    pieces: newPieces,
-    burnMarks: newBurnMarks,
-    holyLights,
-    capturedPieces: newCaptured,
-    moveHistory: newHistory,
-    didShoot: true,
-  };
 }
 
 export default function Game() {
@@ -721,8 +717,8 @@ export default function Game() {
     return newWinner;
   }
 
-  // ✅ finalize：換手後自動射擊（只有在真的換手且尚未勝負時）
-  function finalizeTurnAndMaybeAutoShot(args: {
+  // ✅ finalize：刪除「導線自動射擊」：現在只負責換手（不會自動射擊）
+  function finalizeTurnNoAutoShot(args: {
     piecesAfterStealthExpire: Piece[];
     updatedBurnMarks: BurnMark[];
     remainingHolyLights: HolyLight[];
@@ -744,51 +740,16 @@ export default function Game() {
       remainingHolyLights,
       localCaptured,
       newMoveHistory,
-      nextPlayer,
       result,
     } = args;
 
-    if (result) {
-      return {
-        pieces: piecesAfterStealthExpire,
-        burnMarks: updatedBurnMarks,
-        holyLights: remainingHolyLights,
-        capturedPieces: localCaptured,
-        moveHistory: newMoveHistory,
-        winner: result,
-      };
-    }
-
-    if (!allNodes.length) {
-      return {
-        pieces: piecesAfterStealthExpire,
-        burnMarks: updatedBurnMarks,
-        holyLights: remainingHolyLights,
-        capturedPieces: localCaptured,
-        moveHistory: newMoveHistory,
-        winner: null,
-      };
-    }
-
-    const shot = applyWizardAutoShotIfAny({
+    return {
       pieces: piecesAfterStealthExpire,
-      currentPlayer: nextPlayer,
-      allNodes,
       burnMarks: updatedBurnMarks,
       holyLights: remainingHolyLights,
       capturedPieces: localCaptured,
       moveHistory: newMoveHistory,
-    });
-
-    const winAfterShot = checkWizardWin(shot.pieces);
-
-    return {
-      pieces: shot.pieces,
-      burnMarks: shot.burnMarks,
-      holyLights: shot.holyLights,
-      capturedPieces: shot.capturedPieces,
-      moveHistory: shot.moveHistory,
-      winner: winAfterShot ?? null,
+      winner: result ?? null,
     };
   }
 
@@ -1025,7 +986,6 @@ export default function Game() {
   };
 
   const handleGuardConfirm = () => {
-    // ...（以下完全照你原本的，未改動）
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
 
@@ -1123,7 +1083,7 @@ export default function Game() {
     movedAttacker = setAssassinStealthMeta(movedAttacker);
 
     if (movedAttacker.type === "assassin" && movedAttacker.stealthed) {
-      const inPaladinZone = paladinProtectionZone.some((z) => z.row === targetRowGuard && z.col === targetColGuard);
+      const inPaladinZone = paladinProtectionZone.some((z) => z.row === movedAttacker.row && z.col === movedAttacker.col);
       if (inPaladinZone) {
         const ma: any = { ...movedAttacker, stealthed: false };
         delete ma.stealthExpiresOn;
@@ -1191,9 +1151,7 @@ export default function Game() {
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
     const remainingBurnMarks = updatedBurnMarks;
-
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
-
     const updatedHolyLights = [...remainingHolyLights, { row: paladinRow, col: paladinCol, createdBy: paladin.side }];
 
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(newPieces, nextPlayer);
@@ -1202,7 +1160,7 @@ export default function Game() {
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
-    const finalized = finalizeTurnAndMaybeAutoShot({
+    const finalized = finalizeTurnNoAutoShot({
       piecesAfterStealthExpire,
       updatedBurnMarks: remainingBurnMarks,
       remainingHolyLights: updatedHolyLights,
@@ -1237,7 +1195,6 @@ export default function Game() {
   };
 
   const handleGuardDecline = () => {
-    //（未改動：完整保留你原本程式）
     if (!guardRequest) return;
     if (winner) return;
 
@@ -1341,12 +1298,11 @@ export default function Game() {
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
     const remainingBurnMarks = updatedBurnMarks;
-
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
-    const finalized = finalizeTurnAndMaybeAutoShot({
+    const finalized = finalizeTurnNoAutoShot({
       piecesAfterStealthExpire,
       updatedBurnMarks: remainingBurnMarks,
       remainingHolyLights,
@@ -1423,7 +1379,7 @@ export default function Game() {
     const record = makeMoveRecord(moveDesc, null);
     const newMoveHistory = [record, ...moveHistory];
 
-    const finalized = finalizeTurnAndMaybeAutoShot({
+    const finalized = finalizeTurnNoAutoShot({
       piecesAfterStealthExpire,
       updatedBurnMarks,
       remainingHolyLights,
@@ -1500,7 +1456,7 @@ export default function Game() {
     const record = makeMoveRecord(moveDesc, null);
     const newMoveHistory = [record, ...moveHistory];
 
-    const finalized = finalizeTurnAndMaybeAutoShot({
+    const finalized = finalizeTurnNoAutoShot({
       piecesAfterStealthExpire,
       updatedBurnMarks,
       remainingHolyLights,
@@ -1545,7 +1501,6 @@ export default function Game() {
 
     // ---- 若正在等吟遊詩人第二段換位 ----
     if (bardNeedsSwap && !isObserving) {
-      //（未改動：完整保留你原本程式）
       if (clickedPieceIdx !== -1) {
         const swapTarget = pieces[clickedPieceIdx];
 
@@ -1599,7 +1554,7 @@ export default function Game() {
 
           const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
-          const finalized = finalizeTurnAndMaybeAutoShot({
+          const finalized = finalizeTurnNoAutoShot({
             piecesAfterStealthExpire,
             updatedBurnMarks: remainingBurnMarks,
             remainingHolyLights,
@@ -1647,7 +1602,8 @@ export default function Game() {
           return;
         }
 
-        const canShowMoves = isObserving || localSide === "spectator" || piece.side === localSide || piece.side === "neutral";
+        const canShowMoves =
+          isObserving || localSide === "spectator" || piece.side === localSide || piece.side === "neutral";
 
         if (canShowMoves && allNodes.length > 0) {
           if (piece.type === "wizard") {
@@ -1661,10 +1617,18 @@ export default function Game() {
               burnMarks
             );
 
-            // ✅ 改這裡：用 computeWizardBeamSafe
-            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, holyLights);
+            // ✅ 巫師移動方式：沿節點連線移動 1 節點（只留相鄰 move）
+            const wNodeIdx = getNodeIdx(allNodes, piece.row, piece.col);
+            const filteredMoves = moves.filter((h) => {
+              if (h.type !== "move") return true;
+              const tNodeIdx = getNodeIdx(allNodes, h.row, h.col);
+              if (wNodeIdx === -1 || tNodeIdx === -1) return false;
+              return !!adjacency[wNodeIdx]?.includes(tNodeIdx);
+            });
+
+            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
             const merged = mergeWizardBeamAttackHighlights({
-              moves,
+              moves: filteredMoves,
               beam,
               wizard: piece,
               pieces: effectivePieces,
@@ -1784,9 +1748,17 @@ export default function Game() {
           if (piece.type === "wizard") {
             const moves = calculateWizardMoves(piece, clickedPieceIdx, effectivePieces, adjacency, allNodes, holyLights, burnMarks);
 
-            // ✅ 改這裡：用 computeWizardBeamSafe
-            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, holyLights);
-            const merged = mergeWizardBeamAttackHighlights({ moves, beam, wizard: piece, pieces: effectivePieces });
+            // ✅ 巫師移動方式：沿節點連線移動 1 節點（只留相鄰 move）
+            const wNodeIdx = getNodeIdx(allNodes, piece.row, piece.col);
+            const filteredMoves = moves.filter((h) => {
+              if (h.type !== "move") return true;
+              const tNodeIdx = getNodeIdx(allNodes, h.row, h.col);
+              if (wNodeIdx === -1 || tNodeIdx === -1) return false;
+              return !!adjacency[wNodeIdx]?.includes(tNodeIdx);
+            });
+
+            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+            const merged = mergeWizardBeamAttackHighlights({ moves: filteredMoves, beam, wizard: piece, pieces: effectivePieces });
 
             setHighlights(merged);
             setDragonPathNodes([]);
@@ -1939,7 +1911,6 @@ export default function Game() {
 
           newPieces[adjustedIdx] = movedPiece;
 
-          // ✅ 這就是你說的：「巫師沿節點走一格也能擊殺」：走到敵棋格上視為 move-attack
           moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
         }
       } else {
@@ -2001,7 +1972,6 @@ export default function Game() {
         updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
       }
     } else if (highlight.type === "swap") {
-      //（未改動：完整保留你原本程式）
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2088,7 +2058,6 @@ export default function Game() {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
     } else if (highlight.type === "attack") {
-      //（未改動：完整保留你原本程式）
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2096,7 +2065,8 @@ export default function Game() {
         const wizardNodeIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
         const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
 
-        const isAdjacent = wizardNodeIdx !== -1 && targetNodeIdx !== -1 && adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+        const isAdjacent =
+          wizardNodeIdx !== -1 && targetNodeIdx !== -1 && adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
 
         if (isAdjacent) {
           setWizardAttackRequest({
@@ -2165,7 +2135,7 @@ export default function Game() {
 
       if (targetPiece.type !== "bard") {
         if (selectedPiece.type === "wizard") {
-          // 巫師視線攻擊不動（含導線 attack）
+          // 巫師導線/視線攻擊不動
         } else if (selectedPiece.type === "dragon") {
           const dragonTag = getDragonTag(selectedPiece);
           const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
@@ -2281,7 +2251,7 @@ export default function Game() {
 
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
-    const finalized = finalizeTurnAndMaybeAutoShot({
+    const finalized = finalizeTurnNoAutoShot({
       piecesAfterStealthExpire,
       updatedBurnMarks: remainingBurnMarks,
       remainingHolyLights,
