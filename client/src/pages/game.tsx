@@ -2634,8 +2634,7 @@ export default function Game() {
               holyLights={boardState.holyLights}
               viewerSide={localSide}
               observing={isObserving}
-              // ⚠️ 若你 GameBoard 有支援導線顯示，可再加上：
-              // wizardBeam={wizardBeam}
+              wizardBeam={wizardBeam}
             />
           </div>
 
