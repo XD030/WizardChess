@@ -225,10 +225,12 @@ export function hasEnemyHolyLight(
 }
 
 /**
- * ✅ 重要修正：
- * - 一般棋子：灼痕不能停留
- * - 聖騎士：可以停留在灼痕上
- * - 龍：需要「可穿越灼痕」→ allowBurnThrough=true 時，不因灼痕而被擋住
+ * ✅ 重要修正（符合你最新規則）：
+ * - 灼痕：所有棋子「可穿越」，但「只有聖騎士可停留」
+ * - HolyLight：敵方「不可穿越、不可停留」
+ *
+ * 說明：
+ * - allowBurnThrough=true：代表「做路徑/穿越檢查」時，不因灼痕而擋住（但是否能停留仍由呼叫端決定）
  */
 export function canOccupyNode(
   row: number,
@@ -247,21 +249,19 @@ export function canOccupyNode(
 
   const hasBurnMark = burnList.some((b) => b && b.row === row && b.col === col);
 
-  // 灼痕處理
-  if (hasBurnMark) {
-    // 聖騎士可以站上去
-    if (pieceType === 'paladin') {
-      return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
-    }
-    // 允許穿越（例如龍）
-    if (allowBurnThrough) {
-      return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
-    }
-    // 其他棋子不能停留
-    return false;
-  }
+  // HolyLight：敵方不可穿越/不可停留（統一先擋）
+  if (hasEnemyHolyLight(row, col, pieceSide, holyLights)) return false;
 
-  return !hasEnemyHolyLight(row, col, pieceSide, holyLights);
+  if (!hasBurnMark) return true;
+
+  // 灼痕：只有聖騎士可以「停留」
+  if (pieceType === 'paladin') return true;
+
+  // allowBurnThrough=true 只代表「可穿越」：呼叫端若拿來當路徑檢查可用
+  if (allowBurnThrough) return true;
+
+  // 其他棋子：不能停留
+  return false;
 }
 
 export function filterHighlightsForHolyLight(
@@ -644,7 +644,7 @@ export function calculateGriffinMoves(
 
   const currentCoords = getRotatedCoords(piece.row, piece.col);
 
-  // Horizontal rays (same row)
+  // Horizontal rays (same row) — ✅ 灼痕可穿越、不可停留（非聖騎士）
   for (const firstAdjIdx of adjacency[nodeIdx]) {
     const firstAdjNode = allNodes[firstAdjIdx];
     if (firstAdjNode.row !== piece.row) continue;
@@ -656,19 +656,31 @@ export function calculateGriffinMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type)) break;
+      // ❌ 敵方 HolyLight：不可穿越
+      if (hasEnemyHolyLight(nextNode.row, nextNode.col, piece.side, holyLights)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
 
+      // 有棋：不可穿越，停下（若可落點且是敵人則 attack）
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
-        if (targetPiece.side !== piece.side && targetPiece.side !== 'neutral' && targetPiece.type !== 'bard') {
+        if (
+          targetPiece.side !== piece.side &&
+          targetPiece.side !== 'neutral' &&
+          targetPiece.type !== 'bard' &&
+          canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type)
+        ) {
+          // 只有「可停留」才算攻擊落點（灼痕上不會給 attack）
           highlights.push({ type: 'attack', row: nextNode.row, col: nextNode.col });
         }
         break;
       }
 
-      highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
+      // 空格：只有可停留才給 move（灼痕上不給 move，但要繼續掃描＝可穿越）
+      if (canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type)) {
+        highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
+      }
+
       currentIdx = nextIdx;
       nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
     }
@@ -782,7 +794,7 @@ export function calculatePaladinMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    // ✅ 這裡關鍵：piece.type='paladin' 會允許站在灼痕上
+    // ✅ piece.type='paladin' 允許停在灼痕上
     if (
       targetPieceIdx === -1 &&
       canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
@@ -929,7 +941,7 @@ export function calculateDragonMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      // ✅ 允許「穿越灼痕」：allowBurnThrough=true
+      // ✅ 龍：可穿越灼痕（allowBurnThrough=true），但仍會被敵方 HolyLight 擋住
       if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type, true)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
