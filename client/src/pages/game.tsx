@@ -210,8 +210,8 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
 
 /**
  * ✅ NEW:
- * 把 computeWizardBeam 的 target 轉成可點擊的 attack highlight，
- * 否則你點導線末端紅點會進不到 handleNodeClick 的 attack 分支。
+ * 把 computeWizardBeam 的 target 轉成可點擊的 attack highlight
+ * 並做「更嚴格」：巫師只允許 1 個 attack（導線末端），否則不產生任何 attack。
  */
 function mergeWizardBeamAttackHighlights(args: {
   moves: MoveHighlight[];
@@ -220,30 +220,36 @@ function mergeWizardBeamAttackHighlights(args: {
   pieces: Piece[];
 }): MoveHighlight[] {
   const { moves, beam, wizard, pieces } = args;
-  if (!beam?.target) return moves;
+
+  // ✅ 更嚴格：沒有合法導線 → 不給任何 attack（避免一般攻擊紅點混進來）
+  if (!beam?.target) {
+    return moves.filter((h) => h.type !== "attack");
+  }
 
   const t = beam.target;
   const tIdx = getPieceAt(pieces, t.row, t.col);
-  if (tIdx === -1) return moves;
+  if (tIdx === -1) return moves.filter((h) => h.type !== "attack");
 
   const targetPiece = pieces[tIdx];
 
   // 只能打敵方；bard 規則：不可被擊殺
-  if (targetPiece.side === wizard.side) return moves;
-  if (targetPiece.type === "bard") return moves;
+  if (targetPiece.side === wizard.side) return moves.filter((h) => h.type !== "attack");
+  if (targetPiece.type === "bard") return moves.filter((h) => h.type !== "attack");
 
-  const exists = moves.some((h) => h.type === "attack" && h.row === t.row && h.col === t.col);
-  if (exists) return moves;
-
-  return [...moves, { type: "attack" as const, row: t.row, col: t.col }];
+  // ✅ 更嚴格：巫師 attack 只允許導線 target 這一顆（覆蓋所有 attack）
+  return [...moves.filter((h) => h.type !== "attack"), { type: "attack" as const, row: t.row, col: t.col }];
 }
 
 /* =========================================================
-   ✅✅✅ 巫師導線修正（只動 Game.tsx）
-   目的：
-   1) 導體嚴格：己方學徒、已啟動吟遊詩人（己方或中立）
-   2) 轉向只能在導體上
-   3) 最後一格必須是導體，且要「導體直接連到敵人」
+   ✅✅✅ 巫師導線：更嚴格版本（純 Game.tsx 內做二次驗證）
+   規則（你這次要求的）：
+   - 導線只能由巫師當起點
+   - 中間只能是「導體」（己方學徒 or 已啟動己方/中立吟遊詩人）
+   - 允許「空格」穿過，但空格不可轉彎
+   - 允許轉彎，但只能在「導體」上轉彎（不能在空格、不能在巫師自己上轉）
+   - 最後必須是「導體接敵人」（target 前一格必須有導體，且導體與敵人相鄰）
+   - 導線射擊不會使巫師移動（攻擊分支已確保巫師不動）
+   - ❌ 已移除「導線自動射擊」
    ========================================================= */
 
 function isWizardConductorStrict(wizardSide: Side, p: Piece): boolean {
@@ -259,30 +265,24 @@ function normalizeBeamForUI(wizard: Piece): WizardBeamResult {
   return { pathNodes: [{ row: wizard.row, col: wizard.col }], pathEdges: [] };
 }
 
-function getNodeIdx(allNodes: NodePosition[], r: number, c: number): number {
-  return allNodes.findIndex((n) => n.row === r && n.col === c);
+function isSamePos(a: { row: number; col: number }, b: { row: number; col: number }) {
+  return a.row === b.row && a.col === b.col;
 }
 
-function isAdjacentByGraph(
+function isAdjacentByAdjacency(
   a: { row: number; col: number },
   b: { row: number; col: number },
   allNodes: NodePosition[],
   adjacency: number[][]
 ): boolean {
-  const ai = getNodeIdx(allNodes, a.row, a.col);
-  const bi = getNodeIdx(allNodes, b.row, b.col);
+  const ai = allNodes.findIndex((n) => n.row === a.row && n.col === a.col);
+  const bi = allNodes.findIndex((n) => n.row === b.row && n.col === b.col);
   if (ai === -1 || bi === -1) return false;
   return !!adjacency[ai]?.includes(bi);
 }
 
 /**
- * ✅ 安全版導線：
- * - 仍然呼叫 gameLogic.ts 的 computeWizardBeam
- * - 但會「二次驗證」導線路徑上的棋子與轉彎規則：
- *   只允許：己方學徒、已啟動的己方/中立吟遊詩人 作為導體
- *   且「轉彎只能在導體格上」
- *   且「最後一格必須是導體，導體直接連到敵人」
- * - 不符合 → 視為沒有導線（只顯示巫師自己）
+ * ✅ 更嚴格導線驗證
  */
 function computeWizardBeamSafe(
   wizard: Piece,
@@ -292,80 +292,80 @@ function computeWizardBeamSafe(
   holyLights: HolyLight[] = []
 ): WizardBeamResult {
   const raw = computeWizardBeam(wizard, pieces, allNodes, holyLights);
-  if (!raw?.target) return raw ?? normalizeBeamForUI(wizard);
+  if (!raw?.target) return normalizeBeamForUI(wizard);
 
-  // 0) pathNodes 必須以巫師為起點
   const nodes = raw.pathNodes ?? [];
-  const start = nodes[0];
-  if (!start || start.row !== wizard.row || start.col !== wizard.col) {
+  if (nodes.length < 3) {
+    // 至少 wizard → (某些節點) → target，且必須存在「導體」，所以最少 3
     return normalizeBeamForUI(wizard);
   }
 
-  // 1) target 必須存在且是敵方且非 bard
+  // target 必須存在且是敵方且非 bard
   const tIdx = getPieceAt(pieces, raw.target.row, raw.target.col);
   if (tIdx === -1) return normalizeBeamForUI(wizard);
-
   const tp = pieces[tIdx];
   if (tp.side === wizard.side) return normalizeBeamForUI(wizard);
   if (tp.type === "bard") return normalizeBeamForUI(wizard);
 
-  // 2) 最後一個非 wizard/target 節點必須是導體，且要直接相鄰 target
-  const lastNonWT = [...nodes]
-    .reverse()
-    .find(
-      (n) =>
-        !(n.row === wizard.row && n.col === wizard.col) &&
-        !(n.row === raw.target!.row && n.col === raw.target!.col)
-    );
-
-  if (!lastNonWT) {
-    // 沒有任何中繼節點，不符合「中間導體、最後導體接敵人」
+  // pathNodes 第一個必須是 wizard
+  if (!isSamePos(nodes[0], { row: wizard.row, col: wizard.col })) {
     return normalizeBeamForUI(wizard);
   }
 
-  const lastIdx = getPieceAt(pieces, lastNonWT.row, lastNonWT.col);
-  if (lastIdx === -1) return normalizeBeamForUI(wizard);
-  if (!isWizardConductorStrict(wizard.side, pieces[lastIdx])) return normalizeBeamForUI(wizard);
-
-  if (!isAdjacentByGraph(lastNonWT, raw.target, allNodes, adjacency)) {
+  // pathNodes 最後一個必須是 target（若 computeWizardBeam 沒把 target 放最後，就直接判無效）
+  if (!isSamePos(nodes[nodes.length - 1], raw.target)) {
     return normalizeBeamForUI(wizard);
   }
 
-  // 3) 路徑上所有「有棋子」的節點（除 wizard / target）都必須是合法導體
-  for (const n of nodes) {
-    const isWizard = n.row === wizard.row && n.col === wizard.col;
-    const isTarget = n.row === raw.target.row && n.col === raw.target.col;
-    if (isWizard || isTarget) continue;
+  // ✅ 最後一格（target 前一格）必須是「導體」，且要與 target 相鄰（導體接敵人）
+  const pre = nodes[nodes.length - 2];
+  const preIdx = getPieceAt(pieces, pre.row, pre.col);
+  if (preIdx === -1) return normalizeBeamForUI(wizard); // 不能是空格
+  if (!isWizardConductorStrict(wizard.side, pieces[preIdx])) return normalizeBeamForUI(wizard);
+  if (!isAdjacentByAdjacency(pre, raw.target, allNodes, adjacency)) return normalizeBeamForUI(wizard);
 
-    const idx = getPieceAt(pieces, n.row, n.col);
-    if (idx === -1) continue; // 空節點允許存在於路徑中（例：巫師→空格→導體）
-    const p = pieces[idx];
+  // ✅ 中間必須至少有 1 個導體（排除 wizard / target）
+  let conductorCount = 0;
 
-    if (!isWizardConductorStrict(wizard.side, p)) {
+  // ✅ 任何「有棋子」的中繼節點都必須是合法導體；敵方/未啟動 bard 一律失敗
+  for (let i = 1; i < nodes.length - 1; i++) {
+    const n = nodes[i];
+
+    // ❌ 不能穿過聖光（超嚴格）
+    if (holyLights.some((l) => l.row === n.row && l.col === n.col)) {
       return normalizeBeamForUI(wizard);
     }
+
+    const idx = getPieceAt(pieces, n.row, n.col);
+    if (idx === -1) continue; // 允許空格
+
+    const p = pieces[idx];
+    if (!isWizardConductorStrict(wizard.side, p)) return normalizeBeamForUI(wizard);
+    conductorCount++;
   }
 
-  // 4) 轉向規則：只有「導體格」可以轉彎（空格不能轉彎）
-  const dir = (a: NodePosition, b: NodePosition) => ({ dr: b.row - a.row, dc: b.col - a.col });
+  if (conductorCount < 1) return normalizeBeamForUI(wizard);
 
+  // ✅ 轉彎只能發生在「導體」節點；空格不可轉彎；巫師本體不可轉彎
+  // 用 pathNodes 連續差分判斷方向改變：若 (d1 != d2)，則轉彎點 = nodes[i]
+  // 其中 i 是上一段的終點 / 下一段的起點（中間那顆）
   for (let i = 1; i < nodes.length - 1; i++) {
     const prev = nodes[i - 1];
     const cur = nodes[i];
     const next = nodes[i + 1];
 
-    const isCurWizard = cur.row === wizard.row && cur.col === wizard.col;
-    const isCurTarget = cur.row === raw.target.row && cur.col === raw.target.col;
-    if (isCurWizard || isCurTarget) continue;
+    const d1 = { r: cur.row - prev.row, c: cur.col - prev.col };
+    const d2 = { r: next.row - cur.row, c: next.col - cur.col };
 
-    const d1 = dir(prev, cur);
-    const d2 = dir(cur, next);
-
-    const turned = d1.dr !== d2.dr || d1.dc !== d2.dc;
+    const turned = d1.r !== d2.r || d1.c !== d2.c;
     if (!turned) continue;
 
+    // ❌ 巫師本人不能當轉彎點
+    if (cur.row === wizard.row && cur.col === wizard.col) return normalizeBeamForUI(wizard);
+
+    // ❌ 轉彎點不能是空格，必須有棋且是導體
     const idx = getPieceAt(pieces, cur.row, cur.col);
-    if (idx === -1) return normalizeBeamForUI(wizard); // 空格不能轉彎
+    if (idx === -1) return normalizeBeamForUI(wizard);
     if (!isWizardConductorStrict(wizard.side, pieces[idx])) return normalizeBeamForUI(wizard);
   }
 
@@ -717,7 +717,7 @@ export default function Game() {
     return newWinner;
   }
 
-  // ✅ finalize：刪除「導線自動射擊」：現在只負責換手（不會自動射擊）
+  // ✅ finalize：換手（❌ 已移除導線自動射擊）
   function finalizeTurnNoAutoShot(args: {
     piecesAfterStealthExpire: Piece[];
     updatedBurnMarks: BurnMark[];
@@ -1083,7 +1083,7 @@ export default function Game() {
     movedAttacker = setAssassinStealthMeta(movedAttacker);
 
     if (movedAttacker.type === "assassin" && movedAttacker.stealthed) {
-      const inPaladinZone = paladinProtectionZone.some((z) => z.row === movedAttacker.row && z.col === movedAttacker.col);
+      const inPaladinZone = paladinProtectionZone.some((z) => z.row === targetRowGuard && z.col === targetColGuard);
       if (inPaladinZone) {
         const ma: any = { ...movedAttacker, stealthed: false };
         delete ma.stealthExpiresOn;
@@ -1220,11 +1220,12 @@ export default function Game() {
       newPieces = activateAllBards(newPieces);
     }
 
-    const adjustedIdx = targetPiece.type !== "bard" && targetIdx < attackerPieceIndex ? attackerPieceIndex - 1 : attackerPieceIndex;
+    const adjustedIdx =
+      targetPiece.type !== "bard" && targetIdx < attackerPieceIndex ? attackerPieceIndex - 1 : attackerPieceIndex;
 
     if (targetPiece.type !== "bard") {
       if (selectedPiece.type === "wizard") {
-        // 巫師視線攻擊留在原地
+        // ✅ 巫師攻擊留在原地（導線射擊不移動）
       } else if (selectedPiece.type === "dragon") {
         const tag = getDragonTag(selectedPiece);
         const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, targetRow, targetCol, adjacency, allNodes);
@@ -1347,7 +1348,6 @@ export default function Game() {
 
     let newPieces = [...pieces];
     let localCaptured = cloneCaptured(capturedPieces);
-
     let updatedBurnMarks = [...burnMarks];
 
     if (targetPiece.type === "dragon") {
@@ -1373,7 +1373,6 @@ export default function Game() {
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
-
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const record = makeMoveRecord(moveDesc, null);
@@ -1450,7 +1449,6 @@ export default function Game() {
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
-
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const record = makeMoveRecord(moveDesc, null);
@@ -1617,18 +1615,11 @@ export default function Game() {
               burnMarks
             );
 
-            // ✅ 巫師移動方式：沿節點連線移動 1 節點（只留相鄰 move）
-            const wNodeIdx = getNodeIdx(allNodes, piece.row, piece.col);
-            const filteredMoves = moves.filter((h) => {
-              if (h.type !== "move") return true;
-              const tNodeIdx = getNodeIdx(allNodes, h.row, h.col);
-              if (wNodeIdx === -1 || tNodeIdx === -1) return false;
-              return !!adjacency[wNodeIdx]?.includes(tNodeIdx);
-            });
-
+            // ✅ 更嚴格導線（多條件）
             const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+
             const merged = mergeWizardBeamAttackHighlights({
-              moves: filteredMoves,
+              moves,
               beam,
               wizard: piece,
               pieces: effectivePieces,
@@ -1747,18 +1738,8 @@ export default function Game() {
         if (canShowMoves && allNodes.length > 0) {
           if (piece.type === "wizard") {
             const moves = calculateWizardMoves(piece, clickedPieceIdx, effectivePieces, adjacency, allNodes, holyLights, burnMarks);
-
-            // ✅ 巫師移動方式：沿節點連線移動 1 節點（只留相鄰 move）
-            const wNodeIdx = getNodeIdx(allNodes, piece.row, piece.col);
-            const filteredMoves = moves.filter((h) => {
-              if (h.type !== "move") return true;
-              const tNodeIdx = getNodeIdx(allNodes, h.row, h.col);
-              if (wNodeIdx === -1 || tNodeIdx === -1) return false;
-              return !!adjacency[wNodeIdx]?.includes(tNodeIdx);
-            });
-
             const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
-            const merged = mergeWizardBeamAttackHighlights({ moves: filteredMoves, beam, wizard: piece, pieces: effectivePieces });
+            const merged = mergeWizardBeamAttackHighlights({ moves, beam, wizard: piece, pieces: effectivePieces });
 
             setHighlights(merged);
             setDragonPathNodes([]);
@@ -2000,7 +1981,6 @@ export default function Game() {
         }
 
         const movedWizard = { ...wizard, row: apprentice.row, col: apprentice.col };
-
         const movedApprentice: any = { ...apprentice, row: wizard.row, col: wizard.col, swapUsed: true };
 
         newPieces[wizardIdx] = movedWizard;
@@ -2061,12 +2041,12 @@ export default function Game() {
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
+      // ✅ 巫師：若相鄰，才彈出「導線射擊 or 移動攻擊」
       if (selectedPiece.type === "wizard") {
         const wizardNodeIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
         const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
 
-        const isAdjacent =
-          wizardNodeIdx !== -1 && targetNodeIdx !== -1 && adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+        const isAdjacent = wizardNodeIdx !== -1 && targetNodeIdx !== -1 && adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
 
         if (isAdjacent) {
           setWizardAttackRequest({
@@ -2086,7 +2066,9 @@ export default function Game() {
       }
 
       const guardingPaladinIndices =
-        targetPiece.side !== "neutral" ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes) : [];
+        targetPiece.side !== "neutral"
+          ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
+          : [];
 
       if (guardingPaladinIndices.length > 0) {
         const pendingGuard: PendingGuard = {
@@ -2131,11 +2113,12 @@ export default function Game() {
         newPieces = activateAllBards(newPieces);
       }
 
-      const adjustedIdx = targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+      const adjustedIdx =
+        targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
 
       if (targetPiece.type !== "bard") {
         if (selectedPiece.type === "wizard") {
-          // 巫師導線/視線攻擊不動
+          // ✅ 巫師 attack 不移動（導線射擊符合你規則）
         } else if (selectedPiece.type === "dragon") {
           const dragonTag = getDragonTag(selectedPiece);
           const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
@@ -2351,7 +2334,6 @@ export default function Game() {
   }
 
   // ================== UI ==================
-  //（以下 UI 區塊：照你原本完整保留）
 
   // -------------- 未進房：輸入房間密碼 --------------
   if (!inRoom) {
@@ -2491,7 +2473,9 @@ export default function Game() {
                     onClick={handlePressReady}
                     disabled={myReady}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                      myReady ? "bg-slate-700 text-slate-300 cursor-default" : "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
+                      myReady
+                        ? "bg-slate-700 text-slate-300 cursor-default"
+                        : "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
                     }`}
                   >
                     {myReady ? "已準備完成" : "開始遊戲"}
@@ -2541,7 +2525,9 @@ export default function Game() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-3">
           <div
             className={`px-3 py-1 rounded-full text-xs sm:text-sm border ${
-              isMyTurn ? "border-emerald-400 text-emerald-300 bg-emerald-500/10" : "border-slate-600 text-slate-200 bg-slate-800/60"
+              isMyTurn
+                ? "border-emerald-400 text-emerald-300 bg-emerald-500/10"
+                : "border-slate-600 text-slate-200 bg-slate-800/60"
             }`}
           >
             目前回合：{boardState.currentPlayer === "white" ? "白方" : "黑方"}
