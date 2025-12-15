@@ -221,24 +221,24 @@ function mergeWizardBeamAttackHighlights(args: {
 }): MoveHighlight[] {
   const { moves, beam, wizard, pieces } = args;
 
-  // ✅ 更嚴格：沒有合法導線 → 不給任何 attack（避免一般攻擊紅點混進來）
-  if (!beam?.target) {
-    return moves.filter((h) => h.type !== "attack");
-  }
+  // ✅ 沒有導線 target：不要動 moves（保留一般相鄰 attack）
+  if (!beam?.target) return moves;
 
   const t = beam.target;
   const tIdx = getPieceAt(pieces, t.row, t.col);
-  if (tIdx === -1) return moves.filter((h) => h.type !== "attack");
+  if (tIdx === -1) return moves;
 
   const targetPiece = pieces[tIdx];
 
-  // 只能打敵方；bard 規則：不可被擊殺
-  if (targetPiece.side === wizard.side) return moves.filter((h) => h.type !== "attack");
-  if (targetPiece.type === "bard") return moves.filter((h) => h.type !== "attack");
+  // 只能打敵方；bard 不可被擊殺（你原本規則）
+  if (targetPiece.side === wizard.side) return moves;
+  if (targetPiece.type === "bard") return moves;
 
-  // ✅ 更嚴格：巫師 attack 只允許導線 target 這一顆（覆蓋所有 attack）
-  return [...moves.filter((h) => h.type !== "attack"), { type: "attack" as const, row: t.row, col: t.col }];
+  // ✅ 把導線 target 加進去（避免重複）
+  const already = moves.some((h) => h.type === "attack" && h.row === t.row && h.col === t.col);
+  return already ? moves : [...moves, { type: "attack" as const, row: t.row, col: t.col }];
 }
+
 
 /* =========================================================
    ✅✅✅ 巫師導線：更嚴格版本（純 Game.tsx 內做二次驗證）
@@ -524,12 +524,26 @@ export default function Game() {
 
   // ====== 初始化棋盤節點 ======
   useEffect(() => {
-    const rows = buildRows(700, 700);
-    const nodes = buildAllNodes(rows);
-    const adj = buildAdjacency(rows);
-    setAllNodes(nodes);
-    setAdjacency(adj);
-  }, []);
+  const LOGICAL_SIZE = 1000;
+  const BOARD_SCALE = 2;
+
+  const baseRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
+  const cx = LOGICAL_SIZE / 2;
+  const cy = LOGICAL_SIZE / 2;
+
+  const scaledRows = baseRows.map((row) =>
+    row.map((p) => ({
+      x: cx + (p.x - cx) * BOARD_SCALE,
+      y: cy + (p.y - cy) * BOARD_SCALE,
+    }))
+  );
+
+  const nodes = buildAllNodes(scaledRows);
+  const adj = buildAdjacency(scaledRows);
+  setAllNodes(nodes);
+  setAdjacency(adj);
+}, []);
+
 
   // winner 一變成非 null，就跳出結束視窗
   useEffect(() => {
