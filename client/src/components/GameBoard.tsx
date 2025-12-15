@@ -87,13 +87,22 @@ const BOARD_THEME = {
   labelText: 'rgba(255, 255, 255, 0.85)',
 
   // ==== ✅ 巫師導線顏色（可用導線） ====
-  // 線：黃金；路徑點：青藍；目標：紅
   beamLine: 'rgba(250, 204, 21, 0.85)',
   beamGlow: 'rgba(250, 204, 21, 0.55)',
   beamNode: 'rgba(56, 189, 248, 0.95)',
   beamNodeGlow: 'rgba(56, 189, 248, 0.55)',
   beamTarget: 'rgba(239, 68, 68, 0.95)',
   beamTargetGlow: 'rgba(239, 68, 68, 0.55)',
+
+  // ==== highlights 顏色（節點圈圈） ====
+  moveFill: 'rgba(16, 185, 129, 0.55)',
+  moveFillHover: 'rgba(16, 185, 129, 0.75)',
+
+  swapStroke: 'rgba(59, 130, 246, 0.95)',
+  swapGlow: 'rgba(59, 130, 246, 0.55)',
+
+  attackStroke: 'rgba(239, 68, 68, 0.95)',
+  attackGlow: 'rgba(239, 68, 68, 0.55)',
 };
 
 // 這個視角是否看得到這顆棋
@@ -515,18 +524,76 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // --- 移動高亮 ---
+    // =========================================================
+    // ✅ 移動/換位/攻擊高亮（「節點」層）
+    // 重要修正：attack 目標格子就算「上面有棋」也一定要畫出來！
+    // =========================================================
+    const highlightsByKey = new Map<string, MoveHighlight[]>();
+    for (const h of highlights) {
+      const k = posKey(h.row, h.col);
+      const arr = highlightsByKey.get(k) ?? [];
+      arr.push(h);
+      highlightsByKey.set(k, arr);
+    }
+
+    // move：綠色實心（你原本的行為保留）
     highlights.forEach((h) => {
       if (h.type !== 'move') return;
       const node = getNode(h.row, h.col);
       if (!node) return;
 
       const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
-      const opacity = isHovered ? 0.7 : 0.5;
       ctx.beginPath();
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
+      ctx.fillStyle = isHovered ? BOARD_THEME.moveFillHover : BOARD_THEME.moveFill;
       ctx.fill();
+    });
+
+    // swap / attack：用「外圈」表示（不管有沒有棋都會畫）
+    allNodes.forEach((node) => {
+      const list = highlightsByKey.get(posKey(node.row, node.col));
+      if (!list || list.length === 0) return;
+
+      const hasSwap = list.some((h) => h.type === 'swap');
+      const hasAttack = list.some((h) => h.type === 'attack');
+
+      if (!hasSwap && !hasAttack) return;
+
+      // swap ring
+      if (hasSwap) {
+        ctx.save();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = BOARD_THEME.swapStroke;
+        ctx.shadowColor = BOARD_THEME.swapGlow;
+        ctx.shadowBlur = 10;
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 15, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      // attack ring（優先讓它更醒目）
+      if (hasAttack) {
+        ctx.save();
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = BOARD_THEME.attackStroke;
+        ctx.shadowColor = BOARD_THEME.attackGlow;
+        ctx.shadowBlur = 12;
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 17, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 再加一個內圈，避免被棋子 outline 吃掉視覺
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
     });
 
     // --- 座標標籤 A~I / 1~9 ---
