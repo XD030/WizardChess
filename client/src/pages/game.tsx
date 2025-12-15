@@ -2218,13 +2218,19 @@ export default function Game() {
         });
 
         const swapHighlights: MoveHighlight[] = newPieces
-          .map((p) => p)
-          .filter((p) => p.side === currentPlayer && p.type !== "bard" && p.type !== "dragon")
+          .filter(
+            (p) =>
+              p.side === currentPlayer &&
+              p.type !== "bard" &&
+              p.type !== "dragon" &&
+              p.type !== "wizard" // ✅ 排除巫師
+          )
           .map((p) => ({
             type: "swap" as const,
             row: p.row,
             col: p.col,
           }));
+
 
         setHighlights(swapHighlights);
         setDragonPathNodes([]);
