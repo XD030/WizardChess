@@ -234,6 +234,331 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
   }
 }
 
+// =========================
+// ✅ 巫師導線：計算 + 自動射擊（敵方回合結束觸發）
+// =========================
+
+type BeamEdge = {
+  from: { row: number; col: number };
+  to: { row: number; col: number };
+};
+
+type WizardBeamResult = {
+  pathNodes: { row: number; col: number }[];
+  pathEdges: BeamEdge[];
+  target?: { row: number; col: number };
+};
+
+function posKey(r: number, c: number) {
+  return `${r},${c}`;
+}
+
+function pieceAtMap(pieces: Piece[]): Map<string, number> {
+  const m = new Map<string, number>();
+  pieces.forEach((p, idx) => m.set(posKey(p.row, p.col), idx));
+  return m;
+}
+
+function buildNodeIndexMap(allNodes: NodePosition[]) {
+  const map = new Map<string, number>();
+  allNodes.forEach((n, i) => map.set(posKey(n.row, n.col), i));
+  return map;
+}
+
+function dot(ax: number, ay: number, bx: number, by: number) {
+  return ax * bx + ay * by;
+}
+function len(ax: number, ay: number) {
+  return Math.sqrt(ax * ax + ay * ay);
+}
+function norm(ax: number, ay: number) {
+  const l = len(ax, ay) || 1;
+  return { x: ax / l, y: ay / l };
+}
+
+// 從 start 走一條射線：回傳沿路節點（含第一步），直到遇到棋子或邊界
+function traceRay(
+  startIdx: number,
+  firstStepIdx: number,
+  adjacency: number[][],
+  allNodes: NodePosition[],
+  occupied: Map<string, number>
+): { pathNodeIdxs: number[]; hitPieceIndex: number | null } {
+  const start = allNodes[startIdx];
+  const first = allNodes[firstStepIdx];
+  const dir = norm(first.x - start.x, first.y - start.y);
+
+  const path: number[] = [firstStepIdx];
+
+  let prevIdx = startIdx;
+  let curIdx = firstStepIdx;
+
+  while (true) {
+    const cur = allNodes[curIdx];
+
+    // 檢查命中棋子
+    const key = posKey(cur.row, cur.col);
+    const hit = occupied.get(key);
+    if (hit != null) {
+      return { pathNodeIdxs: path, hitPieceIndex: hit };
+    }
+
+    // 找下一個最像同方向的鄰點
+    const neighbors = adjacency[curIdx] || [];
+    let bestNext: number | null = null;
+    let bestScore = -999;
+
+    for (const nb of neighbors) {
+      if (nb === prevIdx) continue;
+      const nbNode = allNodes[nb];
+      const v = norm(nbNode.x - cur.x, nbNode.y - cur.y);
+      const score = dot(dir.x, dir.y, v.x, v.y);
+      if (score > bestScore) {
+        bestScore = score;
+        bestNext = nb;
+      }
+    }
+
+    // 方向偏差太大就停，避免亂轉
+    if (bestNext == null || bestScore < 0.92) {
+      return { pathNodeIdxs: path, hitPieceIndex: null };
+    }
+
+    prevIdx = curIdx;
+    curIdx = bestNext;
+    path.push(curIdx);
+  }
+}
+
+function isRelayPiece(p: Piece, wizardSide: PlayerSide) {
+  return p.side === wizardSide && (p.type === "apprentice" || p.type === "bard");
+}
+
+/**
+ * 計算：從某個巫師出發，透過己方 relay（apprentice/bard）串起來，
+ * 找到「可命中的第一顆敵方棋」並回傳一條最短（邊數最少）的路徑用於顯示。
+ */
+function computeWizardBeam(
+  pieces: Piece[],
+  wizardIndex: number,
+  adjacency: number[][],
+  allNodes: NodePosition[]
+): WizardBeamResult | null {
+  const wizard = pieces[wizardIndex];
+  if (!wizard || wizard.type !== "wizard") return null;
+
+  const nodeIndexMap = buildNodeIndexMap(allNodes);
+  const startNodeIdx = nodeIndexMap.get(posKey(wizard.row, wizard.col));
+  if (startNodeIdx == null) return null;
+
+  const occupied = pieceAtMap(pieces);
+  const wizardSide = wizard.side as PlayerSide;
+
+  type PrevInfo = {
+    prevKey: string | null;
+    segmentNodeIdxs: number[];
+  };
+
+  const q: string[] = [];
+  const visited = new Set<string>();
+  const prev = new Map<string, PrevInfo>();
+  const depthMap = new Map<string, number>();
+
+  const startKey = posKey(wizard.row, wizard.col);
+  q.push(startKey);
+  visited.add(startKey);
+  prev.set(startKey, { prevKey: null, segmentNodeIdxs: [] });
+  depthMap.set(startKey, 0);
+
+  const candidateTargets: {
+    targetKey: string;
+    fromKey: string;
+    segmentNodeIdxs: number[];
+    depth: number;
+  }[] = [];
+
+  while (q.length) {
+    const curKey = q.shift()!;
+    const d = depthMap.get(curKey) ?? 0;
+
+    const curIdx = nodeIndexMap.get(curKey);
+    if (curIdx == null) continue;
+
+    const neighbors = adjacency[curIdx] || [];
+    for (const nbIdx of neighbors) {
+      const traced = traceRay(curIdx, nbIdx, adjacency, allNodes, occupied);
+
+      const lastNodeIdx = traced.pathNodeIdxs[traced.pathNodeIdxs.length - 1];
+      const lastNode = allNodes[lastNodeIdx];
+      const lastKey = posKey(lastNode.row, lastNode.col);
+
+      if (traced.hitPieceIndex != null) {
+        const hitPiece = pieces[traced.hitPieceIndex];
+        if (!hitPiece) continue;
+
+        // 命中 relay：可延伸 BFS
+        if (isRelayPiece(hitPiece, wizardSide)) {
+          if (!visited.has(lastKey)) {
+            visited.add(lastKey);
+            q.push(lastKey);
+            depthMap.set(lastKey, d + 1);
+            prev.set(lastKey, { prevKey: curKey, segmentNodeIdxs: traced.pathNodeIdxs });
+          }
+        } else {
+          // 命中敵方：記錄候選（traceRay 保證是該方向第一顆）
+          if (hitPiece.side !== wizardSide && hitPiece.side !== "neutral") {
+            candidateTargets.push({
+              targetKey: lastKey,
+              fromKey: curKey,
+              segmentNodeIdxs: traced.pathNodeIdxs,
+              depth: d + 1,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  if (candidateTargets.length === 0) return null;
+
+  candidateTargets.sort((a, b) => a.depth - b.depth);
+  const chosen = candidateTargets[0];
+
+  // 回溯路徑 fromKey -> start
+  const chainKeys: string[] = [];
+  let cur = chosen.fromKey;
+  while (true) {
+    chainKeys.push(cur);
+    const info = prev.get(cur);
+    if (!info || !info.prevKey) break;
+    cur = info.prevKey;
+  }
+  chainKeys.reverse(); // start -> ... -> fromKey
+
+  const fullNodeIdxs: number[] = [];
+
+  const pushSegment = (seg: number[]) => {
+    for (let i = 0; i < seg.length; i++) {
+      const v = seg[i];
+      if (fullNodeIdxs.length === 0 || fullNodeIdxs[fullNodeIdxs.length - 1] !== v) {
+        fullNodeIdxs.push(v);
+      }
+    }
+  };
+
+  for (let i = 1; i < chainKeys.length; i++) {
+    const k = chainKeys[i];
+    const info = prev.get(k);
+    if (info) pushSegment(info.segmentNodeIdxs);
+  }
+  pushSegment(chosen.segmentNodeIdxs);
+
+  const startNode = allNodes[startNodeIdx];
+
+  const pathNodes: { row: number; col: number }[] = [
+    { row: startNode.row, col: startNode.col },
+    ...fullNodeIdxs.map((idx) => ({ row: allNodes[idx].row, col: allNodes[idx].col })),
+  ];
+
+  const pathEdges: BeamEdge[] = [];
+  for (let i = 0; i < pathNodes.length - 1; i++) {
+    pathEdges.push({ from: pathNodes[i], to: pathNodes[i + 1] });
+  }
+
+  const [tr, tc] = chosen.targetKey.split(",").map((x) => parseInt(x, 10));
+  return {
+    pathNodes,
+    pathEdges,
+    target: { row: tr, col: tc },
+  };
+}
+
+/**
+ * 在「回合切換完成後」讓該回合方的巫師自動射擊一次（若存在導線命中）
+ */
+function applyWizardAutoShotIfAny(params: {
+  pieces: Piece[];
+  currentPlayer: PlayerSide;
+  adjacency: number[][];
+  allNodes: NodePosition[];
+  burnMarks: BurnMark[];
+  holyLights: HolyLight[];
+  capturedPieces: CapturedMap;
+  moveHistory: MoveRecord[];
+}): {
+  pieces: Piece[];
+  burnMarks: BurnMark[];
+  holyLights: HolyLight[];
+  capturedPieces: CapturedMap;
+  moveHistory: MoveRecord[];
+  didShoot: boolean;
+} {
+  const {
+    pieces,
+    currentPlayer,
+    adjacency,
+    allNodes,
+    burnMarks,
+    holyLights,
+    capturedPieces,
+    moveHistory,
+  } = params;
+
+  const wizardIdx = pieces.findIndex((p) => p.type === "wizard" && p.side === currentPlayer);
+  if (wizardIdx === -1) {
+    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
+  }
+
+  const beam = computeWizardBeam(pieces, wizardIdx, adjacency, allNodes);
+  if (!beam?.target) {
+    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
+  }
+
+  const targetIndex = getPieceAt(pieces, beam.target.row, beam.target.col);
+  if (targetIndex === -1) {
+    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
+  }
+
+  const wizard = pieces[wizardIdx];
+  const targetPiece = pieces[targetIndex];
+
+  // bard 不可被擊殺
+  if (targetPiece.type === "bard") {
+    return { pieces, burnMarks, holyLights, capturedPieces, moveHistory, didShoot: false };
+  }
+
+  let newPieces = [...pieces];
+  let newCaptured = cloneCaptured(capturedPieces);
+  let newBurnMarks = [...burnMarks];
+
+  if (targetPiece.type === "dragon") {
+    const tag = getDragonTag(targetPiece);
+    if (tag) newBurnMarks = removeBurnMarksByDragonTag(newBurnMarks, tag);
+  }
+
+  newCaptured = addCaptured(newCaptured, targetPiece);
+
+  newPieces.splice(targetIndex, 1);
+  newPieces = activateAllBards(newPieces);
+  newPieces = ensureDragonTags(newPieces);
+
+  const fromCoord = getNodeCoordinate(wizard.row, wizard.col);
+  const toCoord = getNodeCoordinate(beam.target.row, beam.target.col);
+
+  const desc = `${PIECE_CHINESE["wizard"]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}（導線自動射擊）`;
+  const rec = makeMoveRecord(desc, null);
+  const newHistory = [rec, ...moveHistory];
+
+  return {
+    pieces: newPieces,
+    burnMarks: newBurnMarks,
+    holyLights,
+    capturedPieces: newCaptured,
+    moveHistory: newHistory,
+    didShoot: true,
+  };
+}
+
 export default function Game() {
   // 每個 client 自己的 ID，用來辨識座位
   const clientIdRef = useRef<string>("");
@@ -281,6 +606,9 @@ export default function Game() {
   const [adjacency, setAdjacency] = useState<number[][]>([]);
   const [dragonPathNodes, setDragonPathNodes] = useState<{ row: number; col: number }[]>([]);
   const [protectionZones, setProtectionZones] = useState<{ row: number; col: number }[]>([]);
+
+  // ✅ 導線顯示資料（選取巫師時生成）
+  const [wizardBeam, setWizardBeam] = useState<WizardBeamResult | null>(null);
 
   const [wizardAttackRequest, setWizardAttackRequest] = useState<{
     wizardIndex: number;
@@ -467,6 +795,7 @@ export default function Game() {
     setHighlights([]);
     setDragonPathNodes([]);
     setProtectionZones([]);
+    setWizardBeam(null);
 
     // 處理守護中的狀態（pendingGuard）
     if (state.pendingGuard) {
@@ -609,6 +938,79 @@ export default function Game() {
     }
 
     return newWinner;
+  }
+
+  // ✅ finalize：換手後自動射擊（只有在真的換手且尚未勝負時）
+  function finalizeTurnAndMaybeAutoShot(args: {
+    piecesAfterStealthExpire: Piece[];
+    updatedBurnMarks: BurnMark[];
+    remainingHolyLights: HolyLight[];
+    localCaptured: CapturedMap;
+    newMoveHistory: MoveRecord[];
+    nextPlayer: PlayerSide;
+    result: Side | null;
+  }): {
+    pieces: Piece[];
+    burnMarks: BurnMark[];
+    holyLights: HolyLight[];
+    capturedPieces: CapturedMap;
+    moveHistory: MoveRecord[];
+    winner: Side | null;
+  } {
+    const {
+      piecesAfterStealthExpire,
+      updatedBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    } = args;
+
+    if (result) {
+      return {
+        pieces: piecesAfterStealthExpire,
+        burnMarks: updatedBurnMarks,
+        holyLights: remainingHolyLights,
+        capturedPieces: localCaptured,
+        moveHistory: newMoveHistory,
+        winner: result,
+      };
+    }
+
+    // adjacency / allNodes 尚未初始化時不做
+    if (!adjacency.length || !allNodes.length) {
+      return {
+        pieces: piecesAfterStealthExpire,
+        burnMarks: updatedBurnMarks,
+        holyLights: remainingHolyLights,
+        capturedPieces: localCaptured,
+        moveHistory: newMoveHistory,
+        winner: null,
+      };
+    }
+
+    const shot = applyWizardAutoShotIfAny({
+      pieces: piecesAfterStealthExpire,
+      currentPlayer: nextPlayer,
+      adjacency,
+      allNodes,
+      burnMarks: updatedBurnMarks,
+      holyLights: remainingHolyLights,
+      capturedPieces: localCaptured,
+      moveHistory: newMoveHistory,
+    });
+
+    const winAfterShot = checkWizardWin(shot.pieces);
+
+    return {
+      pieces: shot.pieces,
+      burnMarks: shot.burnMarks,
+      holyLights: shot.holyLights,
+      capturedPieces: shot.capturedPieces,
+      moveHistory: shot.moveHistory,
+      winner: winAfterShot ?? null,
+    };
   }
 
   // ====== 再來一局 / 退出遊戲 ======
@@ -874,21 +1276,9 @@ export default function Game() {
     let localCaptured = cloneCaptured(capturedPieces);
     let movedAssassinFinal: Piece | null = null;
 
-    // ✅ 若被守護而犧牲的聖騎士「站到灼痕上」也不影響（犧牲前不清）
-    // ✅ 但守護後新棋盤上若「有聖騎士落點」那格是灼痕，要清掉（這局規則只清終點）
-    // => 這裡守護是「聖騎士跳去被攻擊的棋子原位」等於聖騎士移動了
-    //    但他會被犧牲（被吃）所以不需要清終點；清終點規則只對「仍存在的聖騎士」有效。
-
     const paladinProtectionZone = calculatePaladinProtectionZone(paladin, pieces, adjacency, allNodes);
 
-    // 龍的灼痕：本段是攻擊事件，不是龍移動，不產生新的灼痕
-    // （原本這裡也有龍路徑灼痕邏輯，但那是「龍攻擊造成移動」時才需要）
     if (selectedPiece.type === "dragon") {
-      // 龍攻擊移動（你的規則：攻擊會移動到目標格）
-      // ✅ 但「灼痕規則」改成：只有龍移動時會刷新自己的灼痕（本段確實是移動）
-      // 所以保留生成灼痕，但要改為：
-      // 1) 先清掉該龍舊灼痕
-      // 2) 再依路徑生成新灼痕（避開所有聖騎士守護區內的空格）
       const tag = getDragonTag(selectedPiece);
       const path = calculateDragonPath(
         selectedPiece.row,
@@ -903,13 +1293,8 @@ export default function Game() {
         updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
       }
 
-      // 先更新棋子（還沒真正套回 newPieces 前，用 pieces + 假想移動算保護區 union）
-      // 這裡先不把龍移過去，以免保護區 union 受影響；保護區只看聖騎士即可
       const protectedSet = buildAllPaladinProtectedSet(pieces, adjacency, allNodes);
 
-      // 起點也會成為空格（龍離開），符合「空格」判斷，所以用 newPieces 後再判斷最準
-      // 但這裡路徑灼痕只會落在空格（起點/中途），所以先用「原棋盤上該格是否有其他棋」近似即可：
-      // 若該格不是龍自己佔據，表示有其他棋，不算空格 => 不受保護區阻擋
       const isCellEmptyExceptDragon = (r: number, c: number) => {
         const idx = getPieceAt(pieces, r, c);
         if (idx === -1) return true;
@@ -917,12 +1302,10 @@ export default function Game() {
         return p.type === "dragon" && p.row === selectedPiece.row && p.col === selectedPiece.col;
       };
 
-      // 生成灼痕：起點 + 路徑中間（不含終點）
       const addIfAllowed = (r: number, c: number) => {
         const key = `${r},${c}`;
         const isProtected = protectedSet.has(key);
         const isEmpty = isCellEmptyExceptDragon(r, c);
-        // ✅ 若在任一聖騎士守護區 且 是空格 => 不生成灼痕
         if (isProtected && isEmpty) return;
 
         if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
@@ -984,7 +1367,6 @@ export default function Game() {
       movedAssassinFinal = movedAttacker;
     }
 
-    // ✅ 龍死亡要清灼痕：這裡犧牲的是「聖騎士」，不是龍
     localCaptured = addCaptured(localCaptured, paladin);
 
     let newPieces = pieces
@@ -1042,10 +1424,8 @@ export default function Game() {
 
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    // ✅ 灼痕不再因回合清除（改由「該龍再次移動」才清，或龍死才清）
     const remainingBurnMarks = updatedBurnMarks;
 
-    // HolyLight 維持原本規則（仍會在對手回合結束時消失）
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const updatedHolyLights = [
@@ -1057,21 +1437,30 @@ export default function Game() {
       },
     ];
 
-    // ✅ 切回 nextPlayer 前，先清掉「到期的刺客潛行」
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(newPieces, nextPlayer);
 
     const result = checkWizardWin(piecesAfterStealthExpire);
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
+    const finalized = finalizeTurnAndMaybeAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks: remainingBurnMarks,
+      remainingHolyLights: updatedHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
     const syncState: SyncedState = {
-      pieces: piecesAfterStealthExpire,
-      currentPlayer: result ? currentPlayer : nextPlayer,
-      moveHistory: newMoveHistory,
-      burnMarks: remainingBurnMarks,
-      holyLights: updatedHolyLights,
-      capturedPieces: localCaptured,
-      winner: result ?? winner,
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
       seats,
       startingPlayer,
       startingMode,
@@ -1103,7 +1492,6 @@ export default function Game() {
 
     const targetIdx = targetPieceIndex;
 
-    // ✅ 龍死亡要清灼痕：若這次被吃的是龍，立刻清掉它的灼痕
     if (targetPiece.type === "dragon") {
       const tag = getDragonTag(targetPiece);
       if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
@@ -1136,8 +1524,6 @@ export default function Game() {
           updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
         }
 
-        // ✅ 龍新灼痕：避開「任一聖騎士守護區內的空格」
-        // 先把龍移過去（用 newPieces 的狀態判斷空格最準）
         let movedPiece = updateAssassinStealth(
           { ...selectedPiece, row: targetRow, col: targetCol },
           selectedPiece.row,
@@ -1171,7 +1557,6 @@ export default function Game() {
           addIfAllowed(node.row, node.col);
         }
 
-        // dragon 不是刺客
       } else {
         let movedPiece = updateAssassinStealth(
           { ...selectedPiece, row: targetRow, col: targetCol },
@@ -1183,7 +1568,6 @@ export default function Game() {
         movedPiece = setAssassinStealthMeta(movedPiece);
 
         if (movedPiece.type === "assassin") {
-          // 攻擊後刺客現形（你原本的規則保留）
           const mp: any = { ...movedPiece, stealthed: false };
           delete mp.stealthExpiresOn;
           movedPiece = mp as Piece;
@@ -1207,23 +1591,30 @@ export default function Game() {
     const result = checkWizardWin(newPieces);
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    // ✅ 灼痕不再因回合清除
     const remainingBurnMarks = updatedBurnMarks;
 
-    // HolyLight 保留原規則
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
-    // ✅ 切回 nextPlayer 前，先清掉「到期的刺客潛行」
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
+    const finalized = finalizeTurnAndMaybeAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks: remainingBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
     const syncState: SyncedState = {
-      pieces: piecesAfterStealthExpire,
-      currentPlayer: result ? currentPlayer : nextPlayer,
-      moveHistory: newMoveHistory,
-      burnMarks: remainingBurnMarks,
-      holyLights: remainingHolyLights,
-      capturedPieces: localCaptured,
-      winner: result ?? winner,
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
       seats,
       startingPlayer,
       startingMode,
@@ -1254,7 +1645,6 @@ export default function Game() {
 
     let updatedBurnMarks = [...burnMarks];
 
-    // ✅ 若射死的是龍：清掉該龍灼痕
     if (targetPiece.type === "dragon") {
       const tag = getDragonTag(targetPiece);
       if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
@@ -1277,23 +1667,31 @@ export default function Game() {
     const result = checkWizardWin(newPieces);
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    // ✅ 切回 nextPlayer 前，先清掉「到期的刺客潛行」
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
-    // HolyLight 保留原規則
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const record = makeMoveRecord(moveDesc, null);
     const newMoveHistory = [record, ...moveHistory];
 
+    const finalized = finalizeTurnAndMaybeAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
     const syncState: SyncedState = {
-      pieces: piecesAfterStealthExpire,
-      currentPlayer: result ? currentPlayer : nextPlayer,
-      moveHistory: newMoveHistory,
-      burnMarks: updatedBurnMarks,
-      holyLights: remainingHolyLights,
-      capturedPieces: localCaptured,
-      winner: result ?? winner,
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
       seats,
       startingPlayer,
       startingMode,
@@ -1319,7 +1717,6 @@ export default function Game() {
     let localCaptured = cloneCaptured(capturedPieces);
     let updatedBurnMarks = [...burnMarks];
 
-    // ✅ 若吃到龍：清掉該龍灼痕
     if (targetPiece.type === "dragon") {
       const tag = getDragonTag(targetPiece);
       if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
@@ -1331,8 +1728,8 @@ export default function Game() {
       newPieces = activateAllBards(newPieces);
     }
 
-    // 被 splice 掉之後，巫師的 index 可能往前一格
-    const adjustedWizardIndex = targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
+    const adjustedWizardIndex =
+      targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
 
     const movedWizard: Piece = {
       ...wizard,
@@ -1353,23 +1750,31 @@ export default function Game() {
     const result = checkWizardWin(newPieces);
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    // ✅ 切回 nextPlayer 前，先清掉「到期的刺客潛行」
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
-    // HolyLight 保留原規則
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const record = makeMoveRecord(moveDesc, null);
     const newMoveHistory = [record, ...moveHistory];
 
+    const finalized = finalizeTurnAndMaybeAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
     const syncState: SyncedState = {
-      pieces: piecesAfterStealthExpire,
-      currentPlayer: result ? currentPlayer : nextPlayer,
-      moveHistory: newMoveHistory,
-      burnMarks: updatedBurnMarks,
-      holyLights: remainingHolyLights,
-      capturedPieces: localCaptured,
-      winner: result ?? winner,
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
       seats,
       startingPlayer,
       startingMode,
@@ -1385,13 +1790,14 @@ export default function Game() {
 
   // ====== 點擊棋盤節點 ======
   const handleNodeClick = (row: number, col: number) => {
-    // 若目前有 pending 的守護決定，暫停其他操作
     if (guardRequest) {
       return;
     }
 
     const effectivePieces =
-      isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex] ? snapshots[viewSnapshotIndex].pieces : pieces;
+      isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
+        ? snapshots[viewSnapshotIndex].pieces
+        : pieces;
 
     const clickedPieceIdx = getPieceAt(effectivePieces, row, col);
     let movedAssassinFinal: Piece | null = null;
@@ -1402,16 +1808,14 @@ export default function Game() {
         const swapTarget = pieces[clickedPieceIdx];
 
         if (
-            swapTarget.side === currentPlayer &&
-            swapTarget.type !== "bard" &&
-            swapTarget.type !== "dragon" &&
-            swapTarget.type !== "wizard" // ✅ 排除巫師
-          ) {
-
+          swapTarget.side === currentPlayer &&
+          swapTarget.type !== "bard" &&
+          swapTarget.type !== "dragon" &&
+          swapTarget.type !== "wizard"
+        ) {
           const newPieces = [...pieces];
           const bard = newPieces[bardNeedsSwap.bardIndex];
 
-          // 吟遊詩人本身不是刺客，不會受 updateAssassinStealth 影響
           const movedBard = {
             ...bard,
             row: swapTarget.row,
@@ -1424,7 +1828,6 @@ export default function Game() {
             col: bardNeedsSwap.bardCol,
           };
 
-          // 如果被換的是刺客 → 強制現形
           if (swappedPiece.type === "assassin") {
             const sp: any = { ...swappedPiece, stealthed: false };
             delete sp.stealthExpiresOn;
@@ -1434,12 +1837,11 @@ export default function Game() {
           newPieces[bardNeedsSwap.bardIndex] = movedBard;
           newPieces[clickedPieceIdx] = swappedPiece;
 
-          // ===== 新增：若交換後任一顆是聖騎士，揭露其守護範圍內的潛行刺客 =====
           const paladinIndicesToCheck: number[] = [];
-          if (movedBard.type === "paladin") {
+          if ((movedBard as any).type === "paladin") {
             paladinIndicesToCheck.push(bardNeedsSwap.bardIndex);
           }
-          if (swappedPiece.type === "paladin") {
+          if ((swappedPiece as any).type === "paladin") {
             paladinIndicesToCheck.push(clickedPieceIdx);
           }
 
@@ -1453,7 +1855,6 @@ export default function Game() {
               }
             }
           }
-          // ===== 新增結束 =====
 
           const bardCoord = getNodeCoordinate(bardNeedsSwap.bardRow, bardNeedsSwap.bardCol);
           const swapCoord = getNodeCoordinate(swapTarget.row, swapTarget.col);
@@ -1465,23 +1866,29 @@ export default function Game() {
           const result = checkWizardWin(newPieces);
           const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-          // ✅ 灼痕不再因回合清除
           const remainingBurnMarks = burnMarks;
-
-          // HolyLight 保留原規則
           const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
-          // ✅ 切回 nextPlayer 前，先清掉「到期的刺客潛行」
           const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
+          const finalized = finalizeTurnAndMaybeAutoShot({
+            piecesAfterStealthExpire,
+            updatedBurnMarks: remainingBurnMarks,
+            remainingHolyLights,
+            localCaptured: capturedPieces,
+            newMoveHistory,
+            nextPlayer,
+            result,
+          });
+
           const syncState: SyncedState = {
-            pieces: piecesAfterStealthExpire,
-            currentPlayer: result ? currentPlayer : nextPlayer,
-            moveHistory: newMoveHistory,
-            burnMarks: remainingBurnMarks,
-            holyLights: remainingHolyLights,
-            capturedPieces,
-            winner: result ?? winner,
+            pieces: finalized.pieces,
+            currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+            moveHistory: finalized.moveHistory,
+            burnMarks: finalized.burnMarks,
+            holyLights: finalized.holyLights,
+            capturedPieces: finalized.capturedPieces,
+            winner: finalized.winner ?? winner,
             seats,
             startingPlayer,
             startingMode,
@@ -1504,11 +1911,11 @@ export default function Game() {
         const piece = effectivePieces[clickedPieceIdx];
         setSelectedPieceIndex(clickedPieceIdx);
 
-        // 若是「自己的吟遊詩人，但不是自己回合」→ 不顯示路徑
         if (isOwnBardOutOfTurnForPiece(piece)) {
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
           return;
         }
 
@@ -1530,6 +1937,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(computeWizardBeam(effectivePieces, clickedPieceIdx, adjacency, allNodes));
             } else if (piece.type === "apprentice") {
               const moves = calculateApprenticeMoves(
                 piece,
@@ -1543,6 +1951,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "dragon") {
               const result = calculateDragonMoves(
                 piece,
@@ -1556,6 +1965,7 @@ export default function Game() {
               setHighlights(result.highlights);
               setDragonPathNodes(result.pathNodes);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "ranger") {
               const moves = calculateRangerMoves(
                 piece,
@@ -1569,6 +1979,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "griffin") {
               const moves = calculateGriffinMoves(
                 piece,
@@ -1582,6 +1993,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "assassin") {
               const moves = calculateAssassinMoves(
                 piece,
@@ -1595,6 +2007,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "paladin") {
               const moves = calculatePaladinMoves(
                 piece,
@@ -1609,6 +2022,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
+              setWizardBeam(null);
 
               if (!isObserving) {
                 const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
@@ -1627,20 +2041,24 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             }
           } else {
             setHighlights([]);
             setDragonPathNodes([]);
             setProtectionZones([]);
+            setWizardBeam(null);
           }
         } else {
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
         }
       }
       return;
@@ -1657,6 +2075,7 @@ export default function Game() {
       setHighlights([]);
       setDragonPathNodes([]);
       setProtectionZones([]);
+      setWizardBeam(null);
       return;
     }
 
@@ -1672,6 +2091,7 @@ export default function Game() {
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
           return;
         }
 
@@ -1693,6 +2113,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(computeWizardBeam(effectivePieces, clickedPieceIdx, adjacency, allNodes));
             } else if (piece.type === "apprentice") {
               const moves = calculateApprenticeMoves(
                 piece,
@@ -1706,6 +2127,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "dragon") {
               const result = calculateDragonMoves(
                 piece,
@@ -1719,6 +2141,7 @@ export default function Game() {
               setHighlights(result.highlights);
               setDragonPathNodes(result.pathNodes);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "ranger") {
               const moves = calculateRangerMoves(
                 piece,
@@ -1732,6 +2155,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "griffin") {
               const moves = calculateGriffinMoves(
                 piece,
@@ -1745,6 +2169,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "assassin") {
               const moves = calculateAssassinMoves(
                 piece,
@@ -1758,6 +2183,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else if (piece.type === "paladin") {
               const moves = calculatePaladinMoves(
                 piece,
@@ -1772,6 +2198,7 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
+              setWizardBeam(null);
             } else if (piece.type === "bard") {
               const moves = calculateBardMoves(
                 piece,
@@ -1785,20 +2212,24 @@ export default function Game() {
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             } else {
               setHighlights([]);
               setDragonPathNodes([]);
               setProtectionZones([]);
+              setWizardBeam(null);
             }
           } else {
             setHighlights([]);
             setDragonPathNodes([]);
             setProtectionZones([]);
+            setWizardBeam(null);
           }
         } else {
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
         }
       }
       return;
@@ -1821,16 +2252,15 @@ export default function Game() {
       if (actualTargetIdx !== -1) {
         const targetPiece = pieces[actualTargetIdx];
 
-        // 1) 目標是己方棋子 → 一律不能走（包含己方潛行刺客）
         if (targetPiece.side === selectedPiece.side) {
           setSelectedPieceIndex(-1);
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
           return;
         }
 
-        // 2) 吟遊詩人踩「敵方潛行刺客」：交換位置並讓刺客現形
         if (
           selectedPiece.type === "bard" &&
           targetPiece.type === "assassin" &&
@@ -1850,7 +2280,7 @@ export default function Game() {
             ...targetPiece,
             row: selectedPiece.row,
             col: selectedPiece.col,
-            stealthed: false, // ★ 這裡讓刺客現形
+            stealthed: false,
           };
           delete newAssassinAny.stealthExpiresOn;
           const newAssassin = newAssassinAny as Piece;
@@ -1860,16 +2290,13 @@ export default function Game() {
 
           moveDesc = `${PIECE_CHINESE["bard"]} ${fromCoord} ⇄ 刺客 ${toCoord}（現形）`;
         } else if (targetPiece.type === "bard") {
-          // 吟遊詩人不能被吃，這步當作無效
           setSelectedPieceIndex(-1);
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
           return;
         } else {
-          // 3) 其他情況：正常吃子（這裡一定是敵方棋子）
-
-          // ✅ 龍死亡要清灼痕
           if (targetPiece.type === "dragon") {
             const tag = getDragonTag(targetPiece);
             if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
@@ -1886,7 +2313,6 @@ export default function Game() {
           movedPiece = setAssassinStealthMeta(movedPiece);
 
           if (movedPiece.type === "assassin") {
-            // 攻擊（吃子）後刺客現形（保留你原本規則）
             const mp: any = { ...movedPiece, stealthed: false };
             delete mp.stealthExpiresOn;
             movedPiece = mp as Piece;
@@ -1897,7 +2323,6 @@ export default function Game() {
           moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
         }
       } else {
-        // 落在空格
         let movedPiece = updateAssassinStealth({ ...selectedPiece, row, col }, selectedPiece.row, selectedPiece.col, row, col);
         movedPiece = setAssassinStealthMeta(movedPiece);
 
@@ -1915,7 +2340,6 @@ export default function Game() {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       }
 
-      // ✅ 龍移動才處理灼痕（且灼痕會一直存在，直到該龍下一次移動刷新）
       if (selectedPiece.type === "dragon") {
         const dragonTag = getDragonTag(selectedPiece);
         const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
@@ -1924,7 +2348,6 @@ export default function Game() {
           updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, dragonTag);
         }
 
-        // 先把龍落點更新進 newPieces，讓「空格判斷」正確
         newPieces = ensureDragonTags(newPieces);
 
         const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
@@ -1934,7 +2357,6 @@ export default function Game() {
           const isProtected = protectedSet.has(key);
           const isEmpty = getPieceAt(newPieces, r, c) === -1;
 
-          // ✅ 守護區內的空格：龍經過不形成灼痕（不論友敵）
           if (isProtected && isEmpty) return;
 
           if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
@@ -1946,12 +2368,11 @@ export default function Game() {
 
         addIfAllowed(selectedPiece.row, selectedPiece.col);
         for (const pathNode of path) {
-          if (pathNode.row === row && pathNode.col === col) continue; // 終點不留灼痕（保留你原本做法）
+          if (pathNode.row === row && pathNode.col === col) continue;
           addIfAllowed(pathNode.row, pathNode.col);
         }
       }
 
-      // ✅ 聖騎士可以站在灼痕上，並使「踏上去的終點」灼痕消失
       if (selectedPiece.type === "paladin") {
         updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
       }
@@ -1979,6 +2400,7 @@ export default function Game() {
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
           return;
         }
 
@@ -2012,7 +2434,6 @@ export default function Game() {
         movedPiece = setAssassinStealthMeta(movedPiece);
         swappedPiece = setAssassinStealthMeta(swappedPiece);
 
-        // ⭐ 規則：只要是「交換位置」，刺客一律現形
         if (movedPiece.type === "assassin") {
           const mp: any = { ...movedPiece, stealthed: false };
           delete mp.stealthExpiresOn;
@@ -2033,7 +2454,6 @@ export default function Game() {
           const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPiece.side);
           for (let i = 0; i < newPieces.length; i++) newPieces[i] = revealedPieces[i];
 
-          // ✅ 聖騎士踏上去的終點清灼痕
           updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, movedPiece.row, movedPiece.col);
         }
 
@@ -2042,7 +2462,6 @@ export default function Game() {
           const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, swappedPiece.side);
           for (let i = 0; i < newPieces.length; i++) newPieces[i] = revealedPieces[i];
 
-          // ✅ 聖騎士踏上去的終點清灼痕
           updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, swappedPiece.row, swappedPiece.col);
         }
 
@@ -2052,7 +2471,6 @@ export default function Game() {
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
-      // 🧙‍♂ 巫師：若攻擊的是「相鄰」格，跳出導線 / 移動選擇視窗
       if (selectedPiece.type === "wizard") {
         const wizardNodeIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
         const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
@@ -2072,6 +2490,7 @@ export default function Game() {
           setHighlights([]);
           setDragonPathNodes([]);
           setProtectionZones([]);
+          setWizardBeam(null);
           return;
         }
       }
@@ -2113,9 +2532,7 @@ export default function Game() {
         return;
       }
 
-      // 沒有守護聖騎士 → 直接進正常攻擊流程
       if (targetPiece.type !== "bard") {
-        // ✅ 龍死亡要清灼痕
         if (targetPiece.type === "dragon") {
           const tag = getDragonTag(targetPiece);
           if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
@@ -2133,7 +2550,6 @@ export default function Game() {
         if (selectedPiece.type === "wizard") {
           // 巫師視線攻擊不動
         } else if (selectedPiece.type === "dragon") {
-          // ✅ 龍攻擊會移動，等同移動刷新灼痕
           const dragonTag = getDragonTag(selectedPiece);
           const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
 
@@ -2171,7 +2587,6 @@ export default function Game() {
           movedPiece = setAssassinStealthMeta(movedPiece);
 
           if (movedPiece.type === "assassin") {
-            // 攻擊後刺客現形（保留你原本規則）
             const mp: any = { ...movedPiece, stealthed: false };
             delete mp.stealthExpiresOn;
             movedPiece = mp as Piece;
@@ -2182,7 +2597,6 @@ export default function Game() {
         }
       }
 
-      // ✅ 聖騎士攻擊後若站到灼痕上，清掉終點灼痕
       if (selectedPiece.type === "paladin") {
         updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
       }
@@ -2193,7 +2607,6 @@ export default function Game() {
           : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
 
-    // 若移動的是聖騎士，重新顯形範圍內刺客
     if (selectedPiece.type === "paladin") {
       const movedPaladin =
         newPieces[
@@ -2207,7 +2620,6 @@ export default function Game() {
       }
     }
 
-    // 吟遊詩人普通移動 → 啟動「必須換位」流程
     if (selectedPiece.type === "bard" && highlight.type === "move") {
       const bardNewIdx = selectedPieceIndex;
       const movedBard = newPieces[bardNewIdx];
@@ -2229,7 +2641,7 @@ export default function Game() {
               p.side === currentPlayer &&
               p.type !== "bard" &&
               p.type !== "dragon" &&
-              p.type !== "wizard" // ✅ 排除巫師
+              p.type !== "wizard"
           )
           .map((p) => ({
             type: "swap" as const,
@@ -2237,10 +2649,10 @@ export default function Game() {
             col: p.col,
           }));
 
-
         setHighlights(swapHighlights);
         setDragonPathNodes([]);
         setProtectionZones([]);
+        setWizardBeam(null);
         return;
       }
     }
@@ -2251,23 +2663,30 @@ export default function Game() {
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
-    // ✅ 灼痕不再因回合清除（只會：龍再次移動刷新 / 龍死亡清除 / 聖騎士踏上終點清除）
     const remainingBurnMarks = updatedBurnMarks;
 
-    // HolyLight 保留原規則
     const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
-    // ✅ 切回 nextPlayer 前，先清掉「到期的刺客潛行」
     const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
 
+    const finalized = finalizeTurnAndMaybeAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks: remainingBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
     const syncState: SyncedState = {
-      pieces: piecesAfterStealthExpire,
-      currentPlayer: result ? currentPlayer : nextPlayer,
-      moveHistory: newMoveHistory,
-      burnMarks: remainingBurnMarks,
-      holyLights: remainingHolyLights,
-      capturedPieces: localCaptured,
-      winner: result ?? winner,
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
       seats,
       startingPlayer,
       startingMode,
@@ -2333,6 +2752,7 @@ export default function Game() {
     setHighlights([]);
     setDragonPathNodes([]);
     setProtectionZones([]);
+    setWizardBeam(null);
   };
 
   // ---- 準備階段 ready 顯示 ----
