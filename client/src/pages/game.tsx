@@ -1401,7 +1401,13 @@ export default function Game() {
       if (clickedPieceIdx !== -1) {
         const swapTarget = pieces[clickedPieceIdx];
 
-        if (swapTarget.side === currentPlayer && swapTarget.type !== "bard" && swapTarget.type !== "dragon") {
+        if (
+            swapTarget.side === currentPlayer &&
+            swapTarget.type !== "bard" &&
+            swapTarget.type !== "dragon" &&
+            swapTarget.type !== "wizard" // ✅ 排除巫師
+          ) {
+
           const newPieces = [...pieces];
           const bard = newPieces[bardNeedsSwap.bardIndex];
 
