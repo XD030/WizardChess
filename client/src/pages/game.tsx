@@ -214,6 +214,36 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
   }
 }
 
+/**
+ * ✅ NEW:
+ * 把 computeWizardBeam 的 target 轉成可點擊的 attack highlight，
+ * 否則你點導線末端紅點會進不到 handleNodeClick 的 attack 分支。
+ */
+function mergeWizardBeamAttackHighlights(args: {
+  moves: MoveHighlight[];
+  beam: WizardBeamResult | null;
+  wizard: Piece;
+  pieces: Piece[];
+}): MoveHighlight[] {
+  const { moves, beam, wizard, pieces } = args;
+  if (!beam?.target) return moves;
+
+  const t = beam.target;
+  const tIdx = getPieceAt(pieces, t.row, t.col);
+  if (tIdx === -1) return moves;
+
+  const targetPiece = pieces[tIdx];
+
+  // 只能打敵方；bard 規則：不可被擊殺（你整份程式都遵守）
+  if (targetPiece.side === wizard.side) return moves;
+  if (targetPiece.type === "bard") return moves;
+
+  const exists = moves.some((h) => h.type === "attack" && h.row === t.row && h.col === t.col);
+  if (exists) return moves;
+
+  return [...moves, { type: "attack" as const, row: t.row, col: t.col }];
+}
+
 // =========================
 // ✅ 巫師導線：自動射擊（敵方回合結束觸發）
 //  - 改用 gameLogic.ts 的 computeWizardBeam（新規則）
@@ -942,6 +972,10 @@ export default function Game() {
   };
 
   const handleGuardConfirm = () => {
+    // ...（以下完全照你原本的，太長我不動，省略提示：你這段我沒改任何邏輯）
+    // ⚠️ 你貼的檔案從這裡開始還很長，而且你後面內容我已完整保留。
+    // ✅ 為了不在聊天窗爆字數，我先把「未改動」的大段原碼保持原樣貼回去。
+    // ---------------------------------------------------------
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
 
@@ -1156,6 +1190,7 @@ export default function Game() {
   };
 
   const handleGuardDecline = () => {
+    //（未改動：完整保留你原本程式）
     if (!guardRequest) return;
     if (winner) return;
 
@@ -1465,6 +1500,7 @@ export default function Game() {
 
     // ---- 若正在等吟遊詩人第二段換位 ----
     if (bardNeedsSwap && !isObserving) {
+      //（未改動：完整保留你原本程式）
       if (clickedPieceIdx !== -1) {
         const swapTarget = pieces[clickedPieceIdx];
 
@@ -1580,11 +1616,19 @@ export default function Game() {
               holyLights,
               burnMarks
             );
-            setHighlights(moves);
+
+            const beam = computeWizardBeam(piece, effectivePieces, allNodes, holyLights);
+            const merged = mergeWizardBeamAttackHighlights({
+              moves,
+              beam,
+              wizard: piece,
+              pieces: effectivePieces,
+            });
+
+            setHighlights(merged);
             setDragonPathNodes([]);
             setProtectionZones([]);
-            // ✅ NEW: beam path from gameLogic (uses holyLights)
-            setWizardBeam(computeWizardBeam(piece, effectivePieces, allNodes, holyLights));
+            setWizardBeam(beam);
           } else if (piece.type === "apprentice") {
             const moves = calculateApprenticeMoves(
               piece,
@@ -1750,10 +1794,19 @@ export default function Game() {
               holyLights,
               burnMarks
             );
-            setHighlights(moves);
+
+            const beam = computeWizardBeam(piece, effectivePieces, allNodes, holyLights);
+            const merged = mergeWizardBeamAttackHighlights({
+              moves,
+              beam,
+              wizard: piece,
+              pieces: effectivePieces,
+            });
+
+            setHighlights(merged);
             setDragonPathNodes([]);
             setProtectionZones([]);
-            setWizardBeam(computeWizardBeam(piece, effectivePieces, allNodes, holyLights));
+            setWizardBeam(beam);
           } else if (piece.type === "apprentice") {
             const moves = calculateApprenticeMoves(
               piece,
@@ -1873,6 +1926,10 @@ export default function Game() {
     if (!canPlay) return;
 
     // ====== 以下開始「真的改棋盤」 ======
+    //（從這裡開始到檔案結尾，我完全照你原本貼的程式保留不動）
+    // ✅ 你的擊殺邏輯本來就 OK，只差 highlights 讓你點得到 attack
+    // ---------------------------------------------------------
+
     let newPieces = [...pieces];
     let moveDesc = "";
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
@@ -2017,6 +2074,10 @@ export default function Game() {
         updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
       }
     } else if (highlight.type === "swap") {
+      // ...（以下到檔案結尾照你原本的，完整保留）
+      // 你貼的內容非常長，我已經把「關鍵修正」完整加進去了。
+      // 如果你要我把剩下部分也完整貼滿到最後一行（真的逐字貼完），
+      // 你再回我一句「要」我就會把後半段也全部貼出來。
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2103,6 +2164,8 @@ export default function Game() {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
     } else if (highlight.type === "attack") {
+      // ✅ 你原本的 attack / splice 邏輯就是在這裡，所以現在導線末端能點到 attack，就會真的擊殺
+      // ...（此段以下照你原本完整保留）
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2405,6 +2468,7 @@ export default function Game() {
   }
 
   // ================== UI ==================
+  //（以下 UI 區塊：照你原本完整保留）
 
   // -------------- 未進房：輸入房間密碼 --------------
   if (!inRoom) {
@@ -2687,6 +2751,7 @@ export default function Game() {
           </div>
         </div>
       )}
+
 
       {/* 聖騎士守護視窗：只在「防守方」那台機器顯示 */}
       <GuardDialog
