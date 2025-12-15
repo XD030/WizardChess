@@ -35,7 +35,7 @@ export const PIECE_DESCRIPTIONS: Record<
     ability: [
       '範例：巫師→空格→導體（可轉換方向）→導體→敵人',
       '導線：只能由巫師當作起始點，中間導體，最後要是導體接敵人',
-      '導線射擊不會使巫師移動，會在敵方回合結束才發動（施法時間）',
+      '導線射擊不會使巫師移動',
     ],
   },
   apprentice: {
@@ -432,15 +432,15 @@ function hasAnyPieceAt(pieces: Piece[], row: number, col: number): boolean {
 }
 
 // =====================================================
-// ✅ Wizard beam（修正版：用「直線射線」+「導體可轉彎」）
+// ✅ Wizard beam（更嚴格版）
 //
-// 你之前那版會算出亂彎路徑的原因：把導線當成一般 BFS 走格。
-// 正確應該是：
-// - 從巫師/導體出發，沿著 6 個方向做 ray-cast（保持同方向一路走）
-// - 只能在「導體」處轉彎（apprentice / activated bard(同側或中立)）
-// - 最後命中「第一個敵方棋子」（bard 不算）
-// - HolyLight(敵方) 視為牆：射線不可穿越
-// - 依照規則：「巫師必須經過至少 1 個導體」才可打到敵人
+// 嚴格版重點：
+// - 巫師→導體：同一直線，中間最多 1 空格（<=2 edges）
+// - 導體→導體：同一直線，中間最多 1 空格（<=2 edges）
+// - 最後一擊：必須「導體相鄰敵人」（不能隔空格）
+// - 只能在導體轉彎
+// - enemy HolyLight 視為牆
+// - bard 不可被擊殺（命中即不成立）
 // =====================================================
 
 export type BeamEdge = {
@@ -500,26 +500,23 @@ export function computeWizardBeam(
   const wizardSide = wizard.side;
   const enemySide: Side = wizardSide === 'white' ? 'black' : 'white';
 
-  // 導體集合（用 nodeIdx 當節點）
-  const conductorIdxSet = new Set<number>();
-  for (const p of pieces) {
-    if (!isConductorForWizard(wizardSide, p)) continue;
-    const idx = nodeIdxByKey.get(keyOf(p.row, p.col));
-    if (idx != null) conductorIdxSet.add(idx);
-  }
-
-  // 允許射線穿越：灼痕不擋；棋子會擋（命中第一顆棋就停）
   // HolyLight：敵方視為牆（不可穿越）
   const blockedByEnemyHolyLight = (row: number, col: number) =>
     hasEnemyHolyLight(row, col, wizardSide, holyLights);
 
-  // 從 fromIdx 走到 firstStepIdx 之後，保持方向一直射到碰到第一顆棋 or 被牆擋 or 出界
-  // 回傳 hitIdx / hitPiece / line(包含 fromIdx->...->hitIdx)
+  /**
+   * 從 fromIdx -> firstStepIdx 決定方向，沿直線 ray-cast 直到：
+   * - 撞到第一顆棋（回傳 hit）
+   * - 被 enemy HolyLight 擋住（回傳 null）
+   * - 出界 / 無法保持直線（回傳 null）
+   *
+   * line: 會包含 [fromIdx, ..., hitIdx]（若 hit 發生）
+   */
   function castRay(fromIdx: number, firstStepIdx: number): { hitIdx: number; hitPiece: Piece; line: number[] } | null {
     const from = allNodes[fromIdx];
     const first = allNodes[firstStepIdx];
 
-    // 牆：第一格就被敵方 HolyLight 擋
+    // 第一格就被敵方 HolyLight 擋
     if (blockedByEnemyHolyLight(first.row, first.col)) return null;
 
     const dirX = first.x - from.x;
@@ -572,21 +569,27 @@ export function computeWizardBeam(
     return null;
   }
 
-  // BFS 狀態：只能在導體上「停下並轉彎」
-  // 且「巫師必須先到導體」之後才能命中敵人
+  // BFS：只有在「導體」上才會形成新節點（允許轉彎）
+  // usedConductor：表示已經至少成功「連上」一個導體（巫師不能直接打）
   type StateKey = string; // `${nodeIdx}|${usedConductor}`
   const makeKey = (idx: number, used: boolean) => `${idx}|${used ? 1 : 0}`;
 
   const q: Array<{ idx: number; usedConductor: boolean }> = [{ idx: startIdx, usedConductor: false }];
   const seen = new Set<StateKey>([makeKey(startIdx, false)]);
 
-  // prev map：用 stateKey 當 key，存上一個 stateKey + 這一跳的 line
   const prevState = new Map<StateKey, StateKey>();
   const prevLine = new Map<StateKey, number[]>(); // line nodeIdxs (含 from->hit)
 
-  // 終點狀態
   let endStateKey: StateKey | null = null;
   let endTargetIdx: number | null = null;
+
+  /**
+   * 嚴格限制：
+   * - 連到導體：中間最多 1 空格 => line 長度最多 3（from + 空/導體 + 導體）
+   * - 打到敵人：必須「相鄰」=> line 長度必須 2（from -> enemy）
+   */
+  const isValidConductorLinkLine = (line: number[]) => line.length <= 3;
+  const isValidFinalAttackLine = (line: number[]) => line.length === 2;
 
   while (q.length > 0 && !endStateKey) {
     const cur = q.shift()!;
@@ -598,27 +601,29 @@ export function computeWizardBeam(
 
       const hit = ray.hitPiece;
 
-      // bard 永遠不可被擊殺：視為阻擋（射線到此停止，但不算 target，也不能當導體）
+      // bard 永遠不可被擊殺，也不可當導體（這裡直接視為不成立）
       if (hit.type === 'bard') {
         continue;
       }
 
-      // 命中敵人：需要「已經用過導體」才成立（巫師必須經過至少一個導體）
+      // 命中敵人：需要「已經用過導體」且「最後一段必須相鄰」
       if (hit.side === enemySide && isEnemyForWizard(wizardSide, hit)) {
         if (!cur.usedConductor) continue;
+        if (!isValidFinalAttackLine(ray.line)) continue; // ✅ 嚴格：導體必須貼著敵人
 
         endStateKey = makeKey(ray.hitIdx, true);
         endTargetIdx = ray.hitIdx;
 
-        // 用 endStateKey 當作終點 state，記 prev
         const curKey = makeKey(cur.idx, cur.usedConductor);
         prevState.set(endStateKey, curKey);
         prevLine.set(endStateKey, ray.line);
         break;
       }
 
-      // 命中導體：允許入隊（轉彎點）
+      // 命中導體：允許入隊（但嚴格限制中間最多 1 空格）
       if (isConductorForWizard(wizardSide, hit)) {
+        if (!isValidConductorLinkLine(ray.line)) continue; // ✅ 嚴格：最多 1 空格
+
         const nextUsed = true;
         const nextKey = makeKey(ray.hitIdx, nextUsed);
         if (seen.has(nextKey)) continue;
@@ -631,7 +636,7 @@ export function computeWizardBeam(
         continue;
       }
 
-      // 命中其他己方棋：阻擋，不可穿越，也不入隊
+      // 命中其他棋（己方/中立非導體、或敵方但不符合 target 條件）：阻擋，不可穿越
     }
   }
 
@@ -647,7 +652,6 @@ export function computeWizardBeam(
 
     if (!line || !pkey) break;
 
-    // line 是 [from ... to]，往前拼接時避免重複點
     if (fullIdxs.length === 0) {
       fullIdxs.unshift(...line);
     } else {
@@ -658,7 +662,6 @@ export function computeWizardBeam(
     if (curKey === makeKey(startIdx, false)) break;
   }
 
-  // fullIdxs 可能沒把起點加進來（保險）
   if (fullIdxs[0] !== startIdx) fullIdxs.unshift(startIdx);
 
   const pathNodes = fullIdxs.map((i) => ({ row: allNodes[i].row, col: allNodes[i].col }));
@@ -708,7 +711,7 @@ export function calculateWizardMoves(
     }
   }
 
-  // ✅ New wizard beam target (修正：必須傳 adjacency)
+  // ✅ New wizard beam target (嚴格版)
   const beam = computeWizardBeam(piece, pieces, allNodes, adjacency, holyLights);
   if (beam.target) {
     highlights.push({ type: 'attack', row: beam.target.row, col: beam.target.col });
