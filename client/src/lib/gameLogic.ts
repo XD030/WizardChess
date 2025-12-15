@@ -589,7 +589,8 @@ export function computeWizardBeam(
    * - 打到敵人：必須「相鄰」=> line 長度必須 2（from -> enemy）
    */
   const isValidConductorLinkLine = (line: number[]) => line.length <= 3;
-  const isValidFinalAttackLine = (line: number[]) => line.length === 2;
+  // 最後一擊：導體到敵人「最多空 1 格」（導體->敵人 或 導體->空格->敵人）
+  const isValidFinalAttackLine = (line: number[]) => line.length <= 3;
 
   while (q.length > 0 && !endStateKey) {
     const cur = q.shift()!;
