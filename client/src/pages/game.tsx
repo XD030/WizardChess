@@ -89,7 +89,6 @@ interface SyncedState {
   pendingGuard: PendingGuard | null; // ★ 新增：等待聖騎士守護決定
 }
 
-
 // Helper：吃子時啟動所有吟遊詩人
 function activateAllBards(pieces: Piece[]): Piece[] {
   return pieces.map((piece) =>
@@ -130,7 +129,6 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
       blackText: text,
     };
   }
-  
 
   // movedPiece 是潛行刺客（最後棋面仍是潛行狀態）
   const hiddenMsg = "刺客 ? → ?";
@@ -148,6 +146,23 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
       blackText: text,
     };
   }
+}
+
+/**
+ * ✅ 新規則：刺客潛行維持到「敵方回合結束」。
+ * 等價實作：當回合切換到 nextPlayer（也就是 nextPlayer 回合開始）時，
+ * 把 nextPlayer 方所有 stealthed 刺客解除潛行。
+ */
+function revealStealthedAssassinsForTurnStart(
+  pieces: Piece[],
+  nextPlayer: PlayerSide
+): Piece[] {
+  return pieces.map((p) => {
+    if (p.type === "assassin" && p.side === nextPlayer && p.stealthed) {
+      return { ...p, stealthed: false };
+    }
+    return p;
+  });
 }
 
 export default function Game() {
@@ -179,10 +194,8 @@ export default function Game() {
   });
 
   // 先攻方 / 雙方準備狀態 / 是否已開始對局 / 手動 or 隨機
-  const [startingPlayer, setStartingPlayer] =
-    useState<PlayerSide>("white");
-  const [startingMode, setStartingMode] =
-    useState<StartingMode>("manual");
+  const [startingPlayer, setStartingPlayer] = useState<PlayerSide>("white");
+  const [startingMode, setStartingMode] = useState<StartingMode>("manual");
   const [ready, setReady] = useState<ReadyState>({
     white: false,
     black: false,
@@ -236,9 +249,9 @@ export default function Game() {
   }, [bardNeedsSwap]);
 
   // 本機扮演的顏色：white / black / spectator
-  const [localSide, setLocalSide] = useState<
-    "white" | "black" | "spectator"
-  >("spectator");
+  const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">(
+    "spectator"
+  );
 
   // helper：判斷某顆 piece（假設是 bard）在本機是否屬於己方，且是否為敵方回合（此時不應顯示路徑）
   const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
@@ -250,16 +263,11 @@ export default function Game() {
     return currentPlayer !== localSide;
   };
 
-
-  
   const [seatError, setSeatError] = useState<string | null>(null);
 
   // 只有「不是觀戰」且「本機顏色 = 當前回合」且「尚未勝負且已開始」才能真的下子
   const canPlay =
-    localSide !== "spectator" &&
-    localSide === currentPlayer &&
-    !winner &&
-    gameStarted;
+    localSide !== "spectator" && localSide === currentPlayer && !winner && gameStarted;
 
   // ---- 房間 / WebSocket 狀態 ----
   const [socketStatus, setSocketStatus] = useState<
@@ -273,18 +281,14 @@ export default function Game() {
 
   // ====== 棋局快照，用來回放歷史棋面 ======
   const [snapshots, setSnapshots] = useState<SyncedState[]>([]);
-  const [viewSnapshotIndex, setViewSnapshotIndex] = useState<number | null>(
-    null
-  );
+  const [viewSnapshotIndex, setViewSnapshotIndex] = useState<number | null>(null);
   const moveCountRef = useRef(0);
 
   // 是否處於「觀察模式」（勝負已分且關掉結束視窗）
   const isObserving = !!winner && !showEndModal;
-  
+
   // ====== 歷史回放：找出某 snapshot 相對於前一個 snapshot 是哪幾顆棋移動 ======
-  function findMovedPieceIndicesForSnapshot(
-    snapshotIndex: number
-  ): number[] {
+  function findMovedPieceIndicesForSnapshot(snapshotIndex: number): number[] {
     if (snapshotIndex <= 0 || snapshotIndex >= snapshots.length) return [];
 
     const cur = snapshots[snapshotIndex];
@@ -316,8 +320,7 @@ export default function Game() {
     }
 
     const movedIndices: number[] = [];
-    const lastMoverSide: Side =
-      cur.currentPlayer === "white" ? "black" : "white";
+    const lastMoverSide: Side = cur.currentPlayer === "white" ? "black" : "white";
 
     for (let j = 0; j < curPieces.length; j++) {
       if (matchedCur.has(j)) continue;
@@ -343,9 +346,7 @@ export default function Game() {
   useEffect(() => {
     if (winner) {
       setShowEndModal(true);
-      setViewSnapshotIndex(
-        snapshots.length > 0 ? snapshots.length - 1 : null
-      );
+      setViewSnapshotIndex(snapshots.length > 0 ? snapshots.length - 1 : null);
     }
   }, [winner, snapshots.length]);
 
@@ -423,10 +424,7 @@ export default function Game() {
         paladinIndex: idx,
         paladinRow: state.pieces[idx].row,
         paladinCol: state.pieces[idx].col,
-        coordinate: getNodeCoordinate(
-          state.pieces[idx].row,
-          state.pieces[idx].col
-        ),
+        coordinate: getNodeCoordinate(state.pieces[idx].row, state.pieces[idx].col),
       }));
 
       setGuardOptions(options);
@@ -464,8 +462,7 @@ export default function Game() {
 
   // ====== WebSocket 連線 ======
   useEffect(() => {
-    const wsProtocol =
-      window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsHost = window.location.host; // localhost:5000
     const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
 
@@ -543,12 +540,8 @@ export default function Game() {
 
   // ====== 判斷巫師是否被吃掉 ======
   function checkWizardWin(newPieces: Piece[]): Side | null {
-    const hasWhiteWizard = newPieces.some(
-      (p) => p.type === "wizard" && p.side === "white"
-    );
-    const hasBlackWizard = newPieces.some(
-      (p) => p.type === "wizard" && p.side === "black"
-    );
+    const hasWhiteWizard = newPieces.some((p) => p.type === "wizard" && p.side === "white");
+    const hasBlackWizard = newPieces.some((p) => p.type === "wizard" && p.side === "black");
 
     let newWinner: Side | null = null;
 
@@ -615,13 +608,9 @@ export default function Game() {
     if (side === "spectator") {
       const newSeats: Seats = {
         whiteOwnerId:
-          seats.whiteOwnerId === clientIdRef.current
-            ? null
-            : seats.whiteOwnerId,
+          seats.whiteOwnerId === clientIdRef.current ? null : seats.whiteOwnerId,
         blackOwnerId:
-          seats.blackOwnerId === clientIdRef.current
-            ? null
-            : seats.blackOwnerId,
+          seats.blackOwnerId === clientIdRef.current ? null : seats.blackOwnerId,
       };
       setSeats(newSeats);
       setLocalSide("spectator");
@@ -654,9 +643,7 @@ export default function Game() {
       const newSeats: Seats = {
         whiteOwnerId: clientIdRef.current,
         blackOwnerId:
-          seats.blackOwnerId === clientIdRef.current
-            ? null
-            : seats.blackOwnerId,
+          seats.blackOwnerId === clientIdRef.current ? null : seats.blackOwnerId,
       };
       setSeats(newSeats);
       setLocalSide("white");
@@ -688,9 +675,7 @@ export default function Game() {
       }
       const newSeats: Seats = {
         whiteOwnerId:
-          seats.whiteOwnerId === clientIdRef.current
-            ? null
-            : seats.whiteOwnerId,
+          seats.whiteOwnerId === clientIdRef.current ? null : seats.whiteOwnerId,
         blackOwnerId: clientIdRef.current,
       };
       setSeats(newSeats);
@@ -817,8 +802,7 @@ export default function Game() {
     if (winner) return;
     // ★ 不再檢查 canPlay，因為執行的是「防守方」的操作
 
-    const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } =
-      guardRequest;
+    const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } = guardRequest;
 
     if (
       targetPieceIndex >= pieces.length ||
@@ -873,11 +857,7 @@ export default function Game() {
 
       for (const pathNode of path) {
         if (!(pathNode.row === targetRow && pathNode.col === targetCol)) {
-          if (
-            !updatedBurnMarks.some(
-              (b) => b.row === pathNode.row && b.col === pathNode.col
-            )
-          ) {
+          if (!updatedBurnMarks.some((b) => b.row === pathNode.row && b.col === pathNode.col)) {
             updatedBurnMarks.push({
               row: pathNode.row,
               col: pathNode.col,
@@ -951,12 +931,8 @@ export default function Game() {
       (p) => p.row === movedAttacker.row && p.col === movedAttacker.col
     );
 
-    if (
-      newPieces[targetIdxAfter].type === "assassin" &&
-      newPieces[targetIdxAfter].stealthed
-    ) {
-      const enemySide =
-        newPieces[targetIdxAfter].side === "white" ? "black" : "white";
+    if (newPieces[targetIdxAfter].type === "assassin" && newPieces[targetIdxAfter].stealthed) {
+      const enemySide = newPieces[targetIdxAfter].side === "white" ? "black" : "white";
       if (
         isInProtectionZone(
           newPieces[targetIdxAfter].row,
@@ -967,10 +943,7 @@ export default function Game() {
           allNodes
         )
       ) {
-        newPieces[targetIdxAfter] = {
-          ...newPieces[targetIdxAfter],
-          stealthed: false,
-        };
+        newPieces[targetIdxAfter] = { ...newPieces[targetIdxAfter], stealthed: false };
       }
     }
 
@@ -978,8 +951,7 @@ export default function Game() {
       newPieces[attackerIdxAfter].type === "assassin" &&
       newPieces[attackerIdxAfter].stealthed
     ) {
-      const enemySide =
-        newPieces[attackerIdxAfter].side === "white" ? "black" : "white";
+      const enemySide = newPieces[attackerIdxAfter].side === "white" ? "black" : "white";
       if (
         isInProtectionZone(
           newPieces[attackerIdxAfter].row,
@@ -990,37 +962,19 @@ export default function Game() {
           allNodes
         )
       ) {
-        newPieces[attackerIdxAfter] = {
-          ...newPieces[attackerIdxAfter],
-          stealthed: false,
-        };
+        newPieces[attackerIdxAfter] = { ...newPieces[attackerIdxAfter], stealthed: false };
       }
     }
 
-    const fromCoord = getNodeCoordinate(
-      selectedPiece.row,
-      selectedPiece.col
-    );
-    const targetCoord = getNodeCoordinate(
-      targetRowGuard,
-      targetColGuard
-    );
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
+    const targetCoord = getNodeCoordinate(targetRowGuard, targetColGuard);
     const paladinCoord = getNodeCoordinate(paladinRow, paladinCol);
-    const moveDesc = `${
-      PIECE_CHINESE[selectedPiece.type]
-    } ${fromCoord} → ${targetCoord} (聖騎士 ${paladinCoord} 守護 ${
-      PIECE_CHINESE[targetPiece.type]
-    })`;
+    const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${targetCoord} (聖騎士 ${paladinCoord} 守護 ${PIECE_CHINESE[targetPiece.type]})`;
 
-    const nextPlayer: PlayerSide =
-      currentPlayer === "white" ? "black" : "white";
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    const remainingBurnMarks = updatedBurnMarks.filter(
-      (mark) => mark.createdBy !== nextPlayer
-    );
-    const remainingHolyLights = holyLights.filter(
-      (light) => light.createdBy !== nextPlayer
-    );
+    const remainingBurnMarks = updatedBurnMarks.filter((mark) => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const updatedHolyLights = [
       ...remainingHolyLights,
@@ -1035,8 +989,14 @@ export default function Game() {
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
+    // ✅ 回合切換：在 nextPlayer 回合開始時，解除 nextPlayer 方所有潛行刺客
+    let finalPieces = newPieces;
+    if (!result) {
+      finalPieces = revealStealthedAssassinsForTurnStart(newPieces, nextPlayer);
+    }
+
     const syncState: SyncedState = {
-      pieces: newPieces,
+      pieces: finalPieces,
       currentPlayer: result ? currentPlayer : nextPlayer,
       moveHistory: newMoveHistory,
       burnMarks: remainingBurnMarks,
@@ -1062,10 +1022,8 @@ export default function Game() {
   const handleGuardDecline = () => {
     if (!guardRequest) return;
     if (winner) return;
-    // 一樣不檢查 canPlay，因為是防守方的選擇
 
-    const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } =
-      guardRequest;
+    const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex } = guardRequest;
 
     let newPieces = [...pieces];
     const selectedPiece = pieces[attackerPieceIndex];
@@ -1102,9 +1060,7 @@ export default function Game() {
         );
 
         if (
-          !updatedBurnMarks.some(
-            (b) => b.row === selectedPiece.row && b.col === selectedPiece.col
-          )
+          !updatedBurnMarks.some((b) => b.row === selectedPiece.row && b.col === selectedPiece.col)
         ) {
           updatedBurnMarks.push({
             row: selectedPiece.row,
@@ -1115,11 +1071,7 @@ export default function Game() {
 
         for (const pathNode of path) {
           if (!(pathNode.row === targetRow && pathNode.col === targetCol)) {
-            if (
-              !updatedBurnMarks.some(
-                (b) => b.row === pathNode.row && b.col === pathNode.col
-              )
-            ) {
+            if (!updatedBurnMarks.some((b) => b.row === pathNode.row && b.col === pathNode.col)) {
               updatedBurnMarks.push({
                 row: pathNode.row,
                 col: pathNode.col,
@@ -1158,36 +1110,30 @@ export default function Game() {
       }
     }
 
-    const fromCoord = getNodeCoordinate(
-      selectedPiece.row,
-      selectedPiece.col
-    );
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(targetRow, targetCol);
     const moveDesc =
       targetPiece.type === "bard"
-        ? `${
-            PIECE_CHINESE[selectedPiece.type]
-          } ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
-        : `${
-            PIECE_CHINESE[selectedPiece.type]
-          } ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
+        : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
 
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
     const result = checkWizardWin(newPieces);
-    const nextPlayer: PlayerSide =
-      currentPlayer === "white" ? "black" : "white";
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    const remainingBurnMarks = updatedBurnMarks.filter(
-      (mark) => mark.createdBy !== nextPlayer
-    );
-    const remainingHolyLights = holyLights.filter(
-      (light) => light.createdBy !== nextPlayer
-    );
+    const remainingBurnMarks = updatedBurnMarks.filter((mark) => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+    // ✅ 回合切換：在 nextPlayer 回合開始時，解除 nextPlayer 方所有潛行刺客
+    let finalPieces = newPieces;
+    if (!result) {
+      finalPieces = revealStealthedAssassinsForTurnStart(newPieces, nextPlayer);
+    }
 
     const syncState: SyncedState = {
-      pieces: newPieces,
+      pieces: finalPieces,
       currentPlayer: result ? currentPlayer : nextPlayer,
       moveHistory: newMoveHistory,
       burnMarks: remainingBurnMarks,
@@ -1214,8 +1160,7 @@ export default function Game() {
   const handleWizardLineShot = () => {
     if (!wizardAttackRequest || winner) return;
 
-    const { wizardIndex, targetRow, targetCol, targetPieceIndex } =
-      wizardAttackRequest;
+    const { wizardIndex, targetRow, targetCol, targetPieceIndex } = wizardAttackRequest;
 
     const wizard = pieces[wizardIndex];
     const targetPiece = pieces[targetPieceIndex];
@@ -1235,29 +1180,26 @@ export default function Game() {
 
     const moveDesc =
       targetPiece.type === "bard"
-        ? `${
-            PIECE_CHINESE[wizard.type]
-          } ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺，導線射擊)`
-        : `${
-            PIECE_CHINESE[wizard.type]
-          } ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
+        ? `${PIECE_CHINESE[wizard.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺，導線射擊)`
+        : `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
 
     const result = checkWizardWin(newPieces);
-    const nextPlayer: PlayerSide =
-      currentPlayer === "white" ? "black" : "white";
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    const remainingBurnMarks = burnMarks.filter(
-      (mark) => mark.createdBy !== nextPlayer
-    );
-    const remainingHolyLights = holyLights.filter(
-      (light) => light.createdBy !== nextPlayer
-    );
+    const remainingBurnMarks = burnMarks.filter((mark) => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
+    // ✅ 回合切換：在 nextPlayer 回合開始時，解除 nextPlayer 方所有潛行刺客
+    let finalPieces = newPieces;
+    if (!result) {
+      finalPieces = revealStealthedAssassinsForTurnStart(newPieces, nextPlayer);
+    }
+
     const syncState: SyncedState = {
-      pieces: newPieces,
+      pieces: finalPieces,
       currentPlayer: result ? currentPlayer : nextPlayer,
       moveHistory: newMoveHistory,
       burnMarks: remainingBurnMarks,
@@ -1280,8 +1222,7 @@ export default function Game() {
   const handleWizardMoveAttack = () => {
     if (!wizardAttackRequest || winner) return;
 
-    const { wizardIndex, targetRow, targetCol, targetPieceIndex } =
-      wizardAttackRequest;
+    const { wizardIndex, targetRow, targetCol, targetPieceIndex } = wizardAttackRequest;
 
     const wizard = pieces[wizardIndex];
     const targetPiece = pieces[targetPieceIndex];
@@ -1298,9 +1239,7 @@ export default function Game() {
 
     // 被 splice 掉之後，巫師的 index 可能往前一格
     const adjustedWizardIndex =
-      targetPiece.type !== "bard" && targetPieceIndex < wizardIndex
-        ? wizardIndex - 1
-        : wizardIndex;
+      targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
 
     const movedWizard: Piece = {
       ...wizard,
@@ -1315,29 +1254,26 @@ export default function Game() {
 
     const moveDesc =
       targetPiece.type === "bard"
-        ? `${
-            PIECE_CHINESE[wizard.type]
-          } ${fromCoord} 移動至 ${toCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} (無法擊殺)`
-        : `${
-            PIECE_CHINESE[wizard.type]
-          } ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
+        ? `${PIECE_CHINESE[wizard.type]} ${fromCoord} 移動至 ${toCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} (無法擊殺)`
+        : `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
 
     const result = checkWizardWin(newPieces);
-    const nextPlayer: PlayerSide =
-      currentPlayer === "white" ? "black" : "white";
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-    const remainingBurnMarks = burnMarks.filter(
-      (mark) => mark.createdBy !== nextPlayer
-    );
-    const remainingHolyLights = holyLights.filter(
-      (light) => light.createdBy !== nextPlayer
-    );
+    const remainingBurnMarks = burnMarks.filter((mark) => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
 
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
+    // ✅ 回合切換：在 nextPlayer 回合開始時，解除 nextPlayer 方所有潛行刺客
+    let finalPieces = newPieces;
+    if (!result) {
+      finalPieces = revealStealthedAssassinsForTurnStart(newPieces, nextPlayer);
+    }
+
     const syncState: SyncedState = {
-      pieces: newPieces,
+      pieces: finalPieces,
       currentPlayer: result ? currentPlayer : nextPlayer,
       moveHistory: newMoveHistory,
       burnMarks: remainingBurnMarks,
@@ -1418,17 +1354,8 @@ export default function Game() {
           if (paladinIndicesToCheck.length > 0) {
             for (const pi of paladinIndicesToCheck) {
               const pal = newPieces[pi];
-              const zones = calculatePaladinProtectionZone(
-                pal,
-                newPieces,
-                adjacency,
-                allNodes
-              );
-              const revealedPieces = revealAssassinsInSpecificZone(
-                newPieces,
-                zones,
-                pal.side
-              );
+              const zones = calculatePaladinProtectionZone(pal, newPieces, adjacency, allNodes);
+              const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, pal.side);
               // apply revealed results
               for (let i = 0; i < newPieces.length; i++) {
                 newPieces[i] = revealedPieces[i];
@@ -1437,14 +1364,8 @@ export default function Game() {
           }
           // ===== 新增結束 =====
 
-          const bardCoord = getNodeCoordinate(
-            bardNeedsSwap.bardRow,
-            bardNeedsSwap.bardCol
-          );
-          const swapCoord = getNodeCoordinate(
-            swapTarget.row,
-            swapTarget.col
-          );
+          const bardCoord = getNodeCoordinate(bardNeedsSwap.bardRow, bardNeedsSwap.bardCol);
+          const swapCoord = getNodeCoordinate(swapTarget.row, swapTarget.col);
           const moveDesc = `${PIECE_CHINESE["bard"]} ${bardCoord} ⇄ ${
             PIECE_CHINESE[swapTarget.type]
           } ${swapCoord}`;
@@ -1453,18 +1374,19 @@ export default function Game() {
           const newMoveHistory = [record, ...moveHistory];
 
           const result = checkWizardWin(newPieces);
-          const nextPlayer: PlayerSide =
-            currentPlayer === "white" ? "black" : "white";
+          const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-          const remainingBurnMarks = burnMarks.filter(
-            (mark) => mark.createdBy !== nextPlayer
-          );
-          const remainingHolyLights = holyLights.filter(
-            (light) => light.createdBy !== nextPlayer
-          );
+          const remainingBurnMarks = burnMarks.filter((mark) => mark.createdBy !== nextPlayer);
+          const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+          // ✅ 回合切換：在 nextPlayer 回合開始時，解除 nextPlayer 方所有潛行刺客
+          let finalPieces = newPieces;
+          if (!result) {
+            finalPieces = revealStealthedAssassinsForTurnStart(newPieces, nextPlayer);
+          }
 
           const syncState: SyncedState = {
-            pieces: newPieces,
+            pieces: finalPieces,
             currentPlayer: result ? currentPlayer : nextPlayer,
             moveHistory: newMoveHistory,
             burnMarks: remainingBurnMarks,
@@ -1597,22 +1519,13 @@ export default function Game() {
                 holyLights,
                 burnMarks
               );
-              const zones = calculatePaladinProtectionZone(
-                piece,
-                effectivePieces,
-                adjacency,
-                allNodes
-              );
+              const zones = calculatePaladinProtectionZone(piece, effectivePieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
 
               if (!isObserving) {
-                const revealedPieces = revealAssassinsInSpecificZone(
-                  pieces,
-                  zones,
-                  piece.side
-                );
+                const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
                 setPieces(revealedPieces);
               }
             } else if (piece.type === "bard") {
@@ -1661,9 +1574,7 @@ export default function Game() {
       return;
     }
 
-    const highlight = highlights.find(
-      (h) => h.row === row && h.col === col
-    );
+    const highlight = highlights.find((h) => h.row === row && h.col === col);
 
     // 觀察模式：只改選取 / 高亮，不做後續動作
     if (!highlight || isObserving) {
@@ -1774,16 +1685,11 @@ export default function Game() {
                 holyLights,
                 burnMarks
               );
-              const zones = calculatePaladinProtectionZone(
-                piece,
-                effectivePieces,
-                adjacency,
-                allNodes
-              );
+              const zones = calculatePaladinProtectionZone(piece, effectivePieces, adjacency, allNodes);
               setHighlights(moves);
               setDragonPathNodes([]);
               setProtectionZones(zones);
-           } else if (piece.type === "bard") {
+            } else if (piece.type === "bard") {
               const moves = calculateBardMoves(
                 piece,
                 clickedPieceIdx,
@@ -1821,10 +1727,7 @@ export default function Game() {
     // ====== 以下開始「真的改棋盤」 ======
     let newPieces = [...pieces];
     let moveDesc = "";
-    const fromCoord = getNodeCoordinate(
-      selectedPiece.row,
-      selectedPiece.col
-    );
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(row, col);
     let updatedBurnMarks = [...burnMarks];
     let localCaptured = cloneCaptured(capturedPieces);
@@ -1885,10 +1788,7 @@ export default function Game() {
           newPieces.splice(actualTargetIdx, 1);
           newPieces = activateAllBards(newPieces);
 
-          const adjustedIdx =
-            actualTargetIdx < selectedPieceIndex
-              ? selectedPieceIndex - 1
-              : selectedPieceIndex;
+          const adjustedIdx = actualTargetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
 
           let movedPiece = updateAssassinStealth(
             { ...selectedPiece, row, col },
@@ -1904,9 +1804,7 @@ export default function Game() {
           }
 
           newPieces[adjustedIdx] = movedPiece;
-          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${
-            PIECE_CHINESE[targetPiece.type]
-          } ${toCoord}`;
+          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
         }
       } else {
         // 落在空格
@@ -1919,18 +1817,8 @@ export default function Game() {
         );
 
         if (movedPiece.type === "assassin" && movedPiece.stealthed) {
-          const enemySide =
-            movedPiece.side === "white" ? "black" : "white";
-          if (
-            isInProtectionZone(
-              row,
-              col,
-              newPieces,
-              enemySide,
-              adjacency,
-              allNodes
-            )
-          ) {
+          const enemySide = movedPiece.side === "white" ? "black" : "white";
+          if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
             movedPiece = { ...movedPiece, stealthed: false };
           }
           movedAssassinFinal = movedPiece;
@@ -1952,9 +1840,7 @@ export default function Game() {
         );
 
         if (
-          !updatedBurnMarks.some(
-            (b) => b.row === selectedPiece.row && b.col === selectedPiece.col
-          )
+          !updatedBurnMarks.some((b) => b.row === selectedPiece.row && b.col === selectedPiece.col)
         ) {
           updatedBurnMarks.push({
             row: selectedPiece.row,
@@ -1965,11 +1851,7 @@ export default function Game() {
 
         for (const pathNode of path) {
           if (!(pathNode.row === row && pathNode.col === col)) {
-            if (
-              !updatedBurnMarks.some(
-                (b) => b.row === pathNode.row && b.col === pathNode.col
-              )
-            ) {
+            if (!updatedBurnMarks.some((b) => b.row === pathNode.row && b.col === pathNode.col)) {
               updatedBurnMarks.push({
                 row: pathNode.row,
                 col: pathNode.col,
@@ -1980,142 +1862,115 @@ export default function Game() {
         }
       }
     } else if (highlight.type === "swap") {
-  const targetIdx = clickedPieceIdx!;
-  const targetPiece = pieces[targetIdx];
+      const targetIdx = clickedPieceIdx!;
+      const targetPiece = pieces[targetIdx];
 
-  // =========================
-  // ✅ 學徒交換規則（新）
-  // 每個 apprentice 只能和「己方 wizard」交換 1 次
-  // 注意：wizard 也能主動點 apprentice 交換，但一樣算該 apprentice 用掉一次
-  // =========================
+      // =========================
+      // ✅ 學徒交換規則（新）
+      // 每個 apprentice 只能和「己方 wizard」交換 1 次
+      // 注意：wizard 也能主動點 apprentice 交換，但一樣算該 apprentice 用掉一次
+      // =========================
 
-  const isWizardApprenticeSwap =
-    (selectedPiece.type === "wizard" &&
-      targetPiece.type === "apprentice" &&
-      targetPiece.side === selectedPiece.side) ||
-    (selectedPiece.type === "apprentice" &&
-      targetPiece.type === "wizard" &&
-      targetPiece.side === selectedPiece.side);
+      const isWizardApprenticeSwap =
+        (selectedPiece.type === "wizard" &&
+          targetPiece.type === "apprentice" &&
+          targetPiece.side === selectedPiece.side) ||
+        (selectedPiece.type === "apprentice" &&
+          targetPiece.type === "wizard" &&
+          targetPiece.side === selectedPiece.side);
 
-  if (isWizardApprenticeSwap) {
-    // 找出 apprentice 那顆（不管是被點的還是選到的）
-    const apprenticeIdx =
-      selectedPiece.type === "apprentice" ? selectedPieceIndex : targetIdx;
-    const wizardIdx =
-      selectedPiece.type === "wizard" ? selectedPieceIndex : targetIdx;
+      if (isWizardApprenticeSwap) {
+        // 找出 apprentice 那顆（不管是被點的還是選到的）
+        const apprenticeIdx =
+          selectedPiece.type === "apprentice" ? selectedPieceIndex : targetIdx;
+        const wizardIdx = selectedPiece.type === "wizard" ? selectedPieceIndex : targetIdx;
 
-    const apprentice = pieces[apprenticeIdx];
-    const wizard = pieces[wizardIdx];
+        const apprentice = pieces[apprenticeIdx];
+        const wizard = pieces[wizardIdx];
 
-    // 若已用過交換 -> 直接取消這次操作
-    if (apprentice.swapUsed) {
-      setSelectedPieceIndex(-1);
-      setHighlights([]);
-      setDragonPathNodes([]);
-      setProtectionZones([]);
-      return;
-    }
+        // 若已用過交換 -> 直接取消這次操作
+        if (apprentice.swapUsed) {
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          return;
+        }
 
-    // 交換位置
-    const movedWizard = {
-      ...wizard,
-      row: apprentice.row,
-      col: apprentice.col,
-    };
+        // 交換位置
+        const movedWizard = {
+          ...wizard,
+          row: apprentice.row,
+          col: apprentice.col,
+        };
 
-    const movedApprentice = {
-      ...apprentice,
-      row: wizard.row,
-      col: wizard.col,
-      swapUsed: true, // ★ 用掉一次
-    };
+        const movedApprentice = {
+          ...apprentice,
+          row: wizard.row,
+          col: wizard.col,
+          swapUsed: true, // ★ 用掉一次
+        };
 
-    // 刺客交換立即現形（這裡不會遇到，但保留一致性）
-    // if (movedWizard.type === "assassin") movedWizard.stealthed = false;
-    // if (movedApprentice.type === "assassin") movedApprentice.stealthed = false;
+        newPieces[wizardIdx] = movedWizard;
+        newPieces[apprenticeIdx] = movedApprentice;
 
-    newPieces[wizardIdx] = movedWizard;
-    newPieces[apprenticeIdx] = movedApprentice;
+        moveDesc = `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⇄ ${PIECE_CHINESE["apprentice"]} ${toCoord}`;
+      } else {
+        // =========================
+        // 原本的「通用 swap」：給吟遊詩人第二段換位用
+        // =========================
 
-    moveDesc = `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⇄ ${PIECE_CHINESE["apprentice"]} ${toCoord}`;
+        // 先照原本規則算刺客黑白格移動
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row, col },
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col
+        );
+        let swappedPiece = updateAssassinStealth(
+          {
+            ...targetPiece,
+            row: selectedPiece.row,
+            col: selectedPiece.col,
+          },
+          targetPiece.row,
+          targetPiece.col,
+          selectedPiece.row,
+          selectedPiece.col
+        );
 
-  } else {
-    // =========================
-    // 原本的「通用 swap」：給吟遊詩人第二段換位用
-    // =========================
+        // ⭐ 規則：只要是「交換位置」，刺客一律現形
+        if (movedPiece.type === "assassin") {
+          movedPiece = { ...movedPiece, stealthed: false };
+          movedAssassinFinal = movedPiece;
+        }
+        if (swappedPiece.type === "assassin") {
+          swappedPiece = { ...swappedPiece, stealthed: false };
+        }
 
-    // 先照原本規則算刺客黑白格移動
-    let movedPiece = updateAssassinStealth(
-      { ...selectedPiece, row, col },
-      selectedPiece.row,
-      selectedPiece.col,
-      row,
-      col
-    );
-    let swappedPiece = updateAssassinStealth(
-      {
-        ...targetPiece,
-        row: selectedPiece.row,
-        col: selectedPiece.col,
-      },
-      targetPiece.row,
-      targetPiece.col,
-      selectedPiece.row,
-      selectedPiece.col
-    );
+        newPieces[selectedPieceIndex] = movedPiece;
+        newPieces[targetIdx] = swappedPiece;
 
-    // ⭐ 規則：只要是「交換位置」，刺客一律現形
-    if (movedPiece.type === "assassin") {
-      movedPiece = { ...movedPiece, stealthed: false };
-      movedAssassinFinal = movedPiece;
-    }
-    if (swappedPiece.type === "assassin") {
-      swappedPiece = { ...swappedPiece, stealthed: false };
-    }
+        if (movedPiece.type === "paladin") {
+          const zones = calculatePaladinProtectionZone(movedPiece, newPieces, adjacency, allNodes);
+          const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPiece.side);
+          for (let i = 0; i < newPieces.length; i++) {
+            newPieces[i] = revealedPieces[i];
+          }
+        }
 
-    newPieces[selectedPieceIndex] = movedPiece;
-    newPieces[targetIdx] = swappedPiece;
+        if (swappedPiece.type === "paladin") {
+          const zones = calculatePaladinProtectionZone(swappedPiece, newPieces, adjacency, allNodes);
+          const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, swappedPiece.side);
+          for (let i = 0; i < newPieces.length; i++) {
+            newPieces[i] = revealedPieces[i];
+          }
+        }
 
-    if (movedPiece.type === "paladin") {
-      const zones = calculatePaladinProtectionZone(
-        movedPiece,
-        newPieces,
-        adjacency,
-        allNodes
-      );
-      const revealedPieces = revealAssassinsInSpecificZone(
-        newPieces,
-        zones,
-        movedPiece.side
-      );
-      for (let i = 0; i < newPieces.length; i++) {
-        newPieces[i] = revealedPieces[i];
+        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
-    }
-
-    if (swappedPiece.type === "paladin") {
-      const zones = calculatePaladinProtectionZone(
-        swappedPiece,
-        newPieces,
-        adjacency,
-        allNodes
-      );
-      const revealedPieces = revealAssassinsInSpecificZone(
-        newPieces,
-        zones,
-        swappedPiece.side
-      );
-      for (let i = 0; i < newPieces.length; i++) {
-        newPieces[i] = revealedPieces[i];
-      }
-    }
-
-    moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${
-      PIECE_CHINESE[targetPiece.type]
-    } ${toCoord}`;
-  }
-}
- else if (highlight.type === "attack") {
+    } else if (highlight.type === "attack") {
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
@@ -2123,17 +1978,12 @@ export default function Game() {
       if (selectedPiece.type === "wizard") {
         // 找出巫師節點與目標節點在 adjacency 裡的 index
         const wizardNodeIdx = allNodes.findIndex(
-          (n) =>
-            n.row === selectedPiece.row && n.col === selectedPiece.col
+          (n) => n.row === selectedPiece.row && n.col === selectedPiece.col
         );
-        const targetNodeIdx = allNodes.findIndex(
-          (n) => n.row === row && n.col === col
-        );
+        const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
 
         const isAdjacent =
-          wizardNodeIdx !== -1 &&
-          targetNodeIdx !== -1 &&
-          adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+          wizardNodeIdx !== -1 && targetNodeIdx !== -1 && adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
 
         if (isAdjacent) {
           setWizardAttackRequest({
@@ -2154,14 +2004,7 @@ export default function Game() {
 
       const guardingPaladinIndices =
         targetPiece.side !== "neutral"
-          ? findGuardingPaladins(
-              row,
-              col,
-              pieces,
-              targetPiece.side,
-              adjacency,
-              allNodes
-            )
+          ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
           : [];
 
       // === 重點：攻擊方偵測到「可以守護」 → 建立 pendingGuard，讓防守方那邊跳視窗 ===
@@ -2207,9 +2050,7 @@ export default function Game() {
       }
 
       const adjustedIdx =
-        targetPiece.type !== "bard" && targetIdx < selectedPieceIndex
-          ? selectedPieceIndex - 1
-          : selectedPieceIndex;
+        targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
 
       if (targetPiece.type !== "bard") {
         if (selectedPiece.type === "wizard") {
@@ -2225,11 +2066,7 @@ export default function Game() {
           );
 
           if (
-            !updatedBurnMarks.some(
-              (b) =>
-                b.row === selectedPiece.row &&
-                b.col === selectedPiece.col
-            )
+            !updatedBurnMarks.some((b) => b.row === selectedPiece.row && b.col === selectedPiece.col)
           ) {
             updatedBurnMarks.push({
               row: selectedPiece.row,
@@ -2240,13 +2077,7 @@ export default function Game() {
 
           for (const pathNode of path) {
             if (!(pathNode.row === row && pathNode.col === col)) {
-              if (
-                !updatedBurnMarks.some(
-                  (b) =>
-                    b.row === pathNode.row &&
-                    b.col === pathNode.col
-                )
-              ) {
+              if (!updatedBurnMarks.some((b) => b.row === pathNode.row && b.col === pathNode.col)) {
                 updatedBurnMarks.push({
                   row: pathNode.row,
                   col: pathNode.col,
@@ -2287,12 +2118,8 @@ export default function Game() {
 
       moveDesc =
         targetPiece.type === "bard"
-          ? `${
-              PIECE_CHINESE[selectedPiece.type]
-            } ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
-          : `${
-              PIECE_CHINESE[selectedPiece.type]
-            } ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+          ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
+          : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
     }
 
     // 若移動的是聖騎士，重新顯形範圍內刺客
@@ -2305,17 +2132,8 @@ export default function Game() {
         ];
 
       if (movedPaladin) {
-        const zones = calculatePaladinProtectionZone(
-          movedPaladin,
-          newPieces,
-          adjacency,
-          allNodes
-        );
-        const revealedPieces = revealAssassinsInSpecificZone(
-          newPieces,
-          zones,
-          movedPaladin.side
-        );
+        const zones = calculatePaladinProtectionZone(movedPaladin, newPieces, adjacency, allNodes);
+        const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPaladin.side);
 
         for (let i = 0; i < newPieces.length; i++) {
           newPieces[i] = revealedPieces[i];
@@ -2341,9 +2159,7 @@ export default function Game() {
           .map((p, idx) => ({ piece: p, idx }))
           .filter(
             ({ piece }) =>
-              piece.side === currentPlayer &&
-              piece.type !== "bard" &&
-              piece.type !== "dragon"
+              piece.side === currentPlayer && piece.type !== "bard" && piece.type !== "dragon"
           )
           .map(({ piece }) => ({
             type: "swap" as const,
@@ -2359,21 +2175,22 @@ export default function Game() {
     }
 
     const result = checkWizardWin(newPieces);
-    const nextPlayer: PlayerSide =
-      currentPlayer === "white" ? "black" : "white";
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
 
-    const remainingBurnMarks = updatedBurnMarks.filter(
-      (mark) => mark.createdBy !== nextPlayer
-    );
-    const remainingHolyLights = holyLights.filter(
-      (light) => light.createdBy !== nextPlayer
-    );
+    const remainingBurnMarks = updatedBurnMarks.filter((mark) => mark.createdBy !== nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+    // ✅ 回合切換：在 nextPlayer 回合開始時，解除 nextPlayer 方所有潛行刺客
+    let finalPieces = newPieces;
+    if (!result) {
+      finalPieces = revealStealthedAssassinsForTurnStart(newPieces, nextPlayer);
+    }
 
     const syncState: SyncedState = {
-      pieces: newPieces,
+      pieces: finalPieces,
       currentPlayer: result ? currentPlayer : nextPlayer,
       moveHistory: newMoveHistory,
       burnMarks: remainingBurnMarks,
@@ -2391,7 +2208,6 @@ export default function Game() {
     applySyncedState(syncState);
     broadcastState(syncState);
   };
-
 
   // ====== 棋盤顯示用狀態 ======
   const boardState: SyncedState =
@@ -2415,23 +2231,16 @@ export default function Game() {
 
   // 是否輪到「我」這一方
   const isMyTurn =
-    !winner &&
-    gameStarted &&
-    localSide !== "spectator" &&
-    localSide === boardState.currentPlayer;
+    !winner && gameStarted && localSide !== "spectator" && localSide === boardState.currentPlayer;
 
   const displayPieces: Piece[] = isObserving
-    ? boardState.pieces.map((p) =>
-        p.type === "assassin" ? { ...p, stealthed: false } : p
-      )
+    ? boardState.pieces.map((p) => (p.type === "assassin" ? { ...p, stealthed: false } : p))
     : boardState.pieces;
 
   const effectivePiecesForPanel = boardState.pieces;
 
   const selectedPieceForPanel =
-    selectedPieceIndex !== -1
-      ? effectivePiecesForPanel[selectedPieceIndex]
-      : null;
+    selectedPieceIndex !== -1 ? effectivePiecesForPanel[selectedPieceIndex] : null;
 
   // ====== 歷史回放 點擊 ======
   const handleSelectMoveFromHistory = (index: number) => {
@@ -2461,23 +2270,12 @@ export default function Game() {
 
   // ---- 準備階段 ready 顯示 ----
   const myReady =
-    localSide === "white"
-      ? ready.white
-      : localSide === "black"
-      ? ready.black
-      : false;
+    localSide === "white" ? ready.white : localSide === "black" ? ready.black : false;
   const otherReady =
-    localSide === "white"
-      ? ready.black
-      : localSide === "black"
-      ? ready.white
-      : false;
+    localSide === "white" ? ready.black : localSide === "black" ? ready.white : false;
 
   // ---- 移動紀錄顯示文字（視角） ----
-  const baseHistory =
-    snapshots.length > 0
-      ? snapshots[snapshots.length - 1].moveHistory
-      : moveHistory;
+  const baseHistory = snapshots.length > 0 ? snapshots[snapshots.length - 1].moveHistory : moveHistory;
 
   let displayHistory: string[] = [];
   if (baseHistory) {
@@ -2497,9 +2295,7 @@ export default function Game() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
         <div className="w-full max-w-md bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl">
-          <h1 className="text-2xl font-bold text-center mb-2 text-slate-100">
-            巫師棋 Wizard Chess
-          </h1>
+          <h1 className="text-2xl font-bold text-center mb-2 text-slate-100">巫師棋 Wizard Chess</h1>
           <p className="text-xs text-slate-400 text-center mb-6">
             請輸入本局的密碼（必填）。<br />
             之後其他玩家輸入相同密碼即可加入同一局。
@@ -2507,10 +2303,7 @@ export default function Game() {
 
           <div className="space-y-4">
             <div>
-              <label
-                htmlFor="room-password"
-                className="block text-sm text-slate-300 mb-1"
-              >
+              <label htmlFor="room-password" className="block text-sm text-slate-300 mb-1">
                 房間密碼（必填）
               </label>
               <input
@@ -2530,9 +2323,7 @@ export default function Game() {
               建立 / 加入 房間
             </button>
 
-            {roomError && (
-              <div className="text-red-400 text-xs mt-2">{roomError}</div>
-            )}
+            {roomError && <div className="text-red-400 text-xs mt-2">{roomError}</div>}
 
             <div className="text-[11px] text-slate-500 text-center mt-4">
               WebSocket 狀態：
@@ -2549,18 +2340,12 @@ export default function Game() {
   // -------------- 已進房但尚未開始：準備階段畫面 --------------
   if (inRoom && !gameStarted) {
     const startingText =
-      startingMode === "random"
-        ? "隨機"
-        : startingPlayer === "white"
-        ? "白方先攻"
-        : "黑方先攻";
+      startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
         <div className="w-full max-w-lg bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
-          <h1 className="text-2xl font-bold text-center text-slate-100">
-            巫師棋 Wizard Chess
-          </h1>
+          <h1 className="text-2xl font-bold text-center text-slate-100">巫師棋 Wizard Chess</h1>
           <p className="text-lg text-slate-300 text-center font-medium">
             準備階段：請先選擇白方、黑方或觀戰，並設定這局的先後攻。
             白方與黑方都按下「開始遊戲」後，對局才會正式開始。
@@ -2568,9 +2353,7 @@ export default function Game() {
 
           {/* 座位選擇 */}
           <div>
-            <div className="text-sm text-slate-200 mb-2 text-center">
-              座位選擇
-            </div>
+            <div className="text-sm text-slate-200 mb-2 text-center">座位選擇</div>
             <div className="flex justify-center items-center gap-4 mb-2 text-sm text-slate-300">
               <button
                 className={`px-3 py-1 rounded-full border ${
@@ -2604,32 +2387,23 @@ export default function Game() {
               </button>
             </div>
             <div className="text-[11px] text-slate-400 text-center">
-              白方：{seats.whiteOwnerId ? "有人就座" : "空位"} ｜ 黑方：
-              {seats.blackOwnerId ? "有人就座" : "空位"}
+              白方：{seats.whiteOwnerId ? "有人就座" : "空位"} ｜ 黑方：{seats.blackOwnerId ? "有人就座" : "空位"}
             </div>
-            {seatError && (
-              <div className="text-xs text-red-400 mt-1 text-center">
-                {seatError}
-              </div>
-            )}
+            {seatError && <div className="text-xs text-red-400 mt-1 text-center">{seatError}</div>}
           </div>
 
           {/* 先後攻設定 */}
           <div>
-            <div className="text-sm text-slate-200 mb-2 text-center">
-              先後攻設定
-            </div>
+            <div className="text-sm text-slate-200 mb-2 text-center">先後攻設定</div>
             <div className="text-xs text-slate-400 text-center mb-2">
-              目前設定：{" "}
-              <span className="text-emerald-300">{startingText}</span>
+              目前設定： <span className="text-emerald-300">{startingText}</span>
             </div>
             <div className="flex flex-wrap justify-center gap-3">
               <button
                 onClick={handleToggleStartingPlayer}
                 className="px-3 py-1 rounded-lg border border-slate-600 bg-slate-950 text-xs text-slate-100 hover:border-emerald-400 hover:text-emerald-300"
               >
-                自訂先後攻：{" "}
-                {startingPlayer === "white" ? "白方先攻" : "黑方先攻"}
+                自訂先後攻： {startingPlayer === "white" ? "白方先攻" : "黑方先攻"}
               </button>
               <button
                 onClick={handleRandomStartingPlayer}
@@ -2642,9 +2416,7 @@ export default function Game() {
 
           {/* 準備狀態 */}
           <div>
-            <div className="text-sm text-slate-200 mb-2 text-center">
-              準備狀態
-            </div>
+            <div className="text-sm text-slate-200 mb-2 text-center">準備狀態</div>
             {localSide === "spectator" ? (
               <div className="text-xs text-slate-400 text-center">
                 目前為觀戰模式，無需準備。
@@ -2667,17 +2439,12 @@ export default function Game() {
                   </button>
                 </div>
                 <div className="mt-2 text-[11px] text-slate-400 text-center">
-                  白方：{ready.white ? "已準備" : "未準備"} ｜ 黑方：
-                  {ready.black ? "已準備" : "未準備"}
+                  白方：{ready.white ? "已準備" : "未準備"} ｜ 黑方：{ready.black ? "已準備" : "未準備"}
                 </div>
                 <div className="mt-1 text-[11px] text-amber-300 text-center">
                   {myReady && !otherReady && "你已準備完成，正在等待另一位玩家…"}
-                  {!myReady &&
-                    otherReady &&
-                    "另一位玩家已準備完成，請按「開始遊戲」開始對局。"}
-                  {myReady &&
-                    otherReady &&
-                    "雙方已準備完成，對局即將開始。"}
+                  {!myReady && otherReady && "另一位玩家已準備完成，請按「開始遊戲」開始對局。"}
+                  {myReady && otherReady && "雙方已準備完成，對局即將開始。"}
                 </div>
               </>
             )}
@@ -2698,28 +2465,18 @@ export default function Game() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8">
       <div className="max-w-[1400px] mx-auto">
-        <h1
-          className="text-3xl font-bold text-center mb-4 text-slate-100"
-          data-testid="text-title"
-        >
+        <h1 className="text-3xl font-bold text-center mb-4 text-slate-100" data-testid="text-title">
           巫師棋 Wizard Chess
         </h1>
 
         {/* Debug 資訊 */}
-        <div
-          className="text-xs text-center mb-2 text-slate-400 font-mono"
-          data-testid="text-debug"
-        >
-          選中: {selectedPieceIndex >= 0 ? `#${selectedPieceIndex}` : "無"} |
-          高亮: {highlights.length} | 玩家: {boardState.currentPlayer} | 守護區:{" "}
-          {protectionZones.length}
+        <div className="text-xs text-center mb-2 text-slate-400 font-mono" data-testid="text-debug">
+          選中: {selectedPieceIndex >= 0 ? `#${selectedPieceIndex}` : "無"} | 高亮:{" "}
+          {highlights.length} | 玩家: {boardState.currentPlayer} | 守護區: {protectionZones.length}
           {protectionZones.length > 0 && (
             <span className="ml-2">
-              [
-              {protectionZones
-                .map((z) => `${getNodeCoordinate(z.row, z.col)}`)
-                .join(", ")}
-              ]
+              [{" "}
+              {protectionZones.map((z) => `${getNodeCoordinate(z.row, z.col)}`).join(", ")} ]
             </span>
           )}
         </div>
@@ -2733,16 +2490,13 @@ export default function Game() {
                 : "border-slate-600 text-slate-200 bg-slate-800/60"
             }`}
           >
-            目前回合：
-            {boardState.currentPlayer === "white" ? "白方" : "黑方"}
+            目前回合：{boardState.currentPlayer === "white" ? "白方" : "黑方"}
           </div>
 
           <div className="px-3 py-1 rounded-full text-[11px] sm:text-xs border border-slate-700 text-slate-300 bg-slate-900/60">
             {localSide === "spectator"
               ? "你目前是：觀戰者"
-              : `你扮演：${
-                  localSide === "white" ? "白方" : "黑方"
-                }${isMyTurn ? "（現在輪到你）" : ""}`}
+              : `你扮演：${localSide === "white" ? "白方" : "黑方"}${isMyTurn ? "（現在輪到你）" : ""}`}
           </div>
         </div>
 
@@ -2796,9 +2550,7 @@ export default function Game() {
             <div className="text-lg font-bold text-slate-100 mb-1">
               {winner === "white" ? "白方勝利" : "黑方勝利"}
             </div>
-            <div className="text-xs text-slate-400 mb-4">
-              巫師被擊倒，遊戲結束。
-            </div>
+            <div className="text-xs text-slate-400 mb-4">巫師被擊倒，遊戲結束。</div>
             <div className="flex flex-col gap-2">
               <button
                 onClick={handleRestartGame}
@@ -2825,16 +2577,10 @@ export default function Game() {
 
       {/* 聖騎士守護視窗：只在「防守方」那台機器顯示 */}
       <GuardDialog
-        isOpen={
-          guardDialogOpen &&
-          !!guardRequest &&
-          localSide === guardRequest?.defenderSide
-        }
+        isOpen={guardDialogOpen && !!guardRequest && localSide === guardRequest?.defenderSide}
         guardOptions={guardOptions}
         targetCoordinate={
-          guardRequest
-            ? getNodeCoordinate(guardRequest.targetRow, guardRequest.targetCol)
-            : ""
+          guardRequest ? getNodeCoordinate(guardRequest.targetRow, guardRequest.targetCol) : ""
         }
         selectedPaladinIndex={selectedGuardPaladinIndex}
         onChangeSelectedPaladin={handleChangeSelectedGuardPaladin}
@@ -2847,10 +2593,7 @@ export default function Game() {
         isOpen={!!wizardAttackRequest}
         targetCoordinate={
           wizardAttackRequest
-            ? getNodeCoordinate(
-                wizardAttackRequest.targetRow,
-                wizardAttackRequest.targetCol
-              )
+            ? getNodeCoordinate(wizardAttackRequest.targetRow, wizardAttackRequest.targetCol)
             : ""
         }
         onLineShot={handleWizardLineShot}
