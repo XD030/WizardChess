@@ -229,12 +229,11 @@ export function hasEnemyHolyLight(
 }
 
 /**
- * ✅ 重要修正（符合你最新規則）：
+ * ✅ 最新規則：
  * - 灼痕：所有棋子「可穿越」，但「只有聖騎士可停留」
  * - HolyLight：敵方「不可穿越、不可停留」
  *
- * 說明：
- * - allowBurnThrough=true：代表「做路徑/穿越檢查」時，不因灼痕而擋住（但是否能停留仍由呼叫端決定）
+ * allowBurnThrough=true：代表「路徑檢查可穿越灼痕」，但是否能停留仍由呼叫端/回傳 highlights 決定
  */
 export function canOccupyNode(
   row: number,
@@ -253,18 +252,18 @@ export function canOccupyNode(
 
   const hasBurnMark = burnList.some((b) => b && b.row === row && b.col === col);
 
-  // HolyLight：敵方不可穿越/不可停留（統一先擋）
+  // HolyLight：敵方不可穿越/不可停留
   if (hasEnemyHolyLight(row, col, pieceSide, holyLights)) return false;
 
   if (!hasBurnMark) return true;
 
-  // 灼痕：只有聖騎士可以「停留」
+  // 灼痕：只有聖騎士可停留
   if (pieceType === 'paladin') return true;
 
-  // allowBurnThrough=true 只代表「可穿越」
+  // 灼痕：其他棋子可穿越（allowBurnThrough=true 用於射線/路徑）
   if (allowBurnThrough) return true;
 
-  // 其他棋子：不能停留
+  // 其他棋子不可停留
   return false;
 }
 
@@ -373,10 +372,7 @@ export function getInitialPieces(): Piece[] {
     if (p.type === 'assassin') piece.stealthed = false;
     if (p.type === 'bard') piece.activated = false;
 
-    // ✅ apprentice：一開始都還沒用過交換
-    if (p.type === 'apprentice') {
-      piece.swapUsed = false;
-    }
+    if (p.type === 'apprentice') piece.swapUsed = false;
 
     pieces.push(piece);
   }
@@ -393,10 +389,7 @@ export function getInitialPieces(): Piece[] {
     if (p.type === 'assassin') piece.stealthed = false;
     if (p.type === 'bard') piece.activated = false;
 
-    // ✅ apprentice：一開始都還沒用過交換
-    if (p.type === 'apprentice') {
-      piece.swapUsed = false;
-    }
+    if (p.type === 'apprentice') piece.swapUsed = false;
 
     pieces.push(piece);
   }
@@ -440,11 +433,12 @@ function hasAnyPieceAt(pieces: Piece[], row: number, col: number): boolean {
 }
 
 // =====================================================
-// ✅ Wizard beam (新導線規則：巫師起點→導體→導體→(導體接敵人)，分支即停止)
-// - 導體：學徒、已激活吟遊詩人（己方 + 中立啟動吟遊詩人都可當導體）
-// - 導體間：同一直線，距離 1 或 2（可隔 1 空格），中間格不得有任何棋子
-// - 遇到分支（可接的導體/可接的敵人 >1 或 ==0）就停止
-// - 回傳：路徑點/線，可用於你 GameBoard 上色
+// ✅ Wizard beam（新導線規則，分支即停止）
+// - 起點：巫師
+// - 中間：導體（己方學徒、已激活吟遊詩人(己方/中立)）
+// - 導體間：同一直線，距離 1 或 2（可隔 1 空格），中間不得有任何棋子
+// - 終點：必須是「導體接敵人」→ 從某導體能連到敵方棋子才可射擊
+// - 分支：任一步可連到的導體 != 1 或 可連到的敵人 != 1 → 停止、不射擊
 // =====================================================
 
 export type BeamEdge = {
@@ -461,8 +455,9 @@ export type WizardBeamResult = {
 type LineType = 'x' | 'y' | 'diagonal';
 
 function isConductorForWizard(wizardSide: Side, p: Piece): boolean {
-  if (p.type === 'apprentice') return p.side === wizardSide; // 只能己方學徒
-  if (p.type === 'bard') return !!p.activated && (p.side === wizardSide || p.side === 'neutral'); // 啟動吟遊詩人：己方/中立都可
+  // 只有「己方學徒」與「已激活吟遊詩人」能當導體
+  if (p.type === 'apprentice') return p.side === wizardSide;
+  if (p.type === 'bard') return !!p.activated && (p.side === wizardSide || p.side === 'neutral');
   return false;
 }
 
@@ -513,12 +508,12 @@ function getLinkMiddleIfValid(
   const dist = lineDistance(a, b, line);
   if (dist !== 1 && dist !== 2) return null;
 
-  // HolyLight：敵方不可穿越（包含中間點/落點）
+  // 目標點若是敵方 HolyLight：不可穿越/不可到達
   if (hasEnemyHolyLight(b.row, b.col, wizardSide, holyLights)) return null;
 
   if (dist === 1) return { middle: null };
 
-  // dist === 2：中間點必須存在且無棋子，且不可是敵方 HolyLight
+  // dist===2：中間格必須存在且無棋子，且不是敵方 HolyLight
   const A = getRotatedCoords(a.row, a.col);
   const B = getRotatedCoords(b.row, b.col);
   const midX = (A.x + B.x) / 2;
@@ -562,7 +557,7 @@ function getLinkedEnemyTargets(
 ): Piece[] {
   const out: Piece[] = [];
   for (const e of enemyPieces) {
-    if (e.type === 'bard') continue; // bard 不可被擊殺
+    if (e.type === 'bard') continue;
     const ok = getLinkMiddleIfValid(
       wizardSide,
       fromConductor,
@@ -586,18 +581,14 @@ export function computeWizardBeam(
   if (wizard.type !== 'wizard') return res;
 
   const side = wizard.side;
-
-  // 導體池（己方學徒 + 啟動吟遊詩人(己方/中立)）
   const conductors = pieces.filter((p) => isConductorForWizard(side, p));
 
-  // 敵方棋子池
   const enemySide: Side = side === 'white' ? 'black' : 'white';
   const enemies = pieces.filter((p) => p.side === enemySide);
 
-  // 起點巫師
   res.pathNodes.push({ row: wizard.row, col: wizard.col });
 
-  // 第一步：巫師可接的導體必須唯一（否則分支＝不形成）
+  // 第一步：巫師可接導體必須唯一
   const firstCandidates = getLinkedConductors(
     side,
     { row: wizard.row, col: wizard.col },
@@ -607,16 +598,12 @@ export function computeWizardBeam(
     holyLights,
   );
 
-  if (firstCandidates.length !== 1) {
-    // 分支或無導體：只回傳巫師點（你可選擇要不要顯示）
-    return res;
-  }
+  if (firstCandidates.length !== 1) return res;
 
   let prev = { row: wizard.row, col: wizard.col };
   let current: Piece = firstCandidates[0];
 
   while (true) {
-    // 接到當前導體
     const link = getLinkMiddleIfValid(
       side,
       prev,
@@ -637,7 +624,7 @@ export function computeWizardBeam(
 
     res.pathNodes.push({ row: current.row, col: current.col });
 
-    // 檢查「導體接敵人」：必須唯一，否則分支停止
+    // 目標：導體接敵人必須唯一
     const enemyTargets = getLinkedEnemyTargets(
       side,
       { row: current.row, col: current.col },
@@ -676,12 +663,10 @@ export function computeWizardBeam(
       return res;
     }
 
-    if (enemyTargets.length > 1) {
-      // 導體接敵人也分支：停止（不射擊）
-      return res;
-    }
+    // 分支或無敵人 → 停止、不射擊
+    if (enemyTargets.length !== 0) return res;
 
-    // 繼續找下一個導體：必須唯一（排除上一個導體），否則分支停止
+    // 下一個導體：必須唯一（排除上一個導體）
     const nextCandidates = getLinkedConductors(
       side,
       { row: current.row, col: current.col },
@@ -724,7 +709,7 @@ export function calculateWizardMoves(
     }
   }
 
-  // ✅ Swap with apprentices（只顯示還沒用過交換的學徒）
+  // Swap with apprentices（只顯示 swapUsed=false）
   for (let i = 0; i < pieces.length; i++) {
     const p = pieces[i];
     if (p.side === piece.side && p.type === 'apprentice') {
@@ -733,7 +718,7 @@ export function calculateWizardMoves(
     }
   }
 
-  // ✅ New wizard beam target (分支即停止，只能由導體接敵人)
+  // New wizard beam target
   const beam = computeWizardBeam(piece, pieces, allNodes, holyLights);
   if (beam.target) {
     highlights.push({ type: 'attack', row: beam.target.row, col: beam.target.col });
@@ -783,12 +768,10 @@ export function calculateApprenticeMoves(
     }
   }
 
-  // ✅ 交換能力：每個學徒只能與己方巫師交換位置 1 次
+  // swap：每個學徒只能跟己方巫師交換一次
   if (!piece.swapUsed) {
     const wizard = pieces.find((p) => p.type === 'wizard' && p.side === piece.side);
-    if (wizard) {
-      highlights.push({ type: 'swap', row: wizard.row, col: wizard.col });
-    }
+    if (wizard) highlights.push({ type: 'swap', row: wizard.row, col: wizard.col });
   }
 
   return highlights;
@@ -808,6 +791,7 @@ export function calculateRangerMoves(
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
   if (nodeIdx === -1) return highlights;
 
+  // 1-step
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
@@ -830,6 +814,7 @@ export function calculateRangerMoves(
     }
   }
 
+  // 炮
   for (const adjIdx of adjacency[nodeIdx]) {
     const direction = { from: nodeIdx, to: adjIdx };
 
@@ -848,7 +833,6 @@ export function calculateRangerMoves(
       if (pieceIdxOnNode === -1) continue;
 
       const p = pieces[pieceIdxOnNode];
-
       if (p.type === 'assassin' && p.stealthed) continue;
 
       rayPieces.push({ nodeIdx: currentIdx, piece: p });
@@ -861,7 +845,6 @@ export function calculateRangerMoves(
     const target = rayPieces[1];
 
     if (jump.piece.type === 'bard' && !jump.piece.activated) continue;
-
     if (target.piece.side !== piece.side && target.piece.side !== 'neutral' && target.piece.type !== 'bard') {
       const targetNode = allNodes[target.nodeIdx];
       if (canOccupyNode(targetNode.row, targetNode.col, piece.side, holyLights, burnMarks, piece.type)) {
@@ -889,7 +872,7 @@ export function calculateGriffinMoves(
 
   const currentCoords = getRotatedCoords(piece.row, piece.col);
 
-  // Horizontal rays (same row) — ✅ 灼痕可穿越、不可停留（非聖騎士）
+  // Horizontal rays (same row) — 灼痕可穿越但不可停留（非聖騎士）
   for (const firstAdjIdx of adjacency[nodeIdx]) {
     const firstAdjNode = allNodes[firstAdjIdx];
     if (firstAdjNode.row !== piece.row) continue;
@@ -901,12 +884,12 @@ export function calculateGriffinMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      // ❌ 敵方 HolyLight：不可穿越
+      // 敵方 HolyLight 擋
       if (hasEnemyHolyLight(nextNode.row, nextNode.col, piece.side, holyLights)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
 
-      // 有棋：不可穿越，停下（若可落點且是敵人則 attack）
+      // 有棋：不可穿越
       if (targetPieceIdx !== -1) {
         const targetPiece = pieces[targetPieceIdx];
         if (
@@ -920,7 +903,7 @@ export function calculateGriffinMoves(
         break;
       }
 
-      // 空格：只有可停留才給 move（灼痕上不給 move，但要繼續掃描＝可穿越）
+      // 空格：可停留才給 move（灼痕上不給 move，但要繼續掃描＝可穿越）
       if (canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type)) {
         highlights.push({ type: 'move', row: nextNode.row, col: nextNode.col });
       }
@@ -930,7 +913,7 @@ export function calculateGriffinMoves(
     }
   }
 
-  // Diagonal 1-step in rotated square coords: (x±1, y±1)
+  // Diagonal 1-step: (x±1, y±1)
   for (const direction of [-1, 1]) {
     const targetX = currentCoords.x + direction;
     const targetY = currentCoords.y + direction;
@@ -1038,7 +1021,7 @@ export function calculatePaladinMoves(
     const adjNode = allNodes[adjIdx];
     const targetPieceIdx = getVisiblePieceAt(pieces, adjNode.row, adjNode.col, piece.side);
 
-    // ✅ paladin 允許停在灼痕上
+    // paladin 可停在灼痕上
     if (
       targetPieceIdx === -1 &&
       canOccupyNode(adjNode.row, adjNode.col, piece.side, holyLights, burnMarks, piece.type)
@@ -1170,7 +1153,6 @@ export function calculateDragonMoves(
   burnMarks: { row: number; col: number }[],
   holyLights: HolyLight[] = [],
 ): { highlights: MoveHighlight[]; pathNodes: { row: number; col: number }[] } {
-  console.log(`🐉 Dragon calculateMoves called with burnMarks:`, burnMarks);
   const highlights: MoveHighlight[] = [];
   const pathNodes: { row: number; col: number }[] = [];
 
@@ -1185,7 +1167,7 @@ export function calculateDragonMoves(
     while (nextIdx !== -1) {
       const nextNode = allNodes[nextIdx];
 
-      // ✅ 龍：可穿越灼痕（allowBurnThrough=true），但仍會被敵方 HolyLight 擋住
+      // 龍：路徑可穿越灼痕
       if (!canOccupyNode(nextNode.row, nextNode.col, piece.side, holyLights, burnMarks, piece.type, true)) break;
 
       const targetPieceIdx = getVisiblePieceAt(pieces, nextNode.row, nextNode.col, piece.side);
@@ -1200,7 +1182,7 @@ export function calculateDragonMoves(
         break;
       }
 
-      // ✅ 灼痕：不能停留，但可以繼續往前走
+      // 灼痕：不能停留（龍也不能），但可以穿越繼續掃
       if (hasBurnMark) {
         currentIdx = nextIdx;
         nextIdx = findNextInDirection(currentIdx, direction, adjacency, allNodes);
@@ -1250,7 +1232,7 @@ export function calculateDragonPath(
   return path;
 }
 
-// ---- Direction helper (single declaration; used by dragon/ranger/griffin) ----
+// ---- Direction helper ----
 function findNextInDirection(
   currentIdx: number,
   direction: { from: number; to: number },
@@ -1298,8 +1280,6 @@ function findNextInDirection(
 }
 
 // ---- Bard ----
-// 吟遊詩人：單步 + 直線跳「一次」，不能踩己方潛行刺客，
-// 可以踩敵方潛行刺客（之後在 Game.tsx 處理交換＋現形）
 export function calculateBardMoves(
   piece: Piece,
   pieceIndex: number,
@@ -1311,7 +1291,6 @@ export function calculateBardMoves(
 ): MoveHighlight[] {
   const highlights: MoveHighlight[] = [];
 
-  // 只有啟動後才可以移動
   if (!piece.activated) return highlights;
 
   const nodeIdx = allNodes.findIndex((n) => n.row === piece.row && n.col === piece.col);
@@ -1319,7 +1298,7 @@ export function calculateBardMoves(
 
   const friendlySide: Side = piece.side;
 
-  // ===== 1. 單步相鄰移動 =====
+  // 1-step
   for (const adjIdx of adjacency[nodeIdx]) {
     const adjNode = allNodes[adjIdx];
 
@@ -1332,37 +1311,29 @@ export function calculateBardMoves(
     } else {
       const targetPiece = pieces[targetPieceIdx];
 
-      // 🚫 不能踩「己方潛行刺客」
       if (targetPiece.type === 'assassin' && targetPiece.stealthed && targetPiece.side === friendlySide) continue;
 
-      // ✅ 可以踩「敵方潛行刺客」
       if (targetPiece.type === 'assassin' && targetPiece.stealthed && targetPiece.side !== friendlySide) {
         highlights.push({ type: 'move', row: adjNode.row, col: adjNode.col });
       }
     }
   }
 
-  // ===== 2. 直線跳一次 =====
+  // jump once
   for (const firstJumpIdx of adjacency[nodeIdx]) {
     const firstJumpNode = allNodes[firstJumpIdx];
     const overPieceIdx = getPieceAt(pieces, firstJumpNode.row, firstJumpNode.col);
 
-    // 第一格必須有棋
     if (overPieceIdx === -1) continue;
 
     const overPiece = pieces[overPieceIdx];
 
-    // 未啟動吟遊詩人不能當跳板
     if (overPiece.type === 'bard' && !overPiece.activated) continue;
-
-    // 潛行刺客不能當跳板（不論敵我）
     if (overPiece.type === 'assassin' && overPiece.stealthed) continue;
 
-    // 方向向量（從 bard 指向第一個被跳過的棋）
     const dRow = firstJumpNode.row - piece.row;
     const dCol = firstJumpNode.col - piece.col;
 
-    // 落點：被跳過棋子後面那一格
     const landingIdx = findNodeInDirection(firstJumpIdx, dRow, dCol, adjacency, allNodes);
     if (landingIdx === -1) continue;
 
@@ -1377,10 +1348,8 @@ export function calculateBardMoves(
     } else {
       const landingPiece = pieces[landingPieceIdx];
 
-      // 🚫 不能落在己方潛行刺客
       if (landingPiece.type === 'assassin' && landingPiece.stealthed && landingPiece.side === friendlySide) continue;
 
-      // ✅ 特例：落點是敵方潛行刺客 → 可以跳上去
       if (landingPiece.type === 'assassin' && landingPiece.stealthed && landingPiece.side !== friendlySide) {
         highlights.push({ type: 'move', row: landingNode.row, col: landingNode.col });
       }
@@ -1390,7 +1359,6 @@ export function calculateBardMoves(
   return highlights;
 }
 
-// helper: straight-line search used by bard jumping
 function findNodeInDirection(
   fromIdx: number,
   dRow: number,
