@@ -323,11 +323,9 @@ function computeWizardBeamSafe(
 
   const nodes = raw.pathNodes ?? [];
   if (nodes.length < 3) {
-    // 至少 wizard → (某些節點) → target，且必須存在「導體」，所以最少 3
     return normalizeBeamForUI(wizard);
   }
 
-  // ✅✅✅ 新增：路徑必須是「連續相鄰」且 edges 必須對應 nodes（避免誤標左上學徒可攻擊）
   if (!validatePathContinuous(nodes, allNodes, adjacency)) {
     return normalizeBeamForUI(wizard);
   }
@@ -335,48 +333,38 @@ function computeWizardBeamSafe(
     return normalizeBeamForUI(wizard);
   }
 
-  // target 必須存在且是敵方且非 bard
   const tIdx = getPieceAt(pieces, raw.target.row, raw.target.col);
   if (tIdx === -1) return normalizeBeamForUI(wizard);
   const tp = pieces[tIdx];
   if (tp.side === wizard.side) return normalizeBeamForUI(wizard);
   if (tp.type === "bard") return normalizeBeamForUI(wizard);
 
-  // pathNodes 第一個必須是 wizard
   if (!isSamePos(nodes[0], { row: wizard.row, col: wizard.col })) {
     return normalizeBeamForUI(wizard);
   }
 
-  // pathNodes 最後一個必須是 target（若 computeWizardBeam 沒把 target 放最後，就直接判無效）
   if (!isSamePos(nodes[nodes.length - 1], raw.target)) {
     return normalizeBeamForUI(wizard);
   }
 
-  // ✅ 最後一格（target 前一格）必須是「導體」，且要與 target 相鄰（導體接敵人）
   const pre = nodes[nodes.length - 2];
   const preIdx = getPieceAt(pieces, pre.row, pre.col);
-  if (preIdx === -1) return normalizeBeamForUI(wizard); // 不能是空格
+  if (preIdx === -1) return normalizeBeamForUI(wizard);
   if (!isWizardConductorStrict(wizard.side, pieces[preIdx])) return normalizeBeamForUI(wizard);
   if (!isAdjacentByAdjacency(pre, raw.target, allNodes, adjacency)) return normalizeBeamForUI(wizard);
 
-  // ✅ 中間必須至少有 1 個導體（排除 wizard / target）
   let conductorCount = 0;
-
-  // ✅ NEW: 限制「導體間最多只能空 1 空格」
   let consecutiveEmpty = 0;
 
-  // ✅ 任何「有棋子」的中繼節點都必須是合法導體；敵方/未啟動 bard 一律失敗
   for (let i = 1; i < nodes.length - 1; i++) {
     const n = nodes[i];
 
-    // ❌ 不能穿過聖光（超嚴格）
     if (holyLights.some((l) => l.row === n.row && l.col === n.col)) {
       return normalizeBeamForUI(wizard);
     }
 
     const idx = getPieceAt(pieces, n.row, n.col);
 
-    // 空格：允許，但「最多連續 1 格」
     if (idx === -1) {
       consecutiveEmpty++;
       if (consecutiveEmpty > 1) {
@@ -385,7 +373,6 @@ function computeWizardBeamSafe(
       continue;
     }
 
-    // 有棋子：必須是導體，且會把空格連續計數清零
     const p = pieces[idx];
     if (!isWizardConductorStrict(wizard.side, p)) return normalizeBeamForUI(wizard);
 
@@ -395,7 +382,6 @@ function computeWizardBeamSafe(
 
   if (conductorCount < 1) return normalizeBeamForUI(wizard);
 
-  // ✅ 轉彎只能發生在「導體」節點；空格不可轉彎；巫師本體不可轉彎
   for (let i = 1; i < nodes.length - 1; i++) {
     const prev = nodes[i - 1];
     const cur = nodes[i];
@@ -407,10 +393,8 @@ function computeWizardBeamSafe(
     const turned = d1.r !== d2.r || d1.c !== d2.c;
     if (!turned) continue;
 
-    // ❌ 巫師本人不能當轉彎點
     if (cur.row === wizard.row && cur.col === wizard.col) return normalizeBeamForUI(wizard);
 
-    // ❌ 轉彎點不能是空格，必須有棋且是導體
     const idx = getPieceAt(pieces, cur.row, cur.col);
     if (idx === -1) return normalizeBeamForUI(wizard);
     if (!isWizardConductorStrict(wizard.side, pieces[idx])) return normalizeBeamForUI(wizard);
@@ -420,12 +404,9 @@ function computeWizardBeamSafe(
 }
 
 /**
- * ✅✅✅ 你要的封裝：
- * 判斷「巫師是否為導線射擊（站著打，不移動）」
- * 條件：
- * - selectedPiece 必須是 wizard
- * - (row,col) 必須等於 computeWizardBeamSafe 的 target
- * - 且 wizard 與 target「不是相鄰」（相鄰會走『選單』分支）
+ * ✅✅✅ 你要的封裝：巫師是否「導線射擊」（站著打，不移動）
+ * - 不依賴 wizardBeam state（避免 state 被清掉造成誤判）
+ * - 規則：必須是 beam target，且「非相鄰」
  */
 function isWizardLineShotAttack(
   selectedPiece: Piece,
@@ -437,18 +418,36 @@ function isWizardLineShotAttack(
   holyLights: HolyLight[]
 ): boolean {
   if (selectedPiece.type !== "wizard") return false;
-  if (!allNodes.length) return false;
 
   const beam = computeWizardBeamSafe(selectedPiece, pieces, allNodes, adjacency, holyLights);
   if (!beam?.target) return false;
   if (beam.target.row !== row || beam.target.col !== col) return false;
 
-  const wizardNodeIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
-  const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
-  const isAdjacent =
-    wizardNodeIdx !== -1 && targetNodeIdx !== -1 && !!adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+  const wIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
+  const tIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
+  if (wIdx === -1 || tIdx === -1) return false;
 
+  const isAdjacent = !!adjacency[wIdx]?.includes(tIdx);
   return !isAdjacent;
+}
+
+/**
+ * ✅ WizardAttackDialog 是否可觸發（同一格同時：相鄰 attack 且也是 beam target）
+ * 這裡刻意不要求「非相鄰」，因為彈窗就是要在「相鄰但你也允許導線」時給玩家選。
+ */
+function isWizardBeamTargetAvailable(
+  selectedPiece: Piece,
+  row: number,
+  col: number,
+  pieces: Piece[],
+  allNodes: NodePosition[],
+  adjacency: number[][],
+  holyLights: HolyLight[]
+): boolean {
+  if (selectedPiece.type !== "wizard") return false;
+  const beam = computeWizardBeamSafe(selectedPiece, pieces, allNodes, adjacency, holyLights);
+  if (!beam?.target) return false;
+  return beam.target.row === row && beam.target.col === col;
 }
 
 export default function Game() {
@@ -622,7 +621,6 @@ export default function Game() {
     setAllNodes(nodes);
     setAdjacency(adj);
   }, []);
-
   // winner 一變成非 null，就跳出結束視窗
   useEffect(() => {
     if (winner) {
@@ -844,6 +842,7 @@ export default function Game() {
       winner: result ?? null,
     };
   }
+
   // ====== 再來一局 / 退出遊戲 ======
   function handleRestartGame() {
     const initialPieces = ensureDragonTags(getInitialPieces());
@@ -1075,7 +1074,6 @@ export default function Game() {
   const handleChangeSelectedGuardPaladin = (paladinIndex: number) => {
     setSelectedGuardPaladinIndex(paladinIndex);
   };
-
   const handleGuardConfirm = () => {
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
@@ -1164,13 +1162,19 @@ export default function Game() {
       }
     }
 
-    // ✅✅✅ 這裡改成：巫師若是「導線射擊」，則不移動 attacker
-    const shouldWizardLineShot =
-      selectedPiece.type === "wizard" &&
-      isWizardLineShotAttack(selectedPiece, targetRowGuard, targetColGuard, pieces, allNodes, adjacency, holyLights);
+    // ✅✅✅ 關鍵修正：若攻擊者是巫師且此擊是導線射擊 → 攻擊者不移動
+    const wizardLineShot = isWizardLineShotAttack(
+      selectedPiece,
+      targetRowGuard,
+      targetColGuard,
+      pieces,
+      allNodes,
+      adjacency,
+      holyLights
+    );
 
     let movedAttacker: Piece;
-    if (selectedPiece.type === "wizard" && shouldWizardLineShot) {
+    if (selectedPiece.type === "wizard" && wizardLineShot) {
       movedAttacker = { ...selectedPiece };
     } else {
       movedAttacker = updateAssassinStealth(
@@ -1247,8 +1251,8 @@ export default function Game() {
     const paladinCoord = getNodeCoordinate(paladinRow, paladinCol);
 
     const moveDesc =
-      selectedPiece.type === "wizard" && shouldWizardLineShot
-        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${targetCoord} (聖騎士 ${paladinCoord} 守護 ${PIECE_CHINESE[targetPiece.type]}，導線射擊)`
+      selectedPiece.type === "wizard" && wizardLineShot
+        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${targetCoord} (導線射擊，聖騎士 ${paladinCoord} 守護)`
         : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${targetCoord} (聖騎士 ${paladinCoord} 守護 ${PIECE_CHINESE[targetPiece.type]})`;
 
     const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
@@ -1328,7 +1332,7 @@ export default function Game() {
 
     if (targetPiece.type !== "bard") {
       if (selectedPiece.type === "wizard") {
-        // ✅ 改成共用封裝：導線射擊就不移動，否則移動攻擊
+        // ✅✅✅ 關鍵修正：不用 wizardBeam state，直接用封裝純函式判斷是否為導線射擊
         const isLineShot = isWizardLineShotAttack(
           selectedPiece,
           targetRow,
@@ -1405,16 +1409,26 @@ export default function Game() {
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
     const toCoord = getNodeCoordinate(targetRow, targetCol);
 
-    const isWizardLineShot =
-      selectedPiece.type === "wizard" &&
-      isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
-
-    const moveDesc =
-      targetPiece.type === "bard"
-        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
-        : selectedPiece.type === "wizard" && isWizardLineShot
-          ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
+    let moveDesc = "";
+    if (selectedPiece.type === "wizard" && targetPiece.type !== "bard") {
+      const isLineShot = isWizardLineShotAttack(
+        selectedPiece,
+        targetRow,
+        targetCol,
+        pieces,
+        allNodes,
+        adjacency,
+        holyLights
+      );
+      moveDesc = isLineShot
+        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
+        : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
+    } else {
+      moveDesc =
+        targetPiece.type === "bard"
+          ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
           : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+    }
 
     const record = makeMoveRecord(moveDesc, movedAssassinFinal);
     const newMoveHistory = [record, ...moveHistory];
@@ -1460,6 +1474,7 @@ export default function Game() {
     applySyncedState(syncState);
     broadcastState(syncState);
   };
+
   // ====== 巫師攻擊方式選擇：導線射擊 or 移動攻擊（僅限相鄰攻擊時彈窗） ======
   const handleWizardLineShot = () => {
     if (!wizardAttackRequest || winner) return;
@@ -1555,8 +1570,7 @@ export default function Game() {
       newPieces = activateAllBards(newPieces);
     }
 
-    const adjustedWizardIndex =
-      targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
+    const adjustedWizardIndex = targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
 
     const movedWizard: Piece = { ...wizard, row: targetRow, col: targetCol };
     newPieces[adjustedWizardIndex] = movedWizard;
@@ -1767,15 +1781,7 @@ export default function Game() {
             setProtectionZones([]);
             setWizardBeam(null);
           } else if (piece.type === "dragon") {
-            const result = calculateDragonMoves(
-              piece,
-              clickedPieceIdx,
-              effectivePieces,
-              adjacency,
-              allNodes,
-              burnMarks,
-              holyLights
-            );
+            const result = calculateDragonMoves(piece, clickedPieceIdx, effectivePieces, adjacency, allNodes, burnMarks, holyLights);
             setHighlights(result.highlights);
             setDragonPathNodes(result.pathNodes);
             setProtectionZones([]);
@@ -2172,22 +2178,27 @@ export default function Game() {
       const targetIdx = clickedPieceIdx!;
       const targetPiece = pieces[targetIdx];
 
-      // ====== 巫師：先判斷「相鄰」與「是否為導線 target」 ======
       const isWizard = selectedPiece.type === "wizard";
 
-      const wizardNodeIdx =
-        isWizard ? allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col) : -1;
+      const wizardNodeIdx = isWizard ? allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col) : -1;
       const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
 
       const isAdjacent =
         isWizard && wizardNodeIdx !== -1 && targetNodeIdx !== -1 && !!adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
 
-      // ✅ 只有點到的格子剛好等於 wizardBeam.target 才算「導線射擊目標」
-      const isBeamTarget =
-        isWizard && !!wizardBeam?.target && wizardBeam.target.row === row && wizardBeam.target.col === col;
+      // ✅✅✅ 不再依賴 wizardBeam state：用純函式判斷「這格是否為 beam target」
+      const beamTargetAvailable = isWizardBeamTargetAvailable(
+        selectedPiece,
+        row,
+        col,
+        pieces,
+        allNodes,
+        adjacency,
+        holyLights
+      );
 
-      // ✅ 只有「同一個目標」同時滿足：相鄰 + 導線target，才跳出選單
-      if (isWizard && isAdjacent && isBeamTarget) {
+      // ✅✅✅ WizardAttackDialog：相鄰 attack + 也是 beam target → 讓玩家選「導線射擊 or 移動攻擊」
+      if (isWizard && isAdjacent && beamTargetAvailable) {
         setWizardAttackRequest({
           wizardIndex: selectedPieceIndex,
           targetRow: row,
@@ -2203,7 +2214,7 @@ export default function Game() {
         return;
       }
 
-      // ====== 守護判定（不管是走過去打 or 導線打，只要是攻擊都要先問守護） ======
+      // ====== 守護判定（不管走過去打/導線打） ======
       const guardingPaladinIndices =
         targetPiece.side !== "neutral"
           ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
@@ -2240,7 +2251,6 @@ export default function Game() {
         return;
       }
 
-      // ====== 吃子（bard 不可被擊殺） ======
       if (targetPiece.type !== "bard") {
         if (targetPiece.type === "dragon") {
           const tag = getDragonTag(targetPiece);
@@ -2252,14 +2262,12 @@ export default function Game() {
         newPieces = activateAllBards(newPieces);
       }
 
-      // 吃掉後 index 可能改變
       const adjustedIdx =
         targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
 
-      // ====== 根據攻擊者處理「是否移動」 ======
       if (targetPiece.type !== "bard") {
         if (selectedPiece.type === "wizard") {
-          // ✅ 改成共用封裝：是否為「導線射擊（不移動）」
+          // ✅✅✅ 關鍵：用你要的封裝判斷導線射擊（非相鄰才站著打）
           const isLineShot = isWizardLineShotAttack(
             selectedPiece,
             row,
@@ -2332,23 +2340,26 @@ export default function Game() {
         }
       }
 
-      // ✅ 若攻擊者是聖騎士：清掉目的地灼痕
       if (selectedPiece.type === "paladin") {
         updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
       }
 
-      const isWizardLineShot =
-        selectedPiece.type === "wizard" &&
-        isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
-
-      // ====== moveDesc（巫師要區分導線/移動） ======
       if (selectedPiece.type === "wizard") {
         if (targetPiece.type === "bard") {
           moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`;
-        } else if (isWizardLineShot) {
-          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
         } else {
-          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
+          const isLineShot = isWizardLineShotAttack(
+            selectedPiece,
+            row,
+            col,
+            pieces,
+            allNodes,
+            adjacency,
+            holyLights
+          );
+          moveDesc = isLineShot
+            ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
+            : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
         }
       } else {
         moveDesc =
@@ -2565,7 +2576,6 @@ export default function Game() {
             準備階段：請先選擇白方、黑方或觀戰，並設定這局的先後攻。白方與黑方都按下「開始遊戲」後，對局才會正式開始。
           </p>
 
-          {/* 座位選擇 */}
           <div>
             <div className="text-sm text-slate-200 mb-2 text-center">座位選擇</div>
             <div className="flex justify-center items-center gap-4 mb-2 text-sm text-slate-300">
@@ -2606,7 +2616,6 @@ export default function Game() {
             {seatError && <div className="text-xs text-red-400 mt-1 text-center">{seatError}</div>}
           </div>
 
-          {/* 先後攻設定 */}
           <div>
             <div className="text-sm text-slate-200 mb-2 text-center">先後攻設定</div>
             <div className="text-xs text-slate-400 text-center mb-2">
@@ -2628,7 +2637,6 @@ export default function Game() {
             </div>
           </div>
 
-          {/* 準備狀態 */}
           <div>
             <div className="text-sm text-slate-200 mb-2 text-center">準備狀態</div>
             {localSide === "spectator" ? (
@@ -2683,7 +2691,6 @@ export default function Game() {
           巫師棋 Wizard Chess
         </h1>
 
-        {/* Debug 資訊 */}
         <div className="text-xs text-center mb-2 text-slate-400 font-mono" data-testid="text-debug">
           選中: {selectedPieceIndex >= 0 ? `#${selectedPieceIndex}` : "無"} | 高亮: {highlights.length} | 玩家:{" "}
           {boardState.currentPlayer} | 守護區: {protectionZones.length}
@@ -2692,7 +2699,6 @@ export default function Game() {
           )}
         </div>
 
-        {/* 回合與玩家狀態列 */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-3">
           <div
             className={`px-3 py-1 rounded-full text-xs sm:text-sm border ${
@@ -2712,13 +2718,11 @@ export default function Game() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-6 items-start">
-          {/* 左邊：被吃掉的棋子（上） + 棋子資訊（下） */}
           <div className="order-2 lg:order-1 flex flex-col gap-4">
             <CapturedPiecesPanel capturedPieces={boardState.capturedPieces} />
             <PieceInfoPanel piece={selectedPieceForPanel || null} />
           </div>
 
-          {/* 中間：棋盤 */}
           <div className="order-1 lg:order-2 flex justify-center">
             <GameBoard
               pieces={displayPieces}
@@ -2735,7 +2739,6 @@ export default function Game() {
             />
           </div>
 
-          {/* 右邊：回合資訊 + 歷史 */}
           <div className="order-3 flex flex-col gap-3">
             {winner && (
               <button
@@ -2755,7 +2758,6 @@ export default function Game() {
         </div>
       </div>
 
-      {/* 結束遊戲彈出視窗 */}
       {winner && showEndModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-xs text-center shadow-2xl">
@@ -2785,7 +2787,6 @@ export default function Game() {
         </div>
       )}
 
-      {/* 聖騎士守護視窗：只在「防守方」那台機器顯示 */}
       <GuardDialog
         isOpen={guardDialogOpen && !!guardRequest && localSide === guardRequest?.defenderSide}
         guardOptions={guardOptions}
@@ -2796,7 +2797,6 @@ export default function Game() {
         onDecline={handleGuardDecline}
       />
 
-      {/* 巫師攻擊方式選擇視窗 */}
       <WizardAttackDialog
         isOpen={!!wizardAttackRequest}
         targetCoordinate={wizardAttackRequest ? getNodeCoordinate(wizardAttackRequest.targetRow, wizardAttackRequest.targetCol) : ""}
