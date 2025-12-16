@@ -1776,7 +1776,7 @@ export default function Game() {
         if (isOwnBardOutOfTurnForPiece(piece)) {
           setHighlights([]);
           setDragonPathNodes([]);
-          setProtectionZones[]);
+          setProtectionZones([]);
           setWizardBeam(null);
           return;
         }
