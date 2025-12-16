@@ -1,5 +1,4 @@
 // client/src/components/GameBoard.tsx
-
 import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { Piece, MoveHighlight, NodePosition, BurnMark, HolyLight } from '@shared/schema';
@@ -66,20 +65,28 @@ interface GameBoardProps {
   wizardBeam?: WizardBeamResult | null;
 }
 
-const LOGICAL_SIZE = 1000;
-const BOARD_SCALE = 2;
+const LOGICAL_SIZE = 1000; // Canvas 基礎尺寸
+const BOARD_SCALE = 2; // 棋盤放大倍率（1 = 原本大小）
 const PIECE_SIZE = 40;
 
 const BOARD_THEME = {
+  // ==== 背景 ====
   bgInner: '#2a2622',
   bgOuter: '#1a1714',
+
+  // ==== 邊框 ====
   triBorder: 'rgba(255, 255, 255, 0.35)',
+
+  // ==== 線條與節點（一般） ====
   linkLine: 'rgba(255, 255, 255, 0.15)',
   nodeNormal: 'rgba(255, 255, 255, 0.75)',
   nodeHover: 'rgba(255, 240, 150, 1.0)',
+
+  // ==== 座標文字 ====
   labelText: 'rgba(255, 255, 255, 0.85)',
 
-  // wizard beam
+  // ==== ✅ 巫師導線顏色（可用導線） ====
+  // 線：黃金；路徑點：青藍；目標：紅
   beamLine: 'rgba(250, 204, 21, 0.85)',
   beamGlow: 'rgba(250, 204, 21, 0.55)',
   beamNode: 'rgba(56, 189, 248, 0.95)',
@@ -87,14 +94,11 @@ const BOARD_THEME = {
   beamTarget: 'rgba(239, 68, 68, 0.95)',
   beamTargetGlow: 'rgba(239, 68, 68, 0.55)',
 
-  // highlights
-  moveFill: 'rgba(16, 185, 129, 0.55)',
-  moveFillHover: 'rgba(16, 185, 129, 0.75)',
-
-  attackStroke: 'rgba(239, 68, 68, 0.95)',
-  attackGlow: 'rgba(239, 68, 68, 0.55)',
+  // ✅ 攻擊目標「藍色框框」
+  attackBox: '#3b82f6',
 };
 
+// 這個視角是否看得到這顆棋
 function isPieceVisible(piece: Piece, viewerSide: 'white' | 'black' | 'spectator', observing: boolean): boolean {
   if (observing) return true;
 
@@ -102,11 +106,23 @@ function isPieceVisible(piece: Piece, viewerSide: 'white' | 'black' | 'spectator
     if (viewerSide === 'spectator') return false;
     return piece.side === viewerSide;
   }
+
   return true;
 }
 
 function posKey(row: number, col: number) {
   return `${row},${col}`;
+}
+
+function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
 }
 
 export default function GameBoard({
@@ -129,8 +145,10 @@ export default function GameBoard({
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
 
+  // ===== 棋子圖片 =====
   const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement | null>>({});
 
+  // ===== 移動動畫 =====
   type MoveAnimState =
     | {
         pieceIndex: number;
@@ -152,6 +170,7 @@ export default function GameBoard({
     animStateRef.current = animState;
   }, [animState]);
 
+  // key：決定用哪張圖
   function keyForPiece(piece: Piece): string {
     if (piece.type === 'bard') return 'bard';
     if (piece.side === 'white' || piece.side === 'black') return `${piece.type}_${piece.side}`;
@@ -163,6 +182,7 @@ export default function GameBoard({
     return pieceImages[key] ?? null;
   }
 
+  // 載入所有棋子圖片
   useEffect(() => {
     const srcMap: Record<string, string> = {
       wizard_white: wizardWhitePng,
@@ -196,6 +216,7 @@ export default function GameBoard({
     });
   }, []);
 
+  // 棋盤幾何（含放大）
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -229,6 +250,7 @@ export default function GameBoard({
     setAdjacency(newAdjacency);
   }, []);
 
+  // 偵測棋子位移 → 啟動動畫
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -263,14 +285,16 @@ export default function GameBoard({
     prevPiecesRef.current = pieces;
   }, [pieces, allNodes]);
 
+  // ========= 繪圖主函式 =========
   const drawBoard = (ctx: CanvasRenderingContext2D, overridePos?: { pieceIndex: number; x: number; y: number }) => {
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
+    // 快取 node lookup（避免一直 find）
     const nodeMap = new Map<string, NodePosition>();
     allNodes.forEach((n) => nodeMap.set(posKey(n.row, n.col), n));
     const getNode = (r: number, c: number) => nodeMap.get(posKey(r, c));
 
-    // background
+    // --- 背景 ---
     const bgGrad = ctx.createRadialGradient(
       LOGICAL_SIZE / 2,
       LOGICAL_SIZE / 2,
@@ -284,7 +308,7 @@ export default function GameBoard({
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
 
-    // triangles
+    // --- 棋盤三角形輪廓 ---
     ctx.strokeStyle = BOARD_THEME.triBorder;
     ctx.lineWidth = 1.5;
 
@@ -347,7 +371,7 @@ export default function GameBoard({
       }
     }
 
-    // links
+    // --- 節點連線（一般） ---
     ctx.strokeStyle = BOARD_THEME.linkLine;
     ctx.lineWidth = 1;
     allNodes.forEach((node, idx) => {
@@ -362,7 +386,9 @@ export default function GameBoard({
       });
     });
 
-    // wizard beam
+    // =========================================================
+    // ✅ 巫師導線：只有「目前選到的棋子是巫師」才顯示可用導線（線+點變色）
+    // =========================================================
     const selectedPiece = selectedPieceIndex >= 0 ? pieces[selectedPieceIndex] : null;
     const shouldDrawBeam = !!wizardBeam && !!selectedPiece && selectedPiece.type === 'wizard';
 
@@ -371,6 +397,7 @@ export default function GameBoard({
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
+      // glow
       ctx.strokeStyle = BOARD_THEME.beamGlow;
       ctx.lineWidth = 10;
       ctx.shadowColor = BOARD_THEME.beamGlow;
@@ -386,6 +413,7 @@ export default function GameBoard({
         ctx.stroke();
       });
 
+      // main line
       ctx.shadowBlur = 0;
       ctx.strokeStyle = BOARD_THEME.beamLine;
       ctx.lineWidth = 4;
@@ -409,6 +437,7 @@ export default function GameBoard({
       const isTarget = (r: number, c: number) =>
         !!wizardBeam?.target && wizardBeam.target.row === r && wizardBeam.target.col === c;
 
+      // glow dots
       wizardBeam.pathNodes.forEach((p) => {
         const node = getNode(p.row, p.col);
         if (!node) return;
@@ -422,6 +451,7 @@ export default function GameBoard({
         ctx.fill();
       });
 
+      // core dots
       ctx.shadowBlur = 0;
       wizardBeam.pathNodes.forEach((p) => {
         const node = getNode(p.row, p.col);
@@ -437,7 +467,7 @@ export default function GameBoard({
       ctx.restore();
     }
 
-    // nodes
+    // --- 節點圓點 ---
     allNodes.forEach((node) => {
       const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
       ctx.beginPath();
@@ -446,7 +476,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // burn marks
+    // --- 火焰標記 ---
     burnMarks.forEach((mark) => {
       const node = getNode(mark.row, mark.col);
       if (!node) return;
@@ -466,7 +496,7 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // holy lights
+    // --- 聖光標記 ---
     holyLights.forEach((light) => {
       const node = getNode(light.row, light.col);
       if (!node) return;
@@ -498,54 +528,21 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // highlights (move = green fill)
+    // --- 移動高亮（節點綠點）---
     highlights.forEach((h) => {
       if (h.type !== 'move') return;
       const node = getNode(h.row, h.col);
       if (!node) return;
 
       const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
+      const opacity = isHovered ? 0.7 : 0.5;
       ctx.beginPath();
       ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? BOARD_THEME.moveFillHover : BOARD_THEME.moveFill;
+      ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
       ctx.fill();
     });
 
-    // highlights (attack = red ring on NODE, even if occupied)
-    const highlightsByKey = new Map<string, MoveHighlight[]>();
-    for (const h of highlights) {
-      const k = posKey(h.row, h.col);
-      const arr = highlightsByKey.get(k) ?? [];
-      arr.push(h);
-      highlightsByKey.set(k, arr);
-    }
-
-    allNodes.forEach((node) => {
-      const list = highlightsByKey.get(posKey(node.row, node.col));
-      if (!list) return;
-
-      const hasAttack = list.some((h) => h.type === 'attack');
-      if (!hasAttack) return;
-
-      ctx.save();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = BOARD_THEME.attackStroke;
-      ctx.shadowColor = BOARD_THEME.attackGlow;
-      ctx.shadowBlur = 12;
-
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 17, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 12, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.restore();
-    });
-
-    // labels A~I / 1~9
+    // --- 座標標籤 A~I / 1~9 ---
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = BOARD_THEME.labelText;
 
@@ -569,7 +566,7 @@ export default function GameBoard({
       }
     });
 
-    // pieces
+    // --- 棋子（圖片） ---
     pieces.forEach((piece, idx) => {
       if (!isPieceVisible(piece, viewerSide, observing)) return;
 
@@ -584,21 +581,36 @@ export default function GameBoard({
       const drawX = overridePos && overridePos.pieceIndex === idx ? overridePos.x : node.x;
       const drawY = overridePos && overridePos.pieceIndex === idx ? overridePos.y : node.y;
 
-      const attackHighlight = highlights.some((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
+      const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
+      const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
+      const isProtected = protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
 
-      // ✅ 這裡已移除「swap 藍外框」：只保留選取(黃) / 攻擊(紅)
+      // ✅ 外框樣式：glow(原本) / box(藍框框) / none
+      let outlineStyle: 'none' | 'glow' | 'box' = 'none';
       let outlineColor: string | null = null;
       let outlineWidth = 0;
 
       if (idx === selectedPieceIndex) {
+        outlineStyle = 'glow';
         outlineColor = '#fbbf24';
         outlineWidth = 3;
-      } else if (attackHighlight) {
-        outlineColor = '#ef4444';
+      } else if (swapHighlight) {
+        outlineStyle = 'glow';
+        outlineColor = '#3b82f6';
         outlineWidth = 3;
-      } else {
-        outlineColor = null;
-        outlineWidth = 0;
+      } else if (attackHighlight) {
+        // ✅ 攻擊目標：不要紅色圈圈 → 改成藍色「框框」
+        outlineStyle = 'box';
+        outlineColor = BOARD_THEME.attackBox;
+        outlineWidth = 2.5;
+      } else if (isProtected) {
+        outlineStyle = 'glow';
+        outlineColor = '#06b6d4';
+        outlineWidth = 2.5;
+      } else if (piece.type === 'bard' && piece.activated) {
+        outlineStyle = 'glow';
+        outlineColor = 'rgba(168, 85, 247, 0.9)';
+        outlineWidth = 2.5;
       }
 
       ctx.save();
@@ -615,7 +627,8 @@ export default function GameBoard({
         ctx.globalAlpha = 0.5;
       }
 
-      if (outlineColor && outlineWidth > 0) {
+      // ✅ 原本的「圈圈感」來源：shadow + 多偏移畫圖（glow）
+      if (outlineStyle === 'glow' && outlineColor && outlineWidth > 0) {
         ctx.save();
         ctx.shadowColor = outlineColor;
         ctx.shadowBlur = outlineWidth;
@@ -648,6 +661,7 @@ export default function GameBoard({
         ctx.restore();
       }
 
+      // 先畫棋子
       ctx.drawImage(
         baseImg,
         0,
@@ -660,10 +674,28 @@ export default function GameBoard({
         displaySize,
       );
 
+      // ✅ 攻擊目標藍框框（不是圈圈）
+      if (outlineStyle === 'box' && outlineColor && outlineWidth > 0) {
+        const pad = 4;
+        const x = drawX - displaySize / 2 - pad;
+        const y = drawY - displaySize / 2 - pad;
+        const w = displaySize + pad * 2;
+        const h = displaySize + pad * 2;
+
+        ctx.save();
+        ctx.strokeStyle = outlineColor;
+        ctx.lineWidth = outlineWidth;
+        ctx.shadowColor = outlineColor;
+        ctx.shadowBlur = 6;
+        drawRoundRect(ctx, x, y, w, h, 10);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.restore();
     });
 
-    // guard preview
+    // --- 聖騎士守護 preview 光暈 ---
     if (guardPreview) {
       const drawGuardGlow = (row: number, col: number, color: string, radius: number) => {
         const node = getNode(row, col);
@@ -685,6 +717,7 @@ export default function GameBoard({
     }
   };
 
+  // 非動畫時重繪
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || rows.length === 0 || allNodes.length === 0) return;
@@ -711,6 +744,7 @@ export default function GameBoard({
     wizardBeam,
   ]);
 
+  // 動畫 loop
   useEffect(() => {
     if (!animState) return;
     const canvas = canvasRef.current;
@@ -757,6 +791,7 @@ export default function GameBoard({
     wizardBeam,
   ]);
 
+  // ========= Canvas 事件 =========
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -809,7 +844,7 @@ export default function GameBoard({
         onMouseLeave={() => setHoveredNode(null)}
       />
       <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        綠=移動、紅=攻擊（選到巫師時：可用導線＝黃線＋藍點，命中目標＝紅點）
+        綠=移動、藍=換位、藍框=可攻擊（選到巫師時：可用導線＝黃線＋藍點，命中目標＝紅點）
       </p>
     </div>
   );
