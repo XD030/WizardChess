@@ -239,7 +239,6 @@ function mergeWizardBeamAttackHighlights(args: {
   return already ? moves : [...moves, { type: "attack" as const, row: t.row, col: t.col }];
 }
 
-
 /* =========================================================
    ✅✅✅ 巫師導線：更嚴格版本（純 Game.tsx 內做二次驗證）
    規則（你這次要求的）：
@@ -281,6 +280,37 @@ function isAdjacentByAdjacency(
   return !!adjacency[ai]?.includes(bi);
 }
 
+// ✅✅✅ 新增：連續性/對應性驗證（避免不連續路徑導致誤標可攻擊）
+function validatePathContinuous(
+  nodes: { row: number; col: number }[],
+  allNodes: NodePosition[],
+  adjacency: number[][]
+) {
+  for (let i = 0; i < nodes.length - 1; i++) {
+    if (!isAdjacentByAdjacency(nodes[i], nodes[i + 1], allNodes, adjacency)) return false;
+  }
+  return true;
+}
+
+function validateEdgesMatchNodes(
+  nodes: { row: number; col: number }[],
+  edges: any[] | undefined | null
+) {
+  if (!Array.isArray(edges)) return false;
+  if (edges.length !== nodes.length - 1) return false;
+
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
+    const a = nodes[i];
+    const b = nodes[i + 1];
+
+    if (!e?.from || !e?.to) return false;
+    if (e.from.row !== a.row || e.from.col !== a.col) return false;
+    if (e.to.row !== b.row || e.to.col !== b.col) return false;
+  }
+  return true;
+}
+
 /**
  * ✅ 更嚴格導線驗證
  */
@@ -297,6 +327,14 @@ function computeWizardBeamSafe(
   const nodes = raw.pathNodes ?? [];
   if (nodes.length < 3) {
     // 至少 wizard → (某些節點) → target，且必須存在「導體」，所以最少 3
+    return normalizeBeamForUI(wizard);
+  }
+
+  // ✅✅✅ 新增：路徑必須是「連續相鄰」且 edges 必須對應 nodes（避免誤標左上學徒可攻擊）
+  if (!validatePathContinuous(nodes, allNodes, adjacency)) {
+    return normalizeBeamForUI(wizard);
+  }
+  if (!validateEdgesMatchNodes(nodes, (raw as any).pathEdges)) {
     return normalizeBeamForUI(wizard);
   }
 
@@ -347,8 +385,6 @@ function computeWizardBeamSafe(
   if (conductorCount < 1) return normalizeBeamForUI(wizard);
 
   // ✅ 轉彎只能發生在「導體」節點；空格不可轉彎；巫師本體不可轉彎
-  // 用 pathNodes 連續差分判斷方向改變：若 (d1 != d2)，則轉彎點 = nodes[i]
-  // 其中 i 是上一段的終點 / 下一段的起點（中間那顆）
   for (let i = 1; i < nodes.length - 1; i++) {
     const prev = nodes[i - 1];
     const cur = nodes[i];
@@ -524,26 +560,25 @@ export default function Game() {
 
   // ====== 初始化棋盤節點 ======
   useEffect(() => {
-  const LOGICAL_SIZE = 1000;
-  const BOARD_SCALE = 2;
+    const LOGICAL_SIZE = 1000;
+    const BOARD_SCALE = 2;
 
-  const baseRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
-  const cx = LOGICAL_SIZE / 2;
-  const cy = LOGICAL_SIZE / 2;
+    const baseRows = buildRows(LOGICAL_SIZE, LOGICAL_SIZE);
+    const cx = LOGICAL_SIZE / 2;
+    const cy = LOGICAL_SIZE / 2;
 
-  const scaledRows = baseRows.map((row) =>
-    row.map((p) => ({
-      x: cx + (p.x - cx) * BOARD_SCALE,
-      y: cy + (p.y - cy) * BOARD_SCALE,
-    }))
-  );
+    const scaledRows = baseRows.map((row) =>
+      row.map((p) => ({
+        x: cx + (p.x - cx) * BOARD_SCALE,
+        y: cy + (p.y - cy) * BOARD_SCALE,
+      }))
+    );
 
-  const nodes = buildAllNodes(scaledRows);
-  const adj = buildAdjacency(scaledRows);
-  setAllNodes(nodes);
-  setAdjacency(adj);
-}, []);
-
+    const nodes = buildAllNodes(scaledRows);
+    const adj = buildAdjacency(scaledRows);
+    setAllNodes(nodes);
+    setAdjacency(adj);
+  }, []);
 
   // winner 一變成非 null，就跳出結束視窗
   useEffect(() => {
@@ -1629,7 +1664,7 @@ export default function Game() {
               burnMarks
             );
 
-            // ✅ 更嚴格導線（多條件）
+            // ✅ 更嚴格導線（多條件 + 連續性驗證）
             const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
 
             const merged = mergeWizardBeamAttackHighlights({
@@ -1741,7 +1776,7 @@ export default function Game() {
         if (isOwnBardOutOfTurnForPiece(piece)) {
           setHighlights([]);
           setDragonPathNodes([]);
-          setProtectionZones([]);
+          setProtectionZones[]);
           setWizardBeam(null);
           return;
         }
