@@ -85,18 +85,11 @@ const BOARD_THEME = {
   // ==== 座標文字 ====
   labelText: 'rgba(255, 255, 255, 0.85)',
 
-  // ==== ✅ 巫師導線顏色 ====
+  // ==== ✅ 巫師導線顏色（「沿棋盤線上色」用） ====
   beamLine: 'rgba(250, 204, 21, 0.85)',
   beamGlow: 'rgba(250, 204, 21, 0.55)',
-  beamNode: 'rgba(56, 189, 248, 0.95)',
-  beamNodeGlow: 'rgba(56, 189, 248, 0.55)',
   beamTarget: 'rgba(239, 68, 68, 0.95)',
   beamTargetGlow: 'rgba(239, 68, 68, 0.55)',
-
-  // ✅✅✅ NEW：棋盤上「路徑染色」用（更淡、更大）
-  beamPaintLine: 'rgba(250, 204, 21, 0.20)', // 黃色半透明色帶
-  beamPaintNode: 'rgba(56, 189, 248, 0.20)', // 藍色半透明節點染色
-  beamPaintTarget: 'rgba(239, 68, 68, 0.22)', // 目標節點稍微偏紅
 };
 
 // 這個視角是否看得到這顆棋
@@ -441,9 +434,7 @@ export default function GameBoard({
     });
 
     // =========================================================
-    // ✅✅✅ NEW：巫師導線「路徑染色」+「導線線/點」疊加
-    //   - 路徑染色：寬半透明色帶 + 大節點底色（像棋盤被染色）
-    //   - 導線線/點：你原本的黃線+藍點+紅點仍保留
+    // ✅ 巫師導線：沿「棋盤線條」上色（不畫色帶、不畫大圓）
     // =========================================================
     const selectedPiece = selectedPieceIndex >= 0 ? pieces[selectedPieceIndex] : null;
     const shouldDrawBeam = !!wizardBeam && !!selectedPiece && selectedPiece.type === 'wizard';
@@ -456,150 +447,68 @@ export default function GameBoard({
       return nodes.slice(0, -1).map((n, i) => ({ from: n, to: nodes[i + 1] }));
     };
 
-    const isBeamTarget = (r: number, c: number) =>
-      !!wizardBeam?.target && wizardBeam.target.row === r && wizardBeam.target.col === c;
-
-    const drawBeamPaint = () => {
+    const drawBeamOnBoardLines = () => {
       if (!shouldDrawBeam || !wizardBeam) return;
-
       const edges = getBeamEdges();
-      const nodes = wizardBeam.pathNodes ?? [];
+      if (!edges.length) return;
 
-      // 1) 線段「染色底帶」
-      if (edges.length) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-        ctx.strokeStyle = BOARD_THEME.beamPaintLine;
-        ctx.lineWidth = 20; // ✅ 寬一點像色帶（你可調 16~26）
-        ctx.shadowColor = BOARD_THEME.beamPaintLine;
-        ctx.shadowBlur = 0;
+      // glow（貼著線）
+      ctx.strokeStyle = BOARD_THEME.beamGlow;
+      ctx.lineWidth = 7;
+      ctx.shadowColor = BOARD_THEME.beamGlow;
+      ctx.shadowBlur = 10;
 
-        edges.forEach((e) => {
-          const fromNode = getNode(e.from.row, e.from.col);
-          const toNode = getNode(e.to.row, e.to.col);
-          if (!fromNode || !toNode) return;
+      edges.forEach((e) => {
+        const fromNode = getNode(e.from.row, e.from.col);
+        const toNode = getNode(e.to.row, e.to.col);
+        if (!fromNode || !toNode) return;
+        ctx.beginPath();
+        ctx.moveTo(fromNode.x, fromNode.y);
+        ctx.lineTo(toNode.x, toNode.y);
+        ctx.stroke();
+      });
 
-          ctx.beginPath();
-          ctx.moveTo(fromNode.x, fromNode.y);
-          ctx.lineTo(toNode.x, toNode.y);
-          ctx.stroke();
-        });
+      // main（真正上色線）
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = BOARD_THEME.beamLine;
+      ctx.lineWidth = 3.5;
 
-        ctx.restore();
-      }
+      edges.forEach((e) => {
+        const fromNode = getNode(e.from.row, e.from.col);
+        const toNode = getNode(e.to.row, e.to.col);
+        if (!fromNode || !toNode) return;
+        ctx.beginPath();
+        ctx.moveTo(fromNode.x, fromNode.y);
+        ctx.lineTo(toNode.x, toNode.y);
+        ctx.stroke();
+      });
 
-      // 2) 節點「染色底色」（大光暈）
-      if (nodes.length) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-
-        nodes.forEach((p) => {
-          const node = getNode(p.row, p.col);
-          if (!node) return;
-
-          const target = isBeamTarget(p.row, p.col);
-          const radius = target ? 26 : 22;
-
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-          ctx.fillStyle = target ? BOARD_THEME.beamPaintTarget : BOARD_THEME.beamPaintNode;
-          ctx.fill();
-        });
-
-        ctx.restore();
-      }
+      ctx.restore();
     };
 
-    const drawBeamLineAndDots = () => {
-      if (!shouldDrawBeam || !wizardBeam) return;
+    const drawBeamTargetDot = () => {
+      if (!shouldDrawBeam || !wizardBeam?.target) return;
+      const t = wizardBeam.target;
+      const node = getNode(t.row, t.col);
+      if (!node) return;
 
-      const edges = getBeamEdges();
-      const nodes = wizardBeam.pathNodes ?? [];
-
-      // 線（glow + main）
-      if (edges.length) {
-        ctx.save();
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        // glow
-        ctx.strokeStyle = BOARD_THEME.beamGlow;
-        ctx.lineWidth = 10;
-        ctx.shadowColor = BOARD_THEME.beamGlow;
-        ctx.shadowBlur = 12;
-
-        edges.forEach((e) => {
-          const fromNode = getNode(e.from.row, e.from.col);
-          const toNode = getNode(e.to.row, e.to.col);
-          if (!fromNode || !toNode) return;
-
-          ctx.beginPath();
-          ctx.moveTo(fromNode.x, fromNode.y);
-          ctx.lineTo(toNode.x, toNode.y);
-          ctx.stroke();
-        });
-
-        // main
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = BOARD_THEME.beamLine;
-        ctx.lineWidth = 4;
-
-        edges.forEach((e) => {
-          const fromNode = getNode(e.from.row, e.from.col);
-          const toNode = getNode(e.to.row, e.to.col);
-          if (!fromNode || !toNode) return;
-
-          ctx.beginPath();
-          ctx.moveTo(fromNode.x, fromNode.y);
-          ctx.lineTo(toNode.x, toNode.y);
-          ctx.stroke();
-        });
-
-        ctx.restore();
-      }
-
-      // 點（glow + core）
-      if (nodes.length) {
-        ctx.save();
-
-        // glow dots
-        nodes.forEach((p) => {
-          const node = getNode(p.row, p.col);
-          if (!node) return;
-
-          const target = isBeamTarget(p.row, p.col);
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, target ? 12 : 10, 0, Math.PI * 2);
-          ctx.fillStyle = target ? BOARD_THEME.beamTargetGlow : BOARD_THEME.beamNodeGlow;
-          ctx.shadowColor = target ? BOARD_THEME.beamTargetGlow : BOARD_THEME.beamNodeGlow;
-          ctx.shadowBlur = 12;
-          ctx.fill();
-        });
-
-        // core dots
-        ctx.shadowBlur = 0;
-        nodes.forEach((p) => {
-          const node = getNode(p.row, p.col);
-          if (!node) return;
-
-          const target = isBeamTarget(p.row, p.col);
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, target ? 6.5 : 5.5, 0, Math.PI * 2);
-          ctx.fillStyle = target ? BOARD_THEME.beamTarget : BOARD_THEME.beamNode;
-          ctx.fill();
-        });
-
-        ctx.restore();
-      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = BOARD_THEME.beamTarget;
+      ctx.shadowColor = BOARD_THEME.beamTargetGlow;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.restore();
     };
 
-    // ✅ 先畫「棋盤染色」讓它在底層
-    drawBeamPaint();
-    // ✅ 再畫「導線線段/點」讓玩家看清楚路徑
-    drawBeamLineAndDots();
+    // ✅ 先畫導線上色：會在「一般棋盤線」之上，但不會蓋掉棋子
+    drawBeamOnBoardLines();
+    drawBeamTargetDot();
 
     // --- 節點圓點 ---
     allNodes.forEach((node) => {
@@ -845,8 +754,9 @@ export default function GameBoard({
       drawGuardGlow(guardPreview.attackerRow, guardPreview.attackerCol, 'rgba(248, 113, 113, 0.9)', 26);
     }
 
-    // ✅✅✅ 最後再覆蓋一次導線線/點，避免被節點白點/棋子蓋掉
-    drawBeamLineAndDots();
+    // ✅ 最後再畫一次導線（避免被棋子/節點蓋掉）：仍然是「沿棋盤線上色」
+    drawBeamOnBoardLines();
+    drawBeamTargetDot();
   };
   // 非動畫時重繪
   useEffect(() => {
@@ -975,7 +885,7 @@ export default function GameBoard({
         onMouseLeave={() => setHoveredNode(null)}
       />
       <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        綠=移動、藍=換位、紅描邊=可攻擊（選到巫師時：導線路徑會「染色」＋黃線＋藍點，命中目標＝紅點）
+        綠=移動、藍=換位、紅描邊=可攻擊（選到巫師時：導線路徑會沿棋盤線上色；命中目標＝紅點）
       </p>
     </div>
   );
