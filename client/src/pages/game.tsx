@@ -1274,7 +1274,21 @@ export default function Game() {
 
     if (targetPiece.type !== "bard") {
       if (selectedPiece.type === "wizard") {
-        // ✅ 巫師攻擊留在原地（導線射擊不移動）
+        // ✅ 這裡要跟主 attack 規則一致：
+        // - 若點到的是 wizardBeam.target 且不是相鄰 → 導線射擊不移動
+        // - 其他情況 → 視為走過去打（移動）
+        const wizardNodeIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
+        const targetNodeIdx = allNodes.findIndex((n) => n.row === targetRow && n.col === targetCol);
+        const isAdjacent =
+          wizardNodeIdx !== -1 && targetNodeIdx !== -1 && !!adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+    
+        const isBeamTarget =
+          !!wizardBeam?.target && wizardBeam.target.row === targetRow && wizardBeam.target.col === targetCol;
+    
+        if (!(isBeamTarget && !isAdjacent)) {
+          const movedWizard: Piece = { ...selectedPiece, row: targetRow, col: targetCol };
+          newPieces[adjustedIdx] = movedWizard;
+        }
       } else if (selectedPiece.type === "dragon") {
         const tag = getDragonTag(selectedPiece);
         const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, targetRow, targetCol, adjacency, allNodes);
@@ -2086,155 +2100,188 @@ export default function Game() {
 
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
-    } else if (highlight.type === "attack") {
-      const targetIdx = clickedPieceIdx!;
-      const targetPiece = pieces[targetIdx];
+} else if (highlight.type === "attack") {
+  const targetIdx = clickedPieceIdx!;
+  const targetPiece = pieces[targetIdx];
 
-      // ✅ 巫師：若相鄰，才彈出「導線射擊 or 移動攻擊」
-      if (selectedPiece.type === "wizard") {
-        const wizardNodeIdx = allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col);
-        const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
+  // ====== 巫師：先判斷「相鄰」與「是否為導線 target」 ======
+  const isWizard = selectedPiece.type === "wizard";
 
-        const isAdjacent = wizardNodeIdx !== -1 && targetNodeIdx !== -1 && adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+  const wizardNodeIdx =
+    isWizard ? allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col) : -1;
+  const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
 
-        if (isAdjacent) {
-          setWizardAttackRequest({
-            wizardIndex: selectedPieceIndex,
-            targetRow: row,
-            targetCol: col,
-            targetPieceIndex: targetIdx,
-          });
+  const isAdjacent =
+    isWizard && wizardNodeIdx !== -1 && targetNodeIdx !== -1 && !!adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
 
-          setSelectedPieceIndex(-1);
-          setHighlights([]);
-          setDragonPathNodes([]);
-          setProtectionZones([]);
-          setWizardBeam(null);
-          return;
-        }
-      }
+  // ✅ 只有點到的格子剛好等於 wizardBeam.target 才算「導線射擊目標」
+  const isBeamTarget =
+    isWizard && !!wizardBeam?.target && wizardBeam.target.row === row && wizardBeam.target.col === col;
 
-      const guardingPaladinIndices =
-        targetPiece.side !== "neutral"
-          ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
-          : [];
+  // ✅ 只有「同一個目標」同時滿足：相鄰 + 導線target，才跳出選單
+  if (isWizard && isAdjacent && isBeamTarget) {
+    setWizardAttackRequest({
+      wizardIndex: selectedPieceIndex,
+      targetRow: row,
+      targetCol: col,
+      targetPieceIndex: targetIdx,
+    });
 
-      if (guardingPaladinIndices.length > 0) {
-        const pendingGuard: PendingGuard = {
-          targetRow: row,
-          targetCol: col,
-          targetPieceIndex: targetIdx,
-          attackerPieceIndex: selectedPieceIndex,
-          defenderSide: targetPiece.side as PlayerSide,
-          guardPaladinIndices: guardingPaladinIndices,
-        };
+    setSelectedPieceIndex(-1);
+    setHighlights([]);
+    setDragonPathNodes([]);
+    setProtectionZones([]);
+    setWizardBeam(null);
+    return;
+  }
 
-        const syncState: SyncedState = {
-          pieces,
-          currentPlayer,
-          moveHistory,
-          burnMarks,
-          holyLights,
-          capturedPieces,
-          winner,
-          seats,
-          startingPlayer,
-          startingMode,
-          ready,
-          gameStarted,
-          pendingGuard,
-        };
+  // ====== 守護判定（不管是走過去打 or 導線打，只要是攻擊都要先問守護） ======
+  const guardingPaladinIndices =
+    targetPiece.side !== "neutral"
+      ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
+      : [];
 
-        applySyncedState(syncState);
-        broadcastState(syncState);
-        return;
-      }
+  if (guardingPaladinIndices.length > 0) {
+    const pendingGuard: PendingGuard = {
+      targetRow: row,
+      targetCol: col,
+      targetPieceIndex: targetIdx,
+      attackerPieceIndex: selectedPieceIndex,
+      defenderSide: targetPiece.side as PlayerSide,
+      guardPaladinIndices: guardingPaladinIndices,
+    };
 
-      if (targetPiece.type !== "bard") {
-        if (targetPiece.type === "dragon") {
-          const tag = getDragonTag(targetPiece);
-          if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
-        }
+    const syncState: SyncedState = {
+      pieces,
+      currentPlayer,
+      moveHistory,
+      burnMarks,
+      holyLights,
+      capturedPieces,
+      winner,
+      seats,
+      startingPlayer,
+      startingMode,
+      ready,
+      gameStarted,
+      pendingGuard,
+    };
 
-        localCaptured = addCaptured(localCaptured, targetPiece);
+    applySyncedState(syncState);
+    broadcastState(syncState);
+    return;
+  }
 
-        newPieces.splice(targetIdx, 1);
-        newPieces = activateAllBards(newPieces);
-      }
-
-      const adjustedIdx =
-        targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
-
-      if (targetPiece.type !== "bard") {
-        if (selectedPiece.type === "wizard") {
-          // ✅ 巫師 attack 不移動（導線射擊符合你規則）
-        } else if (selectedPiece.type === "dragon") {
-          const dragonTag = getDragonTag(selectedPiece);
-          const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
-
-          if (dragonTag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, dragonTag);
-
-          let movedPiece = updateAssassinStealth(
-            { ...selectedPiece, row, col },
-            selectedPiece.row,
-            selectedPiece.col,
-            row,
-            col
-          );
-          movedPiece = ensureDragonTags([movedPiece])[0];
-          newPieces[adjustedIdx] = movedPiece;
-
-          const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
-
-          const addIfAllowed = (r: number, c: number) => {
-            const key = `${r},${c}`;
-            const isProtected = protectedSet.has(key);
-            const isEmpty = getPieceAt(newPieces, r, c) === -1;
-            if (isProtected && isEmpty) return;
-
-            if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
-              const m: any = { row: r, col: c, createdBy: movedPiece.side };
-              const tag = getDragonTag(movedPiece);
-              if (tag) m.dragonTag = tag;
-              updatedBurnMarks.push(m as BurnMark);
-            }
-          };
-
-          addIfAllowed(selectedPiece.row, selectedPiece.col);
-          for (const node of path) {
-            if (node.row === row && node.col === col) continue;
-            addIfAllowed(node.row, node.col);
-          }
-        } else {
-          let movedPiece = updateAssassinStealth(
-            { ...selectedPiece, row, col },
-            selectedPiece.row,
-            selectedPiece.col,
-            row,
-            col
-          );
-          movedPiece = setAssassinStealthMeta(movedPiece);
-
-          if (movedPiece.type === "assassin") {
-            const mp: any = { ...movedPiece, stealthed: false };
-            delete mp.stealthExpiresOn;
-            movedPiece = mp as Piece;
-            movedAssassinFinal = movedPiece;
-          }
-
-          newPieces[adjustedIdx] = movedPiece;
-        }
-      }
-
-      if (selectedPiece.type === "paladin") {
-        updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
-      }
-
-      moveDesc =
-        targetPiece.type === "bard"
-          ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
-          : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+  // ====== 吃子（bard 不可被擊殺） ======
+  if (targetPiece.type !== "bard") {
+    if (targetPiece.type === "dragon") {
+      const tag = getDragonTag(targetPiece);
+      if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
     }
+
+    localCaptured = addCaptured(localCaptured, targetPiece);
+    newPieces.splice(targetIdx, 1);
+    newPieces = activateAllBards(newPieces);
+  }
+
+  // 吃掉後 index 可能改變
+  const adjustedIdx =
+    targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+
+  // ====== 根據攻擊者處理「是否移動」 ======
+  if (targetPiece.type !== "bard") {
+    if (selectedPiece.type === "wizard") {
+      // ✅ 規則：
+      // - 只有導線(非相鄰) → 站著導線打：不移動
+      // - 只有相鄰(非導線target) → 走過去打：移動
+      // - 同時相鄰+導線target → 已在上面 return 彈窗處理
+      if (isBeamTarget && !isAdjacent) {
+        // 站著導線打：巫師不移動
+      } else {
+        // 走過去打：巫師移動到目標格
+        const movedWizard: Piece = { ...selectedPiece, row, col };
+        newPieces[adjustedIdx] = movedWizard;
+      }
+    } else if (selectedPiece.type === "dragon") {
+      const dragonTag = getDragonTag(selectedPiece);
+      const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
+
+      if (dragonTag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, dragonTag);
+
+      let movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row, col },
+        selectedPiece.row,
+        selectedPiece.col,
+        row,
+        col
+      );
+      movedPiece = ensureDragonTags([movedPiece])[0];
+      newPieces[adjustedIdx] = movedPiece;
+
+      const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
+
+      const addIfAllowed = (r: number, c: number) => {
+        const key = `${r},${c}`;
+        const isProtected = protectedSet.has(key);
+        const isEmpty = getPieceAt(newPieces, r, c) === -1;
+        if (isProtected && isEmpty) return;
+
+        if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
+          const m: any = { row: r, col: c, createdBy: movedPiece.side };
+          const tag = getDragonTag(movedPiece);
+          if (tag) m.dragonTag = tag;
+          updatedBurnMarks.push(m as BurnMark);
+        }
+      };
+
+      addIfAllowed(selectedPiece.row, selectedPiece.col);
+      for (const node of path) {
+        if (node.row === row && node.col === col) continue;
+        addIfAllowed(node.row, node.col);
+      }
+    } else {
+      let movedPiece = updateAssassinStealth(
+        { ...selectedPiece, row, col },
+        selectedPiece.row,
+        selectedPiece.col,
+        row,
+        col
+      );
+      movedPiece = setAssassinStealthMeta(movedPiece);
+
+      if (movedPiece.type === "assassin") {
+        const mp: any = { ...movedPiece, stealthed: false };
+        delete mp.stealthExpiresOn;
+        movedPiece = mp as Piece;
+        movedAssassinFinal = movedPiece;
+      }
+
+      newPieces[adjustedIdx] = movedPiece;
+    }
+  }
+
+  // ✅ 若攻擊者是聖騎士：清掉目的地灼痕
+  if (selectedPiece.type === "paladin") {
+    updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
+  }
+
+  // ====== moveDesc（巫師要區分導線/移動） ======
+  if (selectedPiece.type === "wizard") {
+    if (targetPiece.type === "bard") {
+      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`;
+    } else if (isBeamTarget && !isAdjacent) {
+      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
+    } else {
+      moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
+    }
+  } else {
+    moveDesc =
+      targetPiece.type === "bard"
+        ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
+        : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+  }
+}
+
 
     if (selectedPiece.type === "paladin") {
       const movedPaladin =
