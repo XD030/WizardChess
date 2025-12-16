@@ -86,8 +86,8 @@ const BOARD_THEME = {
   labelText: 'rgba(255, 255, 255, 0.85)',
 
   // ==== ✅ 巫師導線顏色（「沿棋盤線上色」用） ====
-  beamLine: 'rgba(250, 204, 21, 0.85)',
-  beamGlow: 'rgba(250, 204, 21, 0.55)',
+  beamLine: 'rgba(250, 204, 21, 1.0)',
+  beamGlow: 'rgba(250, 204, 21, 0.95)',
   beamTarget: 'rgba(239, 68, 68, 0.95)',
   beamTargetGlow: 'rgba(239, 68, 68, 0.55)',
 };
@@ -451,17 +451,20 @@ export default function GameBoard({
       if (!shouldDrawBeam || !wizardBeam) return;
       const edges = getBeamEdges();
       if (!edges.length) return;
-
+    
       ctx.save();
+    
+      // ✅ 關鍵：用 lighter 讓黃線把底下白線「加亮」
+      ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-
-      // glow（貼著線）
+    
+      // --- glow（更粗、更亮、更大的 blur）---
       ctx.strokeStyle = BOARD_THEME.beamGlow;
-      ctx.lineWidth = 7;
+      ctx.lineWidth = 12;        // ✅ 變粗，像「點亮棋盤線」
       ctx.shadowColor = BOARD_THEME.beamGlow;
-      ctx.shadowBlur = 10;
-
+      ctx.shadowBlur = 18;
+    
       edges.forEach((e) => {
         const fromNode = getNode(e.from.row, e.from.col);
         const toNode = getNode(e.to.row, e.to.col);
@@ -471,12 +474,12 @@ export default function GameBoard({
         ctx.lineTo(toNode.x, toNode.y);
         ctx.stroke();
       });
-
-      // main（真正上色線）
+    
+      // --- main（真正的點亮線）---
       ctx.shadowBlur = 0;
       ctx.strokeStyle = BOARD_THEME.beamLine;
-      ctx.lineWidth = 3.5;
-
+      ctx.lineWidth = 6;
+    
       edges.forEach((e) => {
         const fromNode = getNode(e.from.row, e.from.col);
         const toNode = getNode(e.to.row, e.to.col);
@@ -486,9 +489,10 @@ export default function GameBoard({
         ctx.lineTo(toNode.x, toNode.y);
         ctx.stroke();
       });
-
+    
       ctx.restore();
     };
+
 
     const drawBeamTargetDot = () => {
       if (!shouldDrawBeam || !wizardBeam?.target) return;
