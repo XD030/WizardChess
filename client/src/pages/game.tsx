@@ -66,6 +66,8 @@ interface ReadyState {
 
 type StartingMode = "manual" | "random";
 
+type WizardAttackMode = "line" | "move";
+
 interface PendingGuard {
   targetRow: number;
   targetCol: number;
@@ -73,6 +75,7 @@ interface PendingGuard {
   attackerPieceIndex: number;
   defenderSide: PlayerSide;
   guardPaladinIndices: number[];
+  wizardAttackMode?: WizardAttackMode | null; // ✅ 新增：若攻擊者是巫師，記錄本次攻擊選擇（導線 or 移動）
 }
 
 interface SyncedState {
@@ -99,7 +102,7 @@ function setAssassinStealthMeta(piece: Piece): Piece {
 
   const p: any = piece;
   if (piece.stealthed) {
-    p.stealthExpiresOn = piece.side; // 當回合切回自己時解除
+    p.stealthExpiresOn = piece.side;
   } else {
     delete p.stealthExpiresOn;
   }
@@ -165,14 +168,18 @@ function buildAllPaladinProtectedSet(pieces: Piece[], adjacency: number[][], all
 
 // Helper：吃子時啟動所有吟遊詩人
 function activateAllBards(pieces: Piece[]): Piece[] {
-  return pieces.map((piece) =>
-    piece.type === "bard"
-      ? {
-          ...piece,
-          activated: true,
-        }
-      : piece
-  );
+  return pieces.map((piece) => {
+    if (piece.type !== "bard") return piece;
+
+    const p: any = piece;
+    return {
+      ...piece,
+      activated: true,
+      isActivated: true,
+      active: true,
+      activatedAt: p.activatedAt ?? Date.now(),
+    } as Piece;
+  });
 }
 
 // Helper：複製被吃棋子 map
@@ -208,6 +215,20 @@ function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
   }
 }
 
+function isAdjacentCell(
+  aRow: number,
+  aCol: number,
+  bRow: number,
+  bCol: number,
+  allNodes: NodePosition[],
+  adjacency: number[][]
+) {
+  const ai = allNodes.findIndex((n) => n.row === aRow && n.col === aCol);
+  const bi = allNodes.findIndex((n) => n.row === bRow && n.col === bCol);
+  if (ai === -1 || bi === -1) return false;
+  return !!adjacency[ai]?.includes(bi);
+}
+
 /**
  * ✅ NEW:
  * 把 computeWizardBeam 的 target 轉成可點擊的 attack highlight
@@ -221,7 +242,6 @@ function mergeWizardBeamAttackHighlights(args: {
 }): MoveHighlight[] {
   const { moves, beam, wizard, pieces } = args;
 
-  // ✅ 沒有導線 target：不要動 moves（保留一般相鄰 attack）
   if (!beam?.target) return moves;
 
   const t = beam.target;
@@ -230,11 +250,9 @@ function mergeWizardBeamAttackHighlights(args: {
 
   const targetPiece = pieces[tIdx];
 
-  // 只能打敵方；bard 不可被擊殺（你原本規則）
   if (targetPiece.side === wizard.side) return moves;
   if (targetPiece.type === "bard") return moves;
 
-  // ✅ 把導線 target 加進去（避免重複）
   const already = moves.some((h) => h.type === "attack" && h.row === t.row && h.col === t.col);
   return already ? moves : [...moves, { type: "attack" as const, row: t.row, col: t.col }];
 }
@@ -252,11 +270,14 @@ function mergeWizardBeamAttackHighlights(args: {
    ========================================================= */
 
 function isWizardConductorStrict(wizardSide: Side, p: Piece): boolean {
-  if (p.type === "apprentice") return p.side === wizardSide; // 只能己方學徒
+  if (p.type === "apprentice") return p.side === wizardSide;
+
   if (p.type === "bard") {
-    const activated = !!(p as any).activated;
-    return activated && (p.side === wizardSide || p.side === "neutral"); // 已啟動，且己方或中立
+    const anyP: any = p;
+    const activated = !!(anyP.activated || anyP.isActivated || anyP.active);
+    return activated && (p.side === wizardSide || p.side === "neutral");
   }
+
   return false;
 }
 
@@ -280,12 +301,7 @@ function isAdjacentByAdjacency(
   return !!adjacency[ai]?.includes(bi);
 }
 
-// ✅✅✅ 新增：連續性/對應性驗證（避免不連續路徑導致誤標可攻擊）
-function validatePathContinuous(
-  nodes: { row: number; col: number }[],
-  allNodes: NodePosition[],
-  adjacency: number[][]
-) {
+function validatePathContinuous(nodes: { row: number; col: number }[], allNodes: NodePosition[], adjacency: number[][]) {
   for (let i = 0; i < nodes.length - 1; i++) {
     if (!isAdjacentByAdjacency(nodes[i], nodes[i + 1], allNodes, adjacency)) return false;
   }
@@ -308,9 +324,6 @@ function validateEdgesMatchNodes(nodes: { row: number; col: number }[], edges: a
   return true;
 }
 
-/**
- * ✅ 更嚴格導線驗證
- */
 function computeWizardBeamSafe(
   wizard: Piece,
   pieces: Piece[],
@@ -403,11 +416,6 @@ function computeWizardBeamSafe(
   return raw;
 }
 
-/**
- * ✅✅✅ 你要的封裝：巫師是否「導線射擊」（站著打，不移動）
- * - 不依賴 wizardBeam state（避免 state 被清掉造成誤判）
- * - 規則：必須是 beam target，且「非相鄰」
- */
 function isWizardLineShotAttack(
   selectedPiece: Piece,
   row: number,
@@ -431,10 +439,6 @@ function isWizardLineShotAttack(
   return !isAdjacent;
 }
 
-/**
- * ✅ WizardAttackDialog 是否可觸發（同一格同時：相鄰 attack 且也是 beam target）
- * 這裡刻意不要求「非相鄰」，因為彈窗就是要在「相鄰但你也允許導線」時給玩家選。
- */
 function isWizardBeamTargetAvailable(
   selectedPiece: Piece,
   row: number,
@@ -449,9 +453,7 @@ function isWizardBeamTargetAvailable(
   if (!beam?.target) return false;
   return beam.target.row === row && beam.target.col === col;
 }
-
 export default function Game() {
-  // 每個 client 自己的 ID，用來辨識座位
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -461,7 +463,6 @@ export default function Game() {
     }
   }
 
-  // ======= 棋局核心狀態（會透過 WebSocket 同步） =======
   const [pieces, setPieces] = useState<Piece[]>(ensureDragonTags(getInitialPieces()));
   const [currentPlayer, setCurrentPlayer] = useState<PlayerSide>("white");
   const [moveHistory, setMoveHistory] = useState<MoveRecord[]>([]);
@@ -478,16 +479,13 @@ export default function Game() {
     blackOwnerId: null,
   });
 
-  // 先攻方 / 雙方準備狀態 / 是否已開始對局 / 手動 or 隨機
   const [startingPlayer, setStartingPlayer] = useState<PlayerSide>("white");
   const [startingMode, setStartingMode] = useState<StartingMode>("manual");
   const [ready, setReady] = useState<ReadyState>({ white: false, black: false });
   const [gameStarted, setGameStarted] = useState(false);
 
-  // 勝利後顯示結束視窗用
   const [showEndModal, setShowEndModal] = useState(false);
 
-  // ======= 本機 UI 狀態（不會同步） =======
   const [selectedPieceIndex, setSelectedPieceIndex] = useState<number>(-1);
   const [highlights, setHighlights] = useState<MoveHighlight[]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
@@ -495,7 +493,6 @@ export default function Game() {
   const [dragonPathNodes, setDragonPathNodes] = useState<{ row: number; col: number }[]>([]);
   const [protectionZones, setProtectionZones] = useState<{ row: number; col: number }[]>([]);
 
-  // ✅ 導線顯示資料（選取巫師時生成）
   const [wizardBeam, setWizardBeam] = useState<WizardBeamResult | null>(null);
 
   const [wizardAttackRequest, setWizardAttackRequest] = useState<{
@@ -505,7 +502,6 @@ export default function Game() {
     targetPieceIndex: number;
   } | null>(null);
 
-  // 聖騎士守護相關（本機 UI 狀態）
   const [guardDialogOpen, setGuardDialogOpen] = useState(false);
   const [guardOptions, setGuardOptions] = useState<GuardOption[]>([]);
   const [guardRequest, setGuardRequest] = useState<{
@@ -514,10 +510,10 @@ export default function Game() {
     targetPieceIndex: number;
     attackerPieceIndex: number;
     defenderSide: PlayerSide;
+    wizardAttackMode?: WizardAttackMode | null; // ✅ 新增：把 pendingGuard 的模式帶進本機狀態
   } | null>(null);
   const [selectedGuardPaladinIndex, setSelectedGuardPaladinIndex] = useState<number | null>(null);
 
-  // 吟遊詩人換位
   const [bardNeedsSwap, setBardNeedsSwap] = useState<{
     bardIndex: number;
     bardRow: number;
@@ -528,10 +524,8 @@ export default function Game() {
     bardSwapActiveRef.current = !!bardNeedsSwap;
   }, [bardNeedsSwap]);
 
-  // 本機扮演的顏色：white / black / spectator
   const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">("spectator");
 
-  // helper：判斷某顆 piece（假設是 bard）在本機是否屬於己方，且是否為敵方回合（此時不應顯示路徑）
   const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
     if (!piece) return false;
     if (piece.type !== "bard") return false;
@@ -542,10 +536,8 @@ export default function Game() {
 
   const [seatError, setSeatError] = useState<string | null>(null);
 
-  // 只有「不是觀戰」且「本機顏色 = 當前回合」且「尚未勝負且已開始」才能真的下子
   const canPlay = localSide !== "spectator" && localSide === currentPlayer && !winner && gameStarted;
 
-  // ---- 房間 / WebSocket 狀態 ----
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [inRoom, setInRoom] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -553,15 +545,12 @@ export default function Game() {
 
   const socketRef = useRef<WebSocket | null>(null);
 
-  // ====== 棋局快照，用來回放歷史棋面 ======
   const [snapshots, setSnapshots] = useState<SyncedState[]>([]);
   const [viewSnapshotIndex, setViewSnapshotIndex] = useState<number | null>(null);
   const moveCountRef = useRef(0);
 
-  // 是否處於「觀察模式」（勝負已分且關掉結束視窗）
   const isObserving = !!winner && !showEndModal;
 
-  // ====== 歷史回放：找出某 snapshot 相對於前一個 snapshot 是哪幾顆棋移動 ======
   function findMovedPieceIndicesForSnapshot(snapshotIndex: number): number[] {
     if (snapshotIndex <= 0 || snapshotIndex >= snapshots.length) return [];
 
@@ -600,7 +589,6 @@ export default function Game() {
     return movedIndices;
   }
 
-  // ====== 初始化棋盤節點 ======
   useEffect(() => {
     const LOGICAL_SIZE = 1000;
     const BOARD_SCALE = 2;
@@ -621,7 +609,7 @@ export default function Game() {
     setAllNodes(nodes);
     setAdjacency(adj);
   }, []);
-  // winner 一變成非 null，就跳出結束視窗
+
   useEffect(() => {
     if (winner) {
       setShowEndModal(true);
@@ -629,7 +617,6 @@ export default function Game() {
     }
   }, [winner, snapshots.length]);
 
-  // 建立一個「全新棋局」狀態（準備階段用）
   function createInitialState(): SyncedState {
     return {
       pieces: ensureDragonTags(getInitialPieces()),
@@ -648,7 +635,6 @@ export default function Game() {
     };
   }
 
-  // 把從 server 收到的狀態套進來
   function applySyncedState(state: SyncedState) {
     const taggedPieces = ensureDragonTags(state.pieces);
 
@@ -691,10 +677,16 @@ export default function Game() {
     setProtectionZones([]);
     setWizardBeam(null);
 
-    // 處理守護中的狀態（pendingGuard）
     if (state.pendingGuard) {
-      const { targetRow, targetCol, targetPieceIndex, attackerPieceIndex, defenderSide, guardPaladinIndices } =
-        state.pendingGuard;
+      const {
+        targetRow,
+        targetCol,
+        targetPieceIndex,
+        attackerPieceIndex,
+        defenderSide,
+        guardPaladinIndices,
+        wizardAttackMode,
+      } = state.pendingGuard;
 
       const options: GuardOption[] = guardPaladinIndices.map((idx) => ({
         paladinIndex: idx,
@@ -704,7 +696,7 @@ export default function Game() {
       }));
 
       setGuardOptions(options);
-      setGuardRequest({ targetRow, targetCol, targetPieceIndex, attackerPieceIndex, defenderSide });
+      setGuardRequest({ targetRow, targetCol, targetPieceIndex, attackerPieceIndex, defenderSide, wizardAttackMode });
       setSelectedGuardPaladinIndex(null);
       setGuardDialogOpen(true);
     } else {
@@ -717,14 +709,12 @@ export default function Game() {
     setWizardAttackRequest(null);
   }
 
-  // 廣播狀態
   function broadcastState(next: SyncedState) {
     const ws = socketRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: "state", state: next, from: clientIdRef.current }));
   }
 
-  // ====== WebSocket 連線 ======
   useEffect(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsHost = window.location.host;
@@ -792,7 +782,6 @@ export default function Game() {
     socketRef.current.send(JSON.stringify({ type: "joinRoom", password: passwordInput }));
   }
 
-  // ====== 判斷巫師是否被吃掉 ======
   function checkWizardWin(newPieces: Piece[]): Side | null {
     const hasWhiteWizard = newPieces.some((p) => p.type === "wizard" && p.side === "white");
     const hasBlackWizard = newPieces.some((p) => p.type === "wizard" && p.side === "black");
@@ -807,7 +796,6 @@ export default function Game() {
     return newWinner;
   }
 
-  // ✅ finalize：換手（❌ 已移除導線自動射擊）
   function finalizeTurnNoAutoShot(args: {
     piecesAfterStealthExpire: Piece[];
     updatedBurnMarks: BurnMark[];
@@ -843,7 +831,6 @@ export default function Game() {
     };
   }
 
-  // ====== 再來一局 / 退出遊戲 ======
   function handleRestartGame() {
     const initialPieces = ensureDragonTags(getInitialPieces());
     const newStarting: PlayerSide = "white";
@@ -886,7 +873,6 @@ export default function Game() {
     setSelectedGuardPaladinIndex(null);
   }
 
-  // ====== 選擇哪一方（白 / 黑 / 觀戰） ======
   function handleChooseSide(side: "white" | "black" | "spectator") {
     if (!inRoom) return;
 
@@ -983,7 +969,6 @@ export default function Game() {
     }
   }
 
-  // ====== 準備階段：設定先後攻 ======
   function handleToggleStartingPlayer() {
     const next = startingPlayer === "white" ? "black" : "white";
     setStartingPlayer(next);
@@ -1030,7 +1015,6 @@ export default function Game() {
     broadcastState(syncState);
   }
 
-  // ====== 準備階段：玩家按「開始遊戲」 ======
   function handlePressReady() {
     if (localSide === "spectator") {
       setSeatError("觀戰者無需準備，請選擇白方或黑方參與對局");
@@ -1069,11 +1053,10 @@ export default function Game() {
     applySyncedState(nextState);
     broadcastState(nextState);
   }
-
-  // ====== 守護相關 ======
   const handleChangeSelectedGuardPaladin = (paladinIndex: number) => {
     setSelectedGuardPaladinIndex(paladinIndex);
   };
+
   const handleGuardConfirm = () => {
     if (!guardRequest || selectedGuardPaladinIndex === null) return;
     if (winner) return;
@@ -1162,20 +1145,31 @@ export default function Game() {
       }
     }
 
-    // ✅✅✅ 關鍵修正：若攻擊者是巫師且此擊是導線射擊 → 攻擊者不移動
-    const wizardLineShot = isWizardLineShotAttack(
-      selectedPiece,
-      targetRowGuard,
-      targetColGuard,
-      pieces,
-      allNodes,
-      adjacency,
-      holyLights
-    );
+    const mode: WizardAttackMode | null | undefined = guardRequest.wizardAttackMode ?? null;
+    const wizardLineShot =
+      selectedPiece.type === "wizard"
+        ? mode === "line"
+          ? true
+          : mode === "move"
+            ? false
+            : isWizardLineShotAttack(selectedPiece, targetRowGuard, targetColGuard, pieces, allNodes, adjacency, holyLights)
+        : false;
 
     let movedAttacker: Piece;
-    if (selectedPiece.type === "wizard" && wizardLineShot) {
-      movedAttacker = { ...selectedPiece };
+
+    if (selectedPiece.type === "wizard") {
+      if (wizardLineShot) {
+        movedAttacker = { ...selectedPiece };
+      } else {
+        movedAttacker = updateAssassinStealth(
+          { ...selectedPiece, row: targetRowGuard, col: targetColGuard },
+          selectedPiece.row,
+          selectedPiece.col,
+          targetRowGuard,
+          targetColGuard
+        );
+        movedAttacker = setAssassinStealthMeta(movedAttacker);
+      }
     } else {
       movedAttacker = updateAssassinStealth(
         { ...selectedPiece, row: targetRowGuard, col: targetColGuard },
@@ -1210,7 +1204,11 @@ export default function Game() {
     const targetIdxAfter = newPieces.findIndex((p) => p.row === movedTarget.row && p.col === movedTarget.col);
     const attackerIdxAfter = newPieces.findIndex((p) => p.row === movedAttacker.row && p.col === movedAttacker.col);
 
-    if (targetIdxAfter !== -1 && newPieces[targetIdxAfter].type === "assassin" && (newPieces[targetIdxAfter] as any).stealthed) {
+    if (
+      targetIdxAfter !== -1 &&
+      newPieces[targetIdxAfter].type === "assassin" &&
+      (newPieces[targetIdxAfter] as any).stealthed
+    ) {
       const enemySide = newPieces[targetIdxAfter].side === "white" ? "black" : "white";
       if (
         isInProtectionZone(
@@ -1228,7 +1226,11 @@ export default function Game() {
       }
     }
 
-    if (attackerIdxAfter !== -1 && newPieces[attackerIdxAfter].type === "assassin" && (newPieces[attackerIdxAfter] as any).stealthed) {
+    if (
+      attackerIdxAfter !== -1 &&
+      newPieces[attackerIdxAfter].type === "assassin" &&
+      (newPieces[attackerIdxAfter] as any).stealthed
+    ) {
       const enemySide = newPieces[attackerIdxAfter].side === "white" ? "black" : "white";
       if (
         isInProtectionZone(
@@ -1332,18 +1334,15 @@ export default function Game() {
 
     if (targetPiece.type !== "bard") {
       if (selectedPiece.type === "wizard") {
-        // ✅✅✅ 關鍵修正：不用 wizardBeam state，直接用封裝純函式判斷是否為導線射擊
-        const isLineShot = isWizardLineShotAttack(
-          selectedPiece,
-          targetRow,
-          targetCol,
-          pieces,
-          allNodes,
-          adjacency,
-          holyLights
-        );
+        const mode: WizardAttackMode | null | undefined = guardRequest.wizardAttackMode ?? null;
+        const wizardLineShot =
+          mode === "line"
+            ? true
+            : mode === "move"
+              ? false
+              : isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
 
-        if (!isLineShot) {
+        if (!wizardLineShot) {
           const movedWizard: Piece = { ...selectedPiece, row: targetRow, col: targetCol };
           newPieces[adjustedIdx] = movedWizard;
         }
@@ -1411,16 +1410,15 @@ export default function Game() {
 
     let moveDesc = "";
     if (selectedPiece.type === "wizard" && targetPiece.type !== "bard") {
-      const isLineShot = isWizardLineShotAttack(
-        selectedPiece,
-        targetRow,
-        targetCol,
-        pieces,
-        allNodes,
-        adjacency,
-        holyLights
-      );
-      moveDesc = isLineShot
+      const mode: WizardAttackMode | null | undefined = guardRequest.wizardAttackMode ?? null;
+      const wizardLineShot =
+        mode === "line"
+          ? true
+          : mode === "move"
+            ? false
+            : isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
+
+      moveDesc = wizardLineShot
         ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
         : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
     } else {
@@ -1475,7 +1473,8 @@ export default function Game() {
     broadcastState(syncState);
   };
 
-  // ====== 巫師攻擊方式選擇：導線射擊 or 移動攻擊（僅限相鄰攻擊時彈窗） ======
+  // ✅✅✅ 巫師攻擊方式選擇：導線射擊 or 移動攻擊
+  // ✅ 若目標有守護：先把選擇結果寫進 pendingGuard.wizardAttackMode，再進守護流程
   const handleWizardLineShot = () => {
     if (!wizardAttackRequest || winner) return;
 
@@ -1483,6 +1482,44 @@ export default function Game() {
 
     const wizard = pieces[wizardIndex];
     const targetPiece = pieces[targetPieceIndex];
+
+    const guardingPaladinIndices =
+      targetPiece.side !== "neutral"
+        ? findGuardingPaladins(targetRow, targetCol, pieces, targetPiece.side, adjacency, allNodes)
+        : [];
+
+    if (guardingPaladinIndices.length > 0) {
+      const pendingGuard: PendingGuard = {
+        targetRow,
+        targetCol,
+        targetPieceIndex,
+        attackerPieceIndex: wizardIndex,
+        defenderSide: targetPiece.side as PlayerSide,
+        guardPaladinIndices: guardingPaladinIndices,
+        wizardAttackMode: "line",
+      };
+
+      const syncState: SyncedState = {
+        pieces,
+        currentPlayer,
+        moveHistory,
+        burnMarks,
+        holyLights,
+        capturedPieces,
+        winner,
+        seats,
+        startingPlayer,
+        startingMode,
+        ready,
+        gameStarted,
+        pendingGuard,
+      };
+
+      setWizardAttackRequest(null);
+      applySyncedState(syncState);
+      broadcastState(syncState);
+      return;
+    }
 
     let newPieces = [...pieces];
     let localCaptured = cloneCaptured(capturedPieces);
@@ -1555,6 +1592,44 @@ export default function Game() {
     const wizard = pieces[wizardIndex];
     const targetPiece = pieces[targetPieceIndex];
 
+    const guardingPaladinIndices =
+      targetPiece.side !== "neutral"
+        ? findGuardingPaladins(targetRow, targetCol, pieces, targetPiece.side, adjacency, allNodes)
+        : [];
+
+    if (guardingPaladinIndices.length > 0) {
+      const pendingGuard: PendingGuard = {
+        targetRow,
+        targetCol,
+        targetPieceIndex,
+        attackerPieceIndex: wizardIndex,
+        defenderSide: targetPiece.side as PlayerSide,
+        guardPaladinIndices: guardingPaladinIndices,
+        wizardAttackMode: "move",
+      };
+
+      const syncState: SyncedState = {
+        pieces,
+        currentPlayer,
+        moveHistory,
+        burnMarks,
+        holyLights,
+        capturedPieces,
+        winner,
+        seats,
+        startingPlayer,
+        startingMode,
+        ready,
+        gameStarted,
+        pendingGuard,
+      };
+
+      setWizardAttackRequest(null);
+      applySyncedState(syncState);
+      broadcastState(syncState);
+      return;
+    }
+
     let newPieces = [...pieces];
     let localCaptured = cloneCaptured(capturedPieces);
     let updatedBurnMarks = [...burnMarks];
@@ -1570,7 +1645,8 @@ export default function Game() {
       newPieces = activateAllBards(newPieces);
     }
 
-    const adjustedWizardIndex = targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
+    const adjustedWizardIndex =
+      targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
 
     const movedWizard: Piece = { ...wizard, row: targetRow, col: targetCol };
     newPieces[adjustedWizardIndex] = movedWizard;
@@ -1623,7 +1699,6 @@ export default function Game() {
     setWizardAttackRequest(null);
   };
 
-  // ====== 點擊棋盤節點 ======
   const handleNodeClick = (row: number, col: number) => {
     if (guardRequest) return;
 
@@ -1635,7 +1710,6 @@ export default function Game() {
     const clickedPieceIdx = getPieceAt(effectivePieces, row, col);
     let movedAssassinFinal: Piece | null = null;
 
-    // ---- 若正在等吟遊詩人第二段換位 ----
     if (bardNeedsSwap && !isObserving) {
       if (clickedPieceIdx !== -1) {
         const swapTarget = pieces[clickedPieceIdx];
@@ -1724,7 +1798,6 @@ export default function Game() {
       return;
     }
 
-    // ====== 還沒選棋子：嘗試選取一顆 ======
     if (selectedPieceIndex === -1) {
       if (clickedPieceIdx !== -1) {
         const piece = effectivePieces[clickedPieceIdx];
@@ -1838,7 +1911,6 @@ export default function Game() {
       return;
     }
 
-    // ===== 已經有選到一顆棋 ======
     const selectedPiece =
       isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
         ? snapshots[viewSnapshotIndex].pieces[selectedPieceIndex]
@@ -1855,7 +1927,6 @@ export default function Game() {
 
     const highlight = highlights.find((h) => h.row === row && h.col === col);
 
-    // 觀察模式：只改選取 / 高亮，不做後續動作
     if (!highlight || isObserving) {
       if (clickedPieceIdx !== -1) {
         const piece = effectivePieces[clickedPieceIdx];
@@ -1941,10 +2012,8 @@ export default function Game() {
       return;
     }
 
-    // 🔒 真正移動前，再檢查一次是否可以行動（攻擊方）
     if (!canPlay) return;
 
-    // ====== 以下開始「真的改棋盤」 ======
     let newPieces = [...pieces];
     let moveDesc = "";
     const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
@@ -1995,7 +2064,7 @@ export default function Game() {
           setSelectedPieceIndex(-1);
           setHighlights([]);
           setDragonPathNodes([]);
-          setProtectionZones([]);
+          setProtectionZones[]);
           setWizardBeam(null);
           return;
         } else {
@@ -2179,26 +2248,15 @@ export default function Game() {
       const targetPiece = pieces[targetIdx];
 
       const isWizard = selectedPiece.type === "wizard";
-
-      const wizardNodeIdx = isWizard ? allNodes.findIndex((n) => n.row === selectedPiece.row && n.col === selectedPiece.col) : -1;
-      const targetNodeIdx = allNodes.findIndex((n) => n.row === row && n.col === col);
-
       const isAdjacent =
-        isWizard && wizardNodeIdx !== -1 && targetNodeIdx !== -1 && !!adjacency[wizardNodeIdx]?.includes(targetNodeIdx);
+        isWizard && isAdjacentCell(selectedPiece.row, selectedPiece.col, row, col, allNodes, adjacency);
 
-      // ✅✅✅ 不再依賴 wizardBeam state：用純函式判斷「這格是否為 beam target」
-      const beamTargetAvailable = isWizardBeamTargetAvailable(
-        selectedPiece,
-        row,
-        col,
-        pieces,
-        allNodes,
-        adjacency,
-        holyLights
-      );
+      const isBeamTarget =
+        isWizard && isWizardBeamTargetAvailable(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
 
-      // ✅✅✅ WizardAttackDialog：相鄰 attack + 也是 beam target → 讓玩家選「導線射擊 or 移動攻擊」
-      if (isWizard && isAdjacent && beamTargetAvailable) {
+      // ✅ 若是「相鄰且也是導線 target」：先開彈窗讓玩家選擇攻擊方式
+      // ✅ 守護會在 handleWizardLineShot / handleWizardMoveAttack 裡處理（避免彈窗被守護流程吃掉）
+      if (isWizard && isAdjacent && isBeamTarget) {
         setWizardAttackRequest({
           wizardIndex: selectedPieceIndex,
           targetRow: row,
@@ -2214,7 +2272,7 @@ export default function Game() {
         return;
       }
 
-      // ====== 守護判定（不管走過去打/導線打） ======
+      // ====== 守護判定（非彈窗路徑的攻擊，都直接進守護） ======
       const guardingPaladinIndices =
         targetPiece.side !== "neutral"
           ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
@@ -2228,6 +2286,7 @@ export default function Game() {
           attackerPieceIndex: selectedPieceIndex,
           defenderSide: targetPiece.side as PlayerSide,
           guardPaladinIndices: guardingPaladinIndices,
+          wizardAttackMode: isWizard && !isAdjacent ? "line" : null, // ✅ 非相鄰巫師攻擊必為導線
         };
 
         const syncState: SyncedState = {
@@ -2267,20 +2326,22 @@ export default function Game() {
 
       if (targetPiece.type !== "bard") {
         if (selectedPiece.type === "wizard") {
-          // ✅✅✅ 關鍵：用你要的封裝判斷導線射擊（非相鄰才站著打）
-          const isLineShot = isWizardLineShotAttack(
-            selectedPiece,
-            row,
-            col,
-            pieces,
-            allNodes,
-            adjacency,
-            holyLights
-          );
-
-          if (!isLineShot) {
-            const movedWizard: Piece = { ...selectedPiece, row, col };
-            newPieces[adjustedIdx] = movedWizard;
+          if (!isAdjacent) {
+            // ✅ 非相鄰：一定導線射擊 → 不移動
+          } else {
+            const isLineShot = isWizardLineShotAttack(
+              selectedPiece,
+              row,
+              col,
+              pieces,
+              allNodes,
+              adjacency,
+              holyLights
+            );
+            if (!isLineShot) {
+              const movedWizard: Piece = { ...selectedPiece, row, col };
+              newPieces[adjustedIdx] = movedWizard;
+            }
           }
         } else if (selectedPiece.type === "dragon") {
           const dragonTag = getDragonTag(selectedPiece);
@@ -2347,6 +2408,8 @@ export default function Game() {
       if (selectedPiece.type === "wizard") {
         if (targetPiece.type === "bard") {
           moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`;
+        } else if (!isAdjacent) {
+          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
         } else {
           const isLineShot = isWizardLineShotAttack(
             selectedPiece,
@@ -2357,6 +2420,7 @@ export default function Game() {
             adjacency,
             holyLights
           );
+
           moveDesc = isLineShot
             ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
             : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
@@ -2446,7 +2510,6 @@ export default function Game() {
     broadcastState(syncState);
   };
 
-  // ====== 棋盤顯示用狀態 ======
   const boardState: SyncedState =
     isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
       ? snapshots[viewSnapshotIndex]
@@ -2466,7 +2529,6 @@ export default function Game() {
           pendingGuard: null,
         } as SyncedState);
 
-  // 是否輪到「我」這一方
   const isMyTurn = !winner && gameStarted && localSide !== "spectator" && localSide === boardState.currentPlayer;
 
   const displayPieces: Piece[] = isObserving
@@ -2476,7 +2538,6 @@ export default function Game() {
   const effectivePiecesForPanel = boardState.pieces;
   const selectedPieceForPanel = selectedPieceIndex !== -1 ? effectivePiecesForPanel[selectedPieceIndex] : null;
 
-  // ====== 歷史回放 點擊 ======
   const handleSelectMoveFromHistory = (index: number) => {
     if (!isObserving) return;
     if (snapshots.length === 0) return;
@@ -2501,11 +2562,9 @@ export default function Game() {
     setWizardBeam(null);
   };
 
-  // ---- 準備階段 ready 顯示 ----
   const myReady = localSide === "white" ? ready.white : localSide === "black" ? ready.black : false;
   const otherReady = localSide === "white" ? ready.black : localSide === "black" ? ready.white : false;
 
-  // ---- 移動紀錄顯示文字（視角） ----
   const baseHistory = snapshots.length > 0 ? snapshots[snapshots.length - 1].moveHistory : moveHistory;
 
   let displayHistory: string[] = [];
@@ -2515,9 +2574,6 @@ export default function Game() {
     else if (localSide === "black") displayHistory = baseHistory.map((r) => r.blackText);
   }
 
-  // ================== UI ==================
-
-  // -------------- 未進房：輸入房間密碼 --------------
   if (!inRoom) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
@@ -2564,7 +2620,6 @@ export default function Game() {
     );
   }
 
-  // -------------- 已進房但尚未開始：準備階段畫面 --------------
   if (inRoom && !gameStarted) {
     const startingText = startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
 
@@ -2683,7 +2738,6 @@ export default function Game() {
     );
   }
 
-  // -------------- 已進房且遊戲已開始：棋盤畫面 --------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8">
       <div className="max-w-[1400px] mx-auto">
@@ -2799,7 +2853,9 @@ export default function Game() {
 
       <WizardAttackDialog
         isOpen={!!wizardAttackRequest}
-        targetCoordinate={wizardAttackRequest ? getNodeCoordinate(wizardAttackRequest.targetRow, wizardAttackRequest.targetCol) : ""}
+        targetCoordinate={
+          wizardAttackRequest ? getNodeCoordinate(wizardAttackRequest.targetRow, wizardAttackRequest.targetCol) : ""
+        }
         onLineShot={handleWizardLineShot}
         onMoveAttack={handleWizardMoveAttack}
       />
