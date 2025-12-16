@@ -93,9 +93,6 @@ const BOARD_THEME = {
   beamNodeGlow: 'rgba(56, 189, 248, 0.55)',
   beamTarget: 'rgba(239, 68, 68, 0.95)',
   beamTargetGlow: 'rgba(239, 68, 68, 0.55)',
-
-  // ✅ 攻擊目標「藍色框框」
-  attackBox: '#3b82f6',
 };
 
 // 這個視角是否看得到這顆棋
@@ -123,6 +120,59 @@ function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.arcTo(x, y + h, x, y, rr);
   ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
+}
+
+/**
+ * ✅ 用圖片 alpha 做「描邊」：先畫紅色剪影多次，再畫原圖
+ * 這樣攻擊目標會是「沿著棋子圖片本體外緣」紅色描邊，而不是方框/圈圈。
+ */
+function drawImageOutline(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+  color: string,
+  thickness = 2,
+) {
+  const off = document.createElement('canvas');
+  off.width = img.width;
+  off.height = img.height;
+  const octx = off.getContext('2d');
+  if (!octx) return;
+
+  octx.clearRect(0, 0, off.width, off.height);
+  octx.drawImage(img, 0, 0);
+
+  // 把圖變成單色（保留 alpha）
+  octx.globalCompositeOperation = 'source-in';
+  octx.fillStyle = color;
+  octx.fillRect(0, 0, off.width, off.height);
+  octx.globalCompositeOperation = 'source-over';
+
+  const offsets = [
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+    [-1, 0],
+    [1, 0],
+    [-1, 1],
+    [0, 1],
+    [1, 1],
+  ];
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  for (let t = 1; t <= thickness; t++) {
+    offsets.forEach(([ox, oy]) => {
+      ctx.drawImage(off, 0, 0, off.width, off.height, dx + ox * t, dy + oy * t, dw, dh);
+    });
+  }
+
+  ctx.restore();
 }
 
 export default function GameBoard({
@@ -585,8 +635,8 @@ export default function GameBoard({
       const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
       const isProtected = protectionZones?.some((z) => z.row === piece.row && z.col === piece.col) || false;
 
-      // ✅ 外框樣式：glow(原本) / box(藍框框) / none
-      let outlineStyle: 'none' | 'glow' | 'box' = 'none';
+      // ✅ 外框樣式：glow(原本) / outline(攻擊目標紅描邊) / none
+      let outlineStyle: 'none' | 'glow' | 'outline' = 'none';
       let outlineColor: string | null = null;
       let outlineWidth = 0;
 
@@ -595,14 +645,15 @@ export default function GameBoard({
         outlineColor = '#fbbf24';
         outlineWidth = 3;
       } else if (swapHighlight) {
+        // ✅ 換位：用回你「藍色框起來」的效果（其實是 glow）
         outlineStyle = 'glow';
         outlineColor = '#3b82f6';
         outlineWidth = 3;
       } else if (attackHighlight) {
-        // ✅ 攻擊目標：不要紅色圈圈 → 改成藍色「框框」
-        outlineStyle = 'box';
-        outlineColor = BOARD_THEME.attackBox;
-        outlineWidth = 2.5;
+        // ✅ 攻擊目標：紅色描邊（沿圖片形狀，不是方框）
+        outlineStyle = 'outline';
+        outlineColor = '#ef4444';
+        outlineWidth = 2;
       } else if (isProtected) {
         outlineStyle = 'glow';
         outlineColor = '#06b6d4';
@@ -627,7 +678,7 @@ export default function GameBoard({
         ctx.globalAlpha = 0.5;
       }
 
-      // ✅ 原本的「圈圈感」來源：shadow + 多偏移畫圖（glow）
+      // ✅ 原本的 glow（保留：選取 / 換位 / 守護 / 啟動吟遊）
       if (outlineStyle === 'glow' && outlineColor && outlineWidth > 0) {
         ctx.save();
         ctx.shadowColor = outlineColor;
@@ -661,6 +712,20 @@ export default function GameBoard({
         ctx.restore();
       }
 
+      // ✅ 攻擊目標：先畫紅色描邊（沿圖片外緣）
+      if (outlineStyle === 'outline' && outlineColor && outlineWidth > 0) {
+        drawImageOutline(
+          ctx,
+          baseImg,
+          drawX - displaySize / 2,
+          drawY - displaySize / 2,
+          displaySize,
+          displaySize,
+          outlineColor,
+          Math.max(1, Math.round(outlineWidth)),
+        );
+      }
+
       // 先畫棋子
       ctx.drawImage(
         baseImg,
@@ -673,24 +738,6 @@ export default function GameBoard({
         displaySize,
         displaySize,
       );
-
-      // ✅ 攻擊目標藍框框（不是圈圈）
-      if (outlineStyle === 'box' && outlineColor && outlineWidth > 0) {
-        const pad = 4;
-        const x = drawX - displaySize / 2 - pad;
-        const y = drawY - displaySize / 2 - pad;
-        const w = displaySize + pad * 2;
-        const h = displaySize + pad * 2;
-
-        ctx.save();
-        ctx.strokeStyle = outlineColor;
-        ctx.lineWidth = outlineWidth;
-        ctx.shadowColor = outlineColor;
-        ctx.shadowBlur = 6;
-        drawRoundRect(ctx, x, y, w, h, 10);
-        ctx.stroke();
-        ctx.restore();
-      }
 
       ctx.restore();
     });
@@ -844,7 +891,7 @@ export default function GameBoard({
         onMouseLeave={() => setHoveredNode(null)}
       />
       <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        綠=移動、藍=換位、藍框=可攻擊（選到巫師時：可用導線＝黃線＋藍點，命中目標＝紅點）
+        綠=移動、藍=換位、紅描邊=可攻擊（選到巫師時：可用導線＝黃線＋藍點，命中目標＝紅點）
       </p>
     </div>
   );
