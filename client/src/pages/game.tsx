@@ -2064,7 +2064,7 @@ export default function Game() {
           setSelectedPieceIndex(-1);
           setHighlights([]);
           setDragonPathNodes([]);
-          setProtectionZones[]);
+          setProtectionZones([]);
           setWizardBeam(null);
           return;
         } else {
