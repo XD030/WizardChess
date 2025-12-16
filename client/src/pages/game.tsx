@@ -454,20 +454,6 @@ function isWizardBeamTargetAvailable(
   return beam.target.row === row && beam.target.col === col;
 }
 
-function isAdjacentCell(
-  r1: number,
-  c1: number,
-  r2: number,
-  c2: number,
-  allNodes: NodePosition[],
-  adjacency: number[][]
-): boolean {
-  const a = allNodes.findIndex((n) => n.row === r1 && n.col === c1);
-  const b = allNodes.findIndex((n) => n.row === r2 && n.col === c2);
-  if (a === -1 || b === -1) return false;
-  return !!adjacency[a]?.includes(b);
-}
-
 function computeAllWizardBeamTargetsSafe(
   wizard: Piece,
   pieces: Piece[],
