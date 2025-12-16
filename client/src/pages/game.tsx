@@ -453,6 +453,162 @@ function isWizardBeamTargetAvailable(
   if (!beam?.target) return false;
   return beam.target.row === row && beam.target.col === col;
 }
+
+function isAdjacentCell(
+  r1: number,
+  c1: number,
+  r2: number,
+  c2: number,
+  allNodes: NodePosition[],
+  adjacency: number[][]
+): boolean {
+  const a = allNodes.findIndex((n) => n.row === r1 && n.col === c1);
+  const b = allNodes.findIndex((n) => n.row === r2 && n.col === c2);
+  if (a === -1 || b === -1) return false;
+  return !!adjacency[a]?.includes(b);
+}
+
+function computeAllWizardBeamTargetsSafe(
+  wizard: Piece,
+  pieces: Piece[],
+  allNodes: NodePosition[],
+  adjacency: number[][],
+  holyLights: HolyLight[] = []
+): { row: number; col: number }[] {
+  if (wizard.type !== "wizard") return [];
+
+  const holySet = new Set(holyLights.map((l) => `${l.row},${l.col}`));
+
+  const idxAt = (r: number, c: number) => getPieceAt(pieces, r, c);
+
+  const isEnemyAttackable = (p: Piece) => {
+    if (p.side === wizard.side) return false;
+    if (p.type === "bard") return false;
+    return true;
+  };
+
+  const targets = new Set<string>();
+
+  type State = {
+    cur: { row: number; col: number };
+    prev: { row: number; col: number } | null;
+    dir: { dr: number; dc: number } | null;
+    consecutiveEmpty: number;
+  };
+
+  const stateKey = (s: State) =>
+    `${s.cur.row},${s.cur.col}|${s.prev ? `${s.prev.row},${s.prev.col}` : "n"}|${
+      s.dir ? `${s.dir.dr},${s.dir.dc}` : "n"
+    }|${s.consecutiveEmpty}`;
+
+  const seen = new Set<string>();
+  const stack: State[] = [
+    { cur: { row: wizard.row, col: wizard.col }, prev: null, dir: null, consecutiveEmpty: 0 },
+  ];
+
+  const canTurnHere = (r: number, c: number) => {
+    const idx = idxAt(r, c);
+    if (idx === -1) return false;
+    return isWizardConductorStrict(wizard.side, pieces[idx]);
+  };
+
+  while (stack.length > 0) {
+    const s = stack.pop()!;
+    const k = stateKey(s);
+    if (seen.has(k)) continue;
+    seen.add(k);
+
+    if (holySet.has(`${s.cur.row},${s.cur.col}`)) continue;
+
+    const curIdx = idxAt(s.cur.row, s.cur.col);
+    const curIsWizard = s.cur.row === wizard.row && s.cur.col === wizard.col;
+    const curIsEmpty = curIdx === -1;
+    const curIsConductor = !curIsWizard && !curIsEmpty && isWizardConductorStrict(wizard.side, pieces[curIdx]);
+
+    const curNodeIndex = allNodes.findIndex((n) => n.row === s.cur.row && n.col === s.cur.col);
+    if (curNodeIndex === -1) continue;
+
+    if (curIsConductor) {
+      const neigh = adjacency[curNodeIndex] || [];
+      for (const ni of neigh) {
+        const nn = allNodes[ni];
+        if (!nn) continue;
+        if (holySet.has(`${nn.row},${nn.col}`)) continue;
+
+        const nIdx = idxAt(nn.row, nn.col);
+        if (nIdx === -1) continue;
+        const p = pieces[nIdx];
+        if (isEnemyAttackable(p)) targets.add(`${nn.row},${nn.col}`);
+      }
+    }
+
+    const neighbors = adjacency[curNodeIndex] || [];
+    for (const ni of neighbors) {
+      const nn = allNodes[ni];
+      if (!nn) continue;
+      if (holySet.has(`${nn.row},${nn.col}`)) continue;
+
+      if (s.prev && nn.row === s.prev.row && nn.col === s.prev.col) continue;
+
+      const nextIdx = idxAt(nn.row, nn.col);
+      const nextIsEmpty = nextIdx === -1;
+      const nextIsConductor = !nextIsEmpty && isWizardConductorStrict(wizard.side, pieces[nextIdx]);
+
+      const ndir = { dr: nn.row - s.cur.row, dc: nn.col - s.cur.col };
+
+      if (s.dir) {
+        const turning = ndir.dr !== s.dir.dr || ndir.dc !== s.dir.dc;
+
+        if (curIsEmpty && turning) continue;
+
+        if (turning) {
+          if (curIsWizard) continue;
+          if (!canTurnHere(s.cur.row, s.cur.col)) continue;
+        }
+      }
+
+      const nextConsecutiveEmpty = nextIsEmpty ? s.consecutiveEmpty + 1 : 0;
+      if (nextConsecutiveEmpty > 1) continue;
+
+      if (!nextIsEmpty && !nextIsConductor) continue;
+
+      stack.push({
+        cur: { row: nn.row, col: nn.col },
+        prev: { row: s.cur.row, col: s.cur.col },
+        dir: s.dir ? ndir : ndir,
+        consecutiveEmpty: nextConsecutiveEmpty,
+      });
+    }
+  }
+
+  return Array.from(targets).map((key) => {
+    const [r, c] = key.split(",").map((x) => parseInt(x, 10));
+    return { row: r, col: c };
+  });
+}
+
+function mergeWizardBeamAttackHighlightsAllTargets(args: {
+  moves: MoveHighlight[];
+  targets: { row: number; col: number }[];
+  wizard: Piece;
+  pieces: Piece[];
+}): MoveHighlight[] {
+  const { moves, targets, wizard, pieces } = args;
+
+  const out = [...moves];
+  for (const t of targets) {
+    const tIdx = getPieceAt(pieces, t.row, t.col);
+    if (tIdx === -1) continue;
+    const tp = pieces[tIdx];
+    if (tp.side === wizard.side) continue;
+    if (tp.type === "bard") continue;
+
+    const already = out.some((h) => h.type === "attack" && h.row === t.row && h.col === t.col);
+    if (!already) out.push({ type: "attack" as const, row: t.row, col: t.col });
+  }
+  return out;
+}
+
 export default function Game() {
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) {
@@ -1825,21 +1981,24 @@ export default function Game() {
               holyLights,
               burnMarks
             );
-
-            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
-
-            const merged = mergeWizardBeamAttackHighlights({
+          
+            const targets = computeAllWizardBeamTargetsSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+          
+            const merged = mergeWizardBeamAttackHighlightsAllTargets({
               moves,
-              beam,
+              targets,
               wizard: piece,
               pieces: effectivePieces,
             });
-
+          
+            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+          
             setHighlights(merged);
             setDragonPathNodes([]);
             setProtectionZones([]);
             setWizardBeam(beam);
-          } else if (piece.type === "apprentice") {
+          
+} else if (piece.type === "apprentice") {
             const moves = calculateApprenticeMoves(
               piece,
               clickedPieceIdx,
@@ -2244,33 +2403,35 @@ export default function Game() {
         moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
     } else if (highlight.type === "attack") {
-      const targetIdx = clickedPieceIdx!;
-      const targetPiece = pieces[targetIdx];
-
-      const isWizard = selectedPiece.type === "wizard";
-      const isAdjacent =
-        isWizard && isAdjacentCell(selectedPiece.row, selectedPiece.col, row, col, allNodes, adjacency);
-
-      const isBeamTarget =
-        isWizard && isWizardBeamTargetAvailable(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
-
-      // ✅ 若是「相鄰且也是導線 target」：先開彈窗讓玩家選擇攻擊方式
-      // ✅ 守護會在 handleWizardLineShot / handleWizardMoveAttack 裡處理（避免彈窗被守護流程吃掉）
-      if (isWizard && isAdjacent && isBeamTarget) {
-        setWizardAttackRequest({
-          wizardIndex: selectedPieceIndex,
-          targetRow: row,
-          targetCol: col,
-          targetPieceIndex: targetIdx,
-        });
-
-        setSelectedPieceIndex(-1);
-        setHighlights([]);
-        setDragonPathNodes([]);
-        setProtectionZones([]);
-        setWizardBeam(null);
-        return;
-      }
+        const targetIdx = clickedPieceIdx!;
+        const targetPiece = pieces[targetIdx];
+      
+        const isWizard = selectedPiece.type === "wizard";
+        const isAdjacent =
+          isWizard &&
+          isAdjacentCell(selectedPiece.row, selectedPiece.col, row, col, allNodes, adjacency);
+      
+        const beamTargetsNow = isWizard
+          ? computeAllWizardBeamTargetsSafe(selectedPiece, pieces, allNodes, adjacency, holyLights)
+          : [];
+      
+        const isBeamTarget = isWizard && beamTargetsNow.some((t) => t.row === row && t.col === col);
+      
+        if (isWizard && isAdjacent && isBeamTarget) {
+          setWizardAttackRequest({
+            wizardIndex: selectedPieceIndex,
+            targetRow: row,
+            targetCol: col,
+            targetPieceIndex: targetIdx,
+          });
+      
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+          return;
+        }
 
       // ====== 守護判定（非彈窗路徑的攻擊，都直接進守護） ======
       const guardingPaladinIndices =
