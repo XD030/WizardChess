@@ -600,6 +600,191 @@ function mergeWizardBeamAttackHighlightsAllTargets(args: {
 export default function Game() {
   const isAIMoveRef = useRef(false);
 
+  // =========================
+  // ✅ Solo AI（最小改動版）：只讓 AI 自己下棋，不動其他規則/流程
+  // =========================
+
+  const aiTimerRef = useRef<number | null>(null);
+
+  const PIECE_VALUE: Record<string, number> = {
+    wizard: 100000,
+    dragon: 5000,
+    paladin: 2500,
+    assassin: 2200,
+    griffin: 2000,
+    ranger: 1800,
+    apprentice: 1200,
+    bard: 200,
+  };
+
+  function buildAttackSetForSide(side: PlayerSide, ps: Piece[]): Set<string> {
+    if (allNodes.length === 0) return new Set<string>();
+
+    const out = new Set<string>();
+
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (p.side !== side) continue;
+
+      let moves: MoveHighlight[] = [];
+
+      if (p.type === "wizard") {
+        moves = calculateWizardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+        const targets = computeAllWizardBeamTargetsSafe(p, ps, allNodes, adjacency, holyLights);
+        moves = mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: p, pieces: ps });
+      } else if (p.type === "apprentice") {
+        moves = calculateApprenticeMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "dragon") {
+        moves = calculateDragonMoves(p, i, ps, adjacency, allNodes, burnMarks, holyLights).highlights;
+      } else if (p.type === "ranger") {
+        moves = calculateRangerMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "griffin") {
+        moves = calculateGriffinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "assassin") {
+        moves = calculateAssassinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "paladin") {
+        moves = calculatePaladinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "bard") {
+        moves = calculateBardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      }
+
+      for (const h of moves) {
+        if (h.type === "attack" || h.type === "move") {
+          out.add(`${h.row},${h.col}`);
+        }
+      }
+    }
+
+    return out;
+  }
+
+  function isWizardThreatened(side: PlayerSide, ps: Piece[]): boolean {
+    const wiz = ps.find((p) => p.type === "wizard" && p.side === side);
+    if (!wiz) return false;
+    const enemySide: PlayerSide = side === "white" ? "black" : "white";
+    const enemyAtk = buildAttackSetForSide(enemySide, ps);
+    return enemyAtk.has(`${wiz.row},${wiz.col}`);
+  }
+
+  function pickBestAIMove(ps: Piece[], aiSide: PlayerSide): { from: Piece; to: { row: number; col: number } } | null {
+    if (allNodes.length === 0) return null;
+
+    const enemySide: PlayerSide = aiSide === "white" ? "black" : "white";
+    const enemyAttackSet = buildAttackSetForSide(enemySide, ps);
+    const aiWizard = ps.find((p) => p.type === "wizard" && p.side === aiSide) || null;
+    const aiWizardThreatened = aiWizard ? enemyAttackSet.has(`${aiWizard.row},${aiWizard.col}`) : false;
+
+    let best: { from: Piece; to: { row: number; col: number }; score: number } | null = null;
+
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (p.side !== aiSide) continue;
+
+      let moves: MoveHighlight[] = [];
+
+      if (p.type === "wizard") {
+        moves = calculateWizardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+        const targets = computeAllWizardBeamTargetsSafe(p, ps, allNodes, adjacency, holyLights);
+        moves = mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: p, pieces: ps });
+      } else if (p.type === "apprentice") {
+        moves = calculateApprenticeMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "dragon") {
+        moves = calculateDragonMoves(p, i, ps, adjacency, allNodes, burnMarks, holyLights).highlights;
+      } else if (p.type === "ranger") {
+        moves = calculateRangerMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "griffin") {
+        moves = calculateGriffinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "assassin") {
+        moves = calculateAssassinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "paladin") {
+        moves = calculatePaladinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      } else if (p.type === "bard") {
+        moves = calculateBardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
+      }
+
+      for (const h of moves) {
+        if (h.type !== "move" && h.type !== "attack" && h.type !== "swap") continue;
+
+        // 基礎分：吃子優先
+        let score = 1;
+
+        const tIdx = getPieceAt(ps, h.row, h.col);
+        if (tIdx !== -1) {
+          const tp = ps[tIdx];
+          if (tp.side !== aiSide) {
+            score += (PIECE_VALUE[tp.type] ?? 100) * 10;
+            if (tp.type === "wizard") score += 10000000;
+          } else {
+            // 不打自己人
+            continue;
+          }
+        }
+
+        // 保巫師：如果己方巫師正被威脅，強力偏好「能解除威脅」的走法
+        if (aiWizardThreatened) {
+          // 1) 直接用吃子解除（只做粗略：只要本步吃子就給大加成）
+          if (tIdx !== -1) score += 250000;
+
+          // 2) 移動己方巫師躲到目前敵方攻擊不到的格子
+          if (p.type === "wizard" && (h.type === "move" || h.type === "attack")) {
+            const destKey = `${h.row},${h.col}`;
+            if (!enemyAttackSet.has(destKey)) score += 200000;
+            else score -= 500000;
+          }
+        } else {
+          // 一般情況：也避免把巫師走進敵方攻擊格
+          if (p.type === "wizard" && (h.type === "move" || h.type === "attack")) {
+            const destKey = `${h.row},${h.col}`;
+            if (enemyAttackSet.has(destKey)) score -= 8000;
+          }
+        }
+
+        // 小隨機避免同分卡死
+        score += Math.random();
+
+        if (!best || score > best.score) {
+          best = { from: p, to: { row: h.row, col: h.col }, score };
+        }
+      }
+    }
+
+    return best ? { from: best.from, to: best.to } : null;
+  }
+
+  function runSimpleAIMove_AI(args: { aiSide: PlayerSide }) {
+    const { aiSide } = args;
+
+    if (isAIMoveRef.current) return;
+    if (guardRequest) return;
+    if (wizardAttackRequest) return;
+    if (winner) return;
+    if (!gameStarted) return;
+    if (playMode !== "solo") return;
+    if (currentPlayer !== aiSide) return;
+
+    const choice = pickBestAIMove(pieces, aiSide);
+    if (!choice) return;
+
+    // 用「模擬點擊」避免改動既有走子/吃子邏輯
+    isAIMoveRef.current = true;
+
+    // 清掉可能殘留的 timer
+    if (aiTimerRef.current) {
+      window.clearTimeout(aiTimerRef.current);
+      aiTimerRef.current = null;
+    }
+
+    // 先選子
+    handleNodeClick(choice.from.row, choice.from.col);
+
+    // 再走子（下一個 event loop，確保 highlights 已更新）
+    aiTimerRef.current = window.setTimeout(() => {
+      handleNodeClick(choice.to.row, choice.to.col);
+      isAIMoveRef.current = false;
+      aiTimerRef.current = null;
+    }, 80);
+  }
+
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -672,22 +857,78 @@ export default function Game() {
 
   const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">("spectator");
   const [playMode, setPlayMode] = useState<PlayMode>("pvp");
+  // ✅ Solo (vs AI) — 人類玩家扮演哪一邊
+  const [soloHumanSide, setSoloHumanSide] = useState<PlayerSide>("white");
+  const soloAiSide: PlayerSide = soloHumanSide === "white" ? "black" : "white";
   // ===== SOLO AI TURN (FIXED) =====
   useEffect(() => {
     if (playMode !== "solo") return;
+    if (!gameStarted) return;
     if (winner) return;
 
-    const aiSide: PlayerSide = localSide === "white" ? "black" : "white";
-    if (currentPlayer !== aiSide) return;
+    // 讓 AI 才會動（玩家那邊不要被影響）
+    if (currentPlayer !== soloAiSide) return;
 
-    const t = setTimeout(() => {
-      isAIMoveRef.current = true;
-      runSimpleAIMove_AI();
-      isAIMoveRef.current = false;
-    }, 300);
+    // 若正在處理守護或巫師選擇攻擊方式，先等流程結束
+    if (guardRequest) return;
+    if (wizardAttackRequest) return;
 
-    return () => clearTimeout(t);
-  }, [playMode, currentPlayer, winner, localSide]);
+    runSimpleAIMove_AI({ aiSide: soloAiSide });
+  }, [
+    playMode,
+    gameStarted,
+    winner,
+    currentPlayer,
+    soloAiSide,
+    guardRequest,
+    wizardAttackRequest,
+    pieces,
+    allNodes.length,
+    adjacency.length,
+    holyLights.length,
+    burnMarks.length,
+  ]);
+
+  // ✅ AI 當守方有守護時，直接自動選一個守護（避免單人模式卡住）
+  useEffect(() => {
+    if (playMode !== "solo") return;
+    if (!guardRequest) return;
+    if (winner) return;
+
+    if (guardRequest.defenderSide !== soloAiSide) return;
+
+    if (!guardOptions || guardOptions.length === 0) {
+      // 沒守護選項就直接不守（保險）
+      handleGuardDecline();
+      return;
+    }
+
+    // 簡單策略：永遠選第一個守護聖騎士
+    const first = guardOptions[0];
+    setSelectedGuardPaladinIndex(first.paladinIndex);
+
+    const t = window.setTimeout(() => {
+      handleGuardConfirm();
+    }, 50);
+
+    return () => window.clearTimeout(t);
+  }, [playMode, guardRequest, guardOptions, winner, soloAiSide]);
+
+  // ✅ AI 遇到「巫師相鄰且同時可導線/可移動」的選擇時，自動選導線射擊（不把巫師往前送）
+  useEffect(() => {
+    if (playMode !== "solo") return;
+    if (!wizardAttackRequest) return;
+    if (winner) return;
+
+    // 只有 AI 自己在攻擊時才自動選
+    if (currentPlayer !== soloAiSide) return;
+
+    const t = window.setTimeout(() => {
+      handleWizardLineShot();
+    }, 30);
+
+    return () => window.clearTimeout(t);
+  }, [playMode, wizardAttackRequest, winner, currentPlayer, soloAiSide]);
 
 
   const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
@@ -705,7 +946,9 @@ export default function Game() {
   const canPlay =
     !winner &&
     gameStarted &&
-    (playMode === "solo" ? true : localSide !== "spectator" && localSide === currentPlayer);
+    (playMode === "solo"
+      ? (localSide !== "spectator" && (localSide as PlayerSide) === currentPlayer) || isAIMoveRef.current
+      : localSide !== "spectator" && localSide === currentPlayer);
 
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [inRoom, setInRoom] = useState(false);
@@ -889,6 +1132,7 @@ export default function Game() {
     ws.send(JSON.stringify({ type: "state", state: next, from: clientIdRef.current }));
   }
   function startSoloGame() {
+    // ✅ 進入單人（AI）模式：先進準備階段，讓玩家選「我玩白/黑」
     setPlayMode("solo");
     setRoomError(null);
     setSeatError(null);
@@ -899,8 +1143,11 @@ export default function Game() {
     };
 
     setSeats(newSeats);
-    setLocalSide("white");
     setInRoom(true);
+
+    // 預設玩家先選白（可在準備階段切換）
+    setSoloHumanSide("white");
+    setLocalSide("white");
 
     const initial: SyncedState = {
       pieces: ensureDragonTags(getInitialPieces()),
@@ -913,8 +1160,8 @@ export default function Game() {
       seats: newSeats,
       startingPlayer: "white",
       startingMode: "manual",
-      ready: { white: true, black: true },
-      gameStarted: true,
+      ready: { white: false, black: false },
+      gameStarted: false,
       pendingGuard: null,
     };
 
@@ -1261,6 +1508,37 @@ export default function Game() {
       startingMode,
       ready: newReady,
       gameStarted: newGameStarted,
+      pendingGuard: null,
+    };
+
+    applySyncedState(nextState);
+    broadcastState(nextState);
+  }
+
+  // ✅ 單人（AI）模式：直接開始（玩家已選邊）
+  function handleStartSoloMatch() {
+    if (playMode !== "solo") return;
+    if (!inRoom) return;
+
+    const newSeats: Seats = {
+      whiteOwnerId: clientIdRef.current,
+      blackOwnerId: clientIdRef.current,
+    };
+    setSeats(newSeats);
+
+    const nextState: SyncedState = {
+      pieces,
+      currentPlayer: startingPlayer,
+      moveHistory,
+      burnMarks,
+      holyLights,
+      capturedPieces,
+      winner,
+      seats: newSeats,
+      startingPlayer,
+      startingMode,
+      ready: { white: true, black: true },
+      gameStarted: true,
       pendingGuard: null,
     };
 
@@ -2851,7 +3129,9 @@ export default function Game() {
   const isMyTurn =
     !winner &&
     gameStarted &&
-    (playMode === "solo" ? true : localSide !== "spectator" && localSide === boardState.currentPlayer);
+    (playMode === "solo"
+      ? localSide !== "spectator" && (localSide as PlayerSide) === boardState.currentPlayer
+      : localSide !== "spectator" && localSide === boardState.currentPlayer);
 
   const displayPieces: Piece[] = isObserving
     ? boardState.pieces.map((p) => (p.type === "assassin" ? { ...p, stealthed: false } : p))
@@ -2968,6 +3248,97 @@ export default function Game() {
 
   if (inRoom && !gameStarted) {
     const startingText = startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
+
+    // ✅ 單人（AI）模式：準備階段（選我玩白/黑）
+    if (playMode === "solo") {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+          <div className="w-full max-w-xl rounded-2xl bg-slate-900/60 border border-slate-700 p-6 space-y-5">
+            <div className="space-y-1">
+              <div className="text-2xl font-bold">單人（AI）</div>
+              <div className="text-sm text-slate-300">
+                選擇「我玩白 / 我玩黑」，然後開始。AI 會在它的回合自動走棋（優先吃子 / 保巫師）。
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm text-slate-300">我方顏色</div>
+              <div className="flex gap-3">
+                <button
+                  className={`px-4 py-2 rounded-xl border ${
+                    soloHumanSide === "white"
+                      ? "bg-slate-100 text-slate-900 border-slate-100"
+                      : "bg-transparent text-slate-100 border-slate-600"
+                  }`}
+                  onClick={() => {
+                    setSoloHumanSide("white");
+                    setLocalSide("white");
+                  }}
+                >
+                  我玩白
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-xl border ${
+                    soloHumanSide === "black"
+                      ? "bg-slate-100 text-slate-900 border-slate-100"
+                      : "bg-transparent text-slate-100 border-slate-600"
+                  }`}
+                  onClick={() => {
+                    setSoloHumanSide("black");
+                    setLocalSide("black");
+                  }}
+                >
+                  我玩黑
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm text-slate-300">先手設定</div>
+              <div className="flex items-center gap-3">
+                <button
+                  className="px-3 py-2 rounded-xl border border-slate-600 hover:bg-slate-800"
+                  onClick={handleToggleStartingPlayer}
+                >
+                  {startingText}
+                </button>
+                <button
+                  className="px-3 py-2 rounded-xl border border-slate-600 hover:bg-slate-800"
+                  onClick={handleRandomStartingPlayer}
+                >
+                  隨機
+                </button>
+              </div>
+              <div className="text-xs text-slate-400">
+                目前：你是{soloHumanSide === "white" ? "白" : "黑"}，AI 是{soloAiSide === "white" ? "白" : "黑"}。
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                className="flex-1 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400"
+                onClick={handleStartSoloMatch}
+              >
+                開始
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl border border-slate-600 hover:bg-slate-800"
+                onClick={() => {
+                  setInRoom(false);
+                  setPlayMode("pvp");
+                  setRoomError(null);
+                  setSeatError(null);
+                  setLocalSide("spectator");
+                }}
+              >
+                返回
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
