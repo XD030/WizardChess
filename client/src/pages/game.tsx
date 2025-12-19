@@ -670,6 +670,9 @@ export default function Game() {
   const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">("spectator");
   const [playMode, setPlayMode] = useState<PlayMode>("pvp");
 
+  // ✅ AI 對戰：玩家在單機模式可選擇自己要玩白/黑
+  const [soloHumanSide, setSoloHumanSide] = useState<PlayerSide>("white");
+
   const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
     if (!piece) return false;
     if (playMode === "solo") return false;
@@ -685,7 +688,9 @@ export default function Game() {
   const canPlay =
     !winner &&
     gameStarted &&
-    (playMode === "solo" ? true : localSide !== "spectator" && localSide === currentPlayer);
+    (playMode === "solo"
+      ? currentPlayer === soloHumanSide
+      : localSide !== "spectator" && localSide === currentPlayer);
 
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [inRoom, setInRoom] = useState(false);
@@ -868,38 +873,41 @@ export default function Game() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: "state", state: next, from: clientIdRef.current }));
   }
-  function startSoloGame() {
-    setPlayMode("solo");
-    setRoomError(null);
-    setSeatError(null);
+  function startSoloGame(humanSide: PlayerSide) {
+  setPlayMode("solo");
+  setRoomError(null);
+  setSeatError(null);
 
-    const newSeats: Seats = {
-      whiteOwnerId: clientIdRef.current,
-      blackOwnerId: clientIdRef.current,
-    };
+  setSoloHumanSide(humanSide);
 
-    setSeats(newSeats);
-    setLocalSide("white");
-    setInRoom(true);
+  const newSeats: Seats = {
+    whiteOwnerId: clientIdRef.current,
+    blackOwnerId: clientIdRef.current,
+  };
 
-    const initial: SyncedState = {
-      pieces: ensureDragonTags(getInitialPieces()),
-      currentPlayer: "white",
-      moveHistory: [],
-      burnMarks: [],
-      holyLights: [],
-      capturedPieces: { white: [], black: [], neutral: [] },
-      winner: null,
-      seats: newSeats,
-      startingPlayer: "white",
-      startingMode: "manual",
-      ready: { white: true, black: true },
-      gameStarted: true,
-      pendingGuard: null,
-    };
+  setSeats(newSeats);
+  setLocalSide(humanSide);
+  setInRoom(true);
 
-    applySyncedState(initial);
-  }
+  const initial: SyncedState = {
+    pieces: ensureDragonTags(getInitialPieces()),
+    currentPlayer: "white",
+    moveHistory: [],
+    burnMarks: [],
+    holyLights: [],
+    capturedPieces: { white: [], black: [], neutral: [] },
+    winner: null,
+    seats: newSeats,
+    startingPlayer: "white",
+    startingMode: "manual",
+    ready: { white: true, black: true },
+    gameStarted: true,
+    pendingGuard: null,
+  };
+
+  applySyncedState(initial);
+}
+
 
   useEffect(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -1019,7 +1027,7 @@ export default function Game() {
 
   function handleRestartGame() {
     if (playMode === "solo") {
-      startSoloGame();
+      startSoloGame(soloHumanSide);
       setShowEndModal(false);
       setViewSnapshotIndex(null);
       return;
@@ -2809,6 +2817,307 @@ export default function Game() {
     broadcastState(syncState);
   };
 
+
+  // =========================================================
+  // ✅ AI 對戰（單機）
+  // - 可選「我玩白 / 我玩黑」
+  // - 簡易策略：優先吃子 / 保巫師
+  // =========================================================
+
+  const aiSide: PlayerSide | null = playMode === "solo" ? (soloHumanSide === "white" ? "black" : "white") : null;
+
+  const pieceValue = (p: Piece): number => {
+    switch (p.type) {
+      case "wizard":
+        return 10000;
+      case "dragon":
+        return 900;
+      case "paladin":
+        return 700;
+      case "griffin":
+        return 520;
+      case "ranger":
+        return 480;
+      case "assassin":
+        return 460;
+      case "apprentice":
+        return 260;
+      case "bard":
+        return 10; // 幾乎不能擊殺
+      default:
+        return 100;
+    }
+  };
+
+  const computeHighlightsForAI = (piece: Piece, pieceIndex: number, ps: Piece[]): MoveHighlight[] => {
+    if (allNodes.length === 0) return [];
+
+    if (piece.type === "wizard") {
+      const moves = calculateWizardMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+      const targets = computeAllWizardBeamTargetsSafe(piece, ps, allNodes, adjacency, holyLights);
+      return mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: piece, pieces: ps });
+    }
+
+    if (piece.type === "apprentice")
+      return calculateApprenticeMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "dragon") return calculateDragonMoves(piece, pieceIndex, ps, adjacency, allNodes, burnMarks, holyLights).highlights;
+
+    if (piece.type === "ranger") return calculateRangerMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "griffin") return calculateGriffinMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "assassin")
+      return calculateAssassinMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "paladin") return calculatePaladinMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "bard") return calculateBardMoves(piece, pieceIndex, ps, adjacency, allNodes, holyLights, burnMarks);
+
+    return [];
+  };
+
+  const chooseAIMove = (ps: Piece[]): { fromIdx: number; to: { row: number; col: number } } | null => {
+    if (!aiSide) return null;
+
+    let best: { fromIdx: number; to: { row: number; col: number }; score: number } | null = null;
+
+    const myWizard = ps.find((p) => p.type === "wizard" && p.side === aiSide) || null;
+    const enemyWizard = ps.find((p) => p.type === "wizard" && p.side !== aiSide) || null;
+
+    const scoreSafety = (nextPs: Piece[]): number => {
+      // ✅ 保巫師：若我方巫師被吃掉，極大扣分；若對方巫師被吃掉，極大加分
+      const hasMyWiz = nextPs.some((p) => p.type === "wizard" && p.side === aiSide);
+      const hasEnemyWiz = nextPs.some((p) => p.type === "wizard" && p.side !== aiSide);
+      if (!hasMyWiz) return -1e9;
+      if (!hasEnemyWiz) return 1e9;
+
+      // 簡易物質分：我方總價值 - 敵方總價值
+      let s = 0;
+      for (const p of nextPs) {
+        const v = pieceValue(p);
+        s += p.side === aiSide ? v : -v;
+      }
+      return s;
+    };
+
+    const quickApply = (fromIdx: number, row: number, col: number, highlight: MoveHighlight): Piece[] | null => {
+      // ⚠️ 為了讓 AI 能快速估值，這裡只做「非常粗略」的結果推估：
+      // - 只處理一般 move / attack 的吃子（不含守護、吟遊詩人換位、巫師二選一）
+      // - 主要用來「優先吃子/保巫師」選點；實際執行仍走 handleNodeClick 的完整規則
+      try {
+        const next = ps.map((p) => ({ ...p }));
+        const mover = next[fromIdx];
+        if (!mover) return null;
+
+        const targetIdx = getPieceAt(next, row, col);
+
+        // 不能吃吟遊詩人：直接視為不利
+        if (targetIdx !== -1 && next[targetIdx].type === "bard") return null;
+
+        // 粗略處理：吃子就移除
+        if (targetIdx !== -1 && next[targetIdx].side !== mover.side) {
+          next.splice(targetIdx, 1);
+          const adjFrom = targetIdx < fromIdx ? fromIdx - 1 : fromIdx;
+          next[adjFrom] = { ...next[adjFrom], row, col };
+          return ensureDragonTags(next);
+        }
+
+        if (highlight.type === "move" || highlight.type === "attack") {
+          next[fromIdx] = { ...mover, row, col };
+          return ensureDragonTags(next);
+        }
+
+        if (highlight.type === "swap") {
+          // 粗略 swap
+          if (targetIdx === -1) return null;
+          const t = next[targetIdx];
+          next[fromIdx] = { ...mover, row: t.row, col: t.col };
+          next[targetIdx] = { ...t, row: mover.row, col: mover.col };
+          return ensureDragonTags(next);
+        }
+
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (p.side !== aiSide) continue;
+
+      const hs = computeHighlightsForAI(p, i, ps);
+
+      for (const h of hs) {
+        // 只考慮會改變局面的：move/attack/swap
+        if (h.type !== "move" && h.type !== "attack" && h.type !== "swap") continue;
+
+        const tIdx = getPieceAt(ps, h.row, h.col);
+        const tp = tIdx !== -1 ? ps[tIdx] : null;
+
+        // ✅ 優先吃子：若能直接打到敵方巫師
+        let immediate = 0;
+        if (tp && tp.side !== aiSide && tp.type === "wizard") immediate += 5e8;
+
+        // ✅ 其次：一般吃子（排除 bard）
+        if (tp && tp.side !== aiSide && tp.type !== "bard") immediate += pieceValue(tp) * 1000;
+
+        // 粗略估值：保巫師 + 物質分
+        const nextPs = quickApply(i, h.row, h.col, h);
+        const safety = nextPs ? scoreSafety(nextPs) : -1e8;
+
+        const score = immediate + safety;
+
+        if (!best || score > best.score) {
+          best = { fromIdx: i, to: { row: h.row, col: h.col }, score };
+        }
+      }
+    }
+
+    // 如果完全沒找到，就隨便走一步（避免卡死）
+    if (!best) {
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
+        if (p.side !== aiSide) continue;
+        const hs = computeHighlightsForAI(p, i, ps);
+        const first = hs.find((h) => h.type === "move" || h.type === "attack" || h.type === "swap");
+        if (first) return { fromIdx: i, to: { row: first.row, col: first.col } };
+      }
+      return null;
+    }
+
+    return { fromIdx: best.fromIdx, to: best.to };
+  };
+
+  const aiThinkingRef = useRef(false);
+
+  const runAIMove = () => {
+    if (aiThinkingRef.current) return;
+    if (!aiSide) return;
+    if (winner || !gameStarted) return;
+    if (currentPlayer !== aiSide) return;
+    if (guardRequest || wizardAttackRequest || bardNeedsSwap) return;
+    if (allNodes.length === 0) return;
+
+    aiThinkingRef.current = true;
+
+    const action = chooseAIMove(pieces);
+    if (!action) {
+      aiThinkingRef.current = false;
+      return;
+    }
+
+    const { fromIdx, to } = action;
+    const p = pieces[fromIdx];
+    if (!p) {
+      aiThinkingRef.current = false;
+      return;
+    }
+
+    const hs = computeHighlightsForAI(p, fromIdx, pieces);
+    const h = hs.find((x) => x.row === to.row && x.col === to.col);
+    if (!h) {
+      aiThinkingRef.current = false;
+      return;
+    }
+
+    // ✅ 先把選取/高亮設好，再用「點擊」走既有完整規則（包含守護/巫師二選一/灼痕等）
+    setSelectedPieceIndex(fromIdx);
+
+    // wizard 的 beam 顯示
+    if (p.type === "wizard") {
+      const beam = computeWizardBeamSafe(p, pieces, allNodes, adjacency, holyLights);
+      setWizardBeam(beam);
+    } else {
+      setWizardBeam(null);
+    }
+
+    setHighlights(hs);
+    setDragonPathNodes([]);
+    setProtectionZones([]);
+
+    // 等 state 生效後，再觸發 click
+    setTimeout(() => {
+      try {
+        handleNodeClick(to.row, to.col);
+      } finally {
+        // handleNodeClick 可能開啟 guard / wizardAttack / bardSwap
+        setTimeout(() => {
+          aiThinkingRef.current = false;
+        }, 0);
+      }
+    }, 60);
+  };
+
+  // ✅ AI：自動處理「守護」與「巫師二選一」與「吟遊詩人換位」
+  useEffect(() => {
+    if (playMode !== "solo") return;
+    if (!aiSide) return;
+    if (winner || !gameStarted) return;
+
+    // AI 守護：若輪到 AI 防守，直接選第一個守護（偏保命）
+    if (guardRequest && guardRequest.defenderSide === aiSide && guardOptions.length > 0) {
+      if (selectedGuardPaladinIndex == null) {
+        setSelectedGuardPaladinIndex(guardOptions[0].paladinIndex);
+      }
+      setTimeout(() => {
+        handleGuardConfirm();
+      }, 120);
+      return;
+    }
+
+    // AI：巫師攻擊二選一（優先導線射擊＝更保巫師）
+    if (wizardAttackRequest && currentPlayer === aiSide) {
+      setTimeout(() => {
+        handleWizardLineShot();
+      }, 120);
+      return;
+    }
+
+    // AI：吟遊詩人換位（隨便挑一顆己方可換的棋子）
+    if (bardNeedsSwap && currentPlayer === aiSide) {
+      const candidates = pieces
+        .map((p, idx) => ({ p, idx }))
+        .filter(({ p }) => p.side === aiSide && p.type !== "bard" && p.type !== "dragon" && p.type !== "wizard");
+
+      if (candidates.length > 0) {
+        const t = candidates[0].p;
+        setTimeout(() => {
+          handleNodeClick(t.row, t.col);
+        }, 120);
+      } else {
+        // 沒得換：直接取消（避免卡死）
+        setBardNeedsSwap(null);
+        setSelectedPieceIndex(-1);
+        setHighlights([]);
+        setWizardBeam(null);
+      }
+      return;
+    }
+
+    // AI：輪到 AI 下棋就走一步
+    if (!guardRequest && !wizardAttackRequest && !bardNeedsSwap && currentPlayer === aiSide) {
+      const t = setTimeout(() => runAIMove(), 160);
+      return () => clearTimeout(t);
+    }
+  }, [
+    playMode,
+    aiSide,
+    winner,
+    gameStarted,
+    currentPlayer,
+    pieces,
+    guardRequest,
+    guardOptions,
+    selectedGuardPaladinIndex,
+    wizardAttackRequest,
+    bardNeedsSwap,
+    allNodes.length,
+  ]);
+
+
+
   const boardState: SyncedState =
     isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
       ? snapshots[viewSnapshotIndex]
@@ -2831,7 +3140,9 @@ export default function Game() {
   const isMyTurn =
     !winner &&
     gameStarted &&
-    (playMode === "solo" ? true : localSide !== "spectator" && localSide === boardState.currentPlayer);
+    (playMode === "solo"
+      ? boardState.currentPlayer === soloHumanSide
+      : localSide !== "spectator" && localSide === boardState.currentPlayer);
 
   const displayPieces: Piece[] = isObserving
     ? boardState.pieces.map((p) => (p.type === "assassin" ? { ...p, stealthed: false } : p))
@@ -2899,12 +3210,25 @@ export default function Game() {
                 PVP 連線
               </button>
 
-              <button
-                onClick={startSoloGame}
-                className="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
-              >
-                單機
-              </button>
+              <div className="flex-1 flex flex-col gap-2">
+  <div className="flex gap-2">
+    <button
+      onClick={() => startSoloGame("white")}
+      className="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+    >
+      AI 對戰：我玩白
+    </button>
+    <button
+      onClick={() => startSoloGame("black")}
+      className="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+    >
+      AI 對戰：我玩黑
+    </button>
+  </div>
+  <div className="text-[11px] text-slate-400 text-center">
+    AI 策略：優先吃子／保巫師（簡易啟發式）
+  </div>
+</div>
             </div>
 
             {playMode === "pvp" && (
