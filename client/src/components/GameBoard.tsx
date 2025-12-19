@@ -626,52 +626,56 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // --- 座標標籤 A~I / 1~9（✅ 放到棋盤外面，且跟著翻面位置）---
+    // --- 座標標籤 A~I / 1~9（貼齊每排最左/最右節點，且跟著翻面）---
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = BOARD_THEME.labelText;
     
-    // 先算出「翻面後」所有節點的 bounding box
+    // 標籤離節點的距離（可調）
+    const PAD = 12;
+    
+    // 先算出「翻面後」整個棋盤的 bounding box（用來判斷外側方向）
     let minX = Infinity;
     let maxX = -Infinity;
-    
     for (const n of allNodes) {
       const v = vPoint(n);
       if (v.x < minX) minX = v.x;
       if (v.x > maxX) maxX = v.x;
     }
     
-    // 往外推的距離（可自行調大/小）
-    const OUT = 26;
-    
-    // 固定放在棋盤外的左右兩側
-    const labelXRight = maxX + OUT; // 英文字母
-    const labelXLeft = minX - OUT;  // 數字
-    
-    // A~I（每一排的「最右節點」取 y，x 固定在棋盤外右側）
+    // A~I：貼在每排「最右節點」外側
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     rowLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         const v = vPoint(rightNode);
     
+        // 右端點要往外側推：永遠朝「maxX 外面」推
+        const dir = v.x >= (minX + maxX) / 2 ? 1 : 1; //（右側永遠 +x）
+        const x = v.x + PAD * dir;
+    
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, labelXRight, v.y - 5);
+        ctx.fillText(label, x, v.y - 5);
       }
     });
     
-    // 1~9（每一排的「最左節點」取 y，x 固定在棋盤外左側）
+    // 1~9：貼在每排「最左節點」外側
     const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
     colLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const leftNode = rows[rowIdx][0];
         const v = vPoint(leftNode);
     
+        // 左端點要往外側推：永遠朝「minX 外面」推
+        const dir = v.x <= (minX + maxX) / 2 ? -1 : -1; //（左側永遠 -x）
+        const x = v.x + PAD * dir;
+    
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, labelXLeft, v.y - 5);
+        ctx.fillText(label, x, v.y - 5);
       }
     });
+
 
 
     // --- 棋子（圖片） ---
