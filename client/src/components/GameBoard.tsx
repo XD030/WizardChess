@@ -626,56 +626,60 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // --- 座標標籤 A~I / 1~9（貼齊每排最左/最右節點，且跟著翻面）---
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillStyle = BOARD_THEME.labelText;
-    
-    // 標籤離節點的距離（可調）
-    const PAD = 12;
-    
-    // 先算出「翻面後」整個棋盤的 bounding box（用來判斷外側方向）
-    let minX = Infinity;
-    let maxX = -Infinity;
-    for (const n of allNodes) {
-      const v = vPoint(n);
-      if (v.x < minX) minX = v.x;
-      if (v.x > maxX) maxX = v.x;
-    }
-    
-    // A~I：貼在每排「最右節點」外側
-    const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-    rowLabels.forEach((label, rowIdx) => {
-      if (rowIdx < rows.length && rowIdx <= 8) {
-        const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
-        const v = vPoint(rightNode);
-    
-        // 右端點要往外側推：永遠朝「maxX 外面」推
-        const dir = v.x >= (minX + maxX) / 2 ? 1 : 1; //（右側永遠 +x）
-        const x = v.x + PAD * dir;
-    
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, x, v.y - 5);
-      }
-    });
-    
-    // 1~9：貼在每排「最左節點」外側
-    const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    colLabels.forEach((label, rowIdx) => {
-      if (rowIdx < rows.length && rowIdx <= 8) {
-        const leftNode = rows[rowIdx][0];
-        const v = vPoint(leftNode);
-    
-        // 左端點要往外側推：永遠朝「minX 外面」推
-        const dir = v.x <= (minX + maxX) / 2 ? -1 : -1; //（左側永遠 -x）
-        const x = v.x + PAD * dir;
-    
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, x, v.y - 5);
-      }
-    });
+    // --- 座標標籤 A~I / 1~9（貼齊每排最左/最右節點，永遠往外側推）---
+ctx.font = 'bold 14px sans-serif';
+ctx.fillStyle = BOARD_THEME.labelText;
 
+const PAD = 14; // 距離外推（可調 10~18）
+
+// 用 vPoint 後的節點算出棋盤中心（翻面後也正確）
+let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+for (const n of allNodes) {
+  const v = vPoint(n);
+  if (v.x < minX) minX = v.x;
+  if (v.x > maxX) maxX = v.x;
+  if (v.y < minY) minY = v.y;
+  if (v.y > maxY) maxY = v.y;
+}
+const cx = (minX + maxX) / 2;
+const cy = (minY + maxY) / 2;
+
+// 把點沿「中心→端點」方向外推，保證在外側
+function pushOut(p: { x: number; y: number }, amount: number) {
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: p.x + (dx / len) * amount, y: p.y + (dy / len) * amount };
+}
+
+// A~I：每排最右端點
+const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+rowLabels.forEach((label, rowIdx) => {
+  if (rowIdx < rows.length && rowIdx <= 8) {
+    const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
+    const v = vPoint(rightNode);
+    const out = pushOut(v, PAD);
+
+    // 依外推方向決定對齊，避免文字蓋到棋盤
+    ctx.textAlign = out.x >= cx ? 'left' : 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, out.x, out.y);
+  }
+});
+
+// 1~9：每排最左端點
+const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+colLabels.forEach((label, rowIdx) => {
+  if (rowIdx < rows.length && rowIdx <= 8) {
+    const leftNode = rows[rowIdx][0];
+    const v = vPoint(leftNode);
+    const out = pushOut(v, PAD);
+
+    ctx.textAlign = out.x >= cx ? 'left' : 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, out.x, out.y);
+  }
+});
 
 
     // --- 棋子（圖片） ---
