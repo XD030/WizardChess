@@ -61,7 +61,7 @@ interface GameBoardProps {
     attackerCol: number;
   } | null;
 
-  // ✅ 巫師導線（保留資料結構，但此檔案不做任何路徑視覺化繪製）
+  // ✅ 巫師導線（由 Game.tsx 計算後傳進來）
   wizardBeam?: WizardBeamResult | null;
 }
 
@@ -84,6 +84,14 @@ const BOARD_THEME = {
 
   // ==== 座標文字 ====
   labelText: 'rgba(255, 255, 255, 0.85)',
+
+  // ==== ✅ 巫師導線顏色（線：黃金；路徑點：青藍；目標：紅） ====
+  beamLine: 'rgba(250, 204, 21, 0.85)',
+  beamGlow: 'rgba(250, 204, 21, 0.55)',
+  beamNode: 'rgba(56, 189, 248, 0.95)',
+  beamNodeGlow: 'rgba(56, 189, 248, 0.55)',
+  beamTarget: 'rgba(239, 68, 68, 0.95)',
+  beamTargetGlow: 'rgba(239, 68, 68, 0.55)',
 };
 
 // 這個視角是否看得到這顆棋
@@ -100,17 +108,6 @@ function isPieceVisible(piece: Piece, viewerSide: 'white' | 'black' | 'spectator
 
 function posKey(row: number, col: number) {
   return `${row},${col}`;
-}
-
-function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
 }
 
 /**
@@ -178,13 +175,19 @@ export default function GameBoard({
   viewerSide,
   observing,
   guardPreview,
-  wizardBeam, // ✅ 保留但不使用（避免 eslint 可加 _wizardBeam）
+  wizardBeam,
 }: GameBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoveredNode, setHoveredNode] = useState<{ row: number; col: number } | null>(null);
   const [rows, setRows] = useState<{ x: number; y: number }[][]>([]);
   const [allNodes, setAllNodes] = useState<NodePosition[]>([]);
   const [adjacency, setAdjacency] = useState<number[][]>([]);
+
+  // ✅✅✅ 黑方視角翻面（UI-only）
+  const shouldFlip = viewerSide === 'black' && viewerSide !== 'spectator';
+  const vx = (x: number) => (shouldFlip ? LOGICAL_SIZE - x : x);
+  const vy = (y: number) => (shouldFlip ? LOGICAL_SIZE - y : y);
+  const vPoint = (p: { x: number; y: number }) => ({ x: vx(p.x), y: vy(p.y) });
 
   // ===== 棋子圖片 =====
   const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement | null>>({});
@@ -291,7 +294,7 @@ export default function GameBoard({
     setAdjacency(newAdjacency);
   }, []);
 
-  // 偵測棋子位移 → 啟動動畫
+  // 偵測棋子位移 → 啟動動畫（注意：animState 存的是「原始座標」，畫的時候再 vx/vy）
   useEffect(() => {
     if (!allNodes.length) {
       prevPiecesRef.current = pieces;
@@ -325,7 +328,6 @@ export default function GameBoard({
 
     prevPiecesRef.current = pieces;
   }, [pieces, allNodes]);
-
   // ========= 繪圖主函式 =========
   const drawBoard = (ctx: CanvasRenderingContext2D, overridePos?: { pieceIndex: number; x: number; y: number }) => {
     ctx.clearRect(0, 0, LOGICAL_SIZE, LOGICAL_SIZE);
@@ -359,9 +361,9 @@ export default function GameBoard({
 
       if (rowB.length === rowA.length + 1) {
         for (let c = 0; c < rowA.length; c++) {
-          const p1 = rowA[c];
-          const p2 = { x: rowB[c].x, y: rowB[c].y };
-          const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
+          const p1 = vPoint(rowA[c]);
+          const p2 = vPoint(rowB[c]);
+          const p3 = vPoint(rowB[c + 1]);
 
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
@@ -372,9 +374,9 @@ export default function GameBoard({
         }
 
         for (let c = 0; c < rowA.length - 1; c++) {
-          const p1 = rowA[c];
-          const p2 = rowA[c + 1];
-          const p3 = { x: rowB[c + 1].x, y: rowB[c + 1].y };
+          const p1 = vPoint(rowA[c]);
+          const p2 = vPoint(rowA[c + 1]);
+          const p3 = vPoint(rowB[c + 1]);
 
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
@@ -385,9 +387,9 @@ export default function GameBoard({
         }
       } else if (rowA.length === rowB.length + 1) {
         for (let c = 0; c < rowB.length; c++) {
-          const p1 = rowB[c];
-          const p2 = { x: rowA[c].x, y: rowA[c].y };
-          const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
+          const p1 = vPoint(rowB[c]);
+          const p2 = vPoint(rowA[c]);
+          const p3 = vPoint(rowA[c + 1]);
 
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
@@ -398,9 +400,9 @@ export default function GameBoard({
         }
 
         for (let c = 0; c < rowB.length - 1; c++) {
-          const p1 = rowB[c];
-          const p2 = rowB[c + 1];
-          const p3 = { x: rowA[c + 1].x, y: rowA[c + 1].y };
+          const p1 = vPoint(rowB[c]);
+          const p2 = vPoint(rowB[c + 1]);
+          const p3 = vPoint(rowA[c + 1]);
 
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
@@ -420,21 +422,137 @@ export default function GameBoard({
         if (idx >= adjIdx) return;
         const adjNode = allNodes[adjIdx];
         if (!adjNode) return;
+
+        const a = vPoint(node);
+        const b = vPoint(adjNode);
+
         ctx.beginPath();
-        ctx.moveTo(node.x, node.y);
-        ctx.lineTo(adjNode.x, adjNode.y);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
         ctx.stroke();
       });
     });
 
-    // ✅✅✅ 導線路徑視覺化已移除（不畫黃線/藍點/染色）
-    // wizardBeam 仍保留在 props，以免影響 Game.tsx 邏輯
+    // =========================================================
+    // ✅ 巫師導線：只有「目前選到的棋子是巫師」才顯示（黃線＋藍點，命中目標紅點）
+    // =========================================================
+    const selectedPiece = selectedPieceIndex >= 0 ? pieces[selectedPieceIndex] : null;
+    const shouldDrawBeam = !!wizardBeam && !!selectedPiece && selectedPiece.type === 'wizard';
+
+    const getBeamEdges = (): BeamEdge[] => {
+      if (!wizardBeam) return [];
+      if (wizardBeam.pathEdges?.length) return wizardBeam.pathEdges;
+      const nodes = wizardBeam.pathNodes ?? [];
+      if (nodes.length < 2) return [];
+      return nodes.slice(0, -1).map((n, i) => ({ from: n, to: nodes[i + 1] }));
+    };
+
+    const isBeamTarget = (r: number, c: number) =>
+      !!wizardBeam?.target && wizardBeam.target.row === r && wizardBeam.target.col === c;
+
+    const drawBeamLineAndDots = () => {
+      if (!shouldDrawBeam || !wizardBeam) return;
+
+      const edges = getBeamEdges();
+      const nodes = wizardBeam.pathNodes ?? [];
+
+      // 線（glow + main）
+      if (edges.length) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // glow
+        ctx.strokeStyle = BOARD_THEME.beamGlow;
+        ctx.lineWidth = 10;
+        ctx.shadowColor = BOARD_THEME.beamGlow;
+        ctx.shadowBlur = 12;
+
+        edges.forEach((e) => {
+          const fromNode = getNode(e.from.row, e.from.col);
+          const toNode = getNode(e.to.row, e.to.col);
+          if (!fromNode || !toNode) return;
+
+          const a = vPoint(fromNode);
+          const b = vPoint(toNode);
+
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        });
+
+        // main
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = BOARD_THEME.beamLine;
+        ctx.lineWidth = 4;
+
+        edges.forEach((e) => {
+          const fromNode = getNode(e.from.row, e.from.col);
+          const toNode = getNode(e.to.row, e.to.col);
+          if (!fromNode || !toNode) return;
+
+          const a = vPoint(fromNode);
+          const b = vPoint(toNode);
+
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        });
+
+        ctx.restore();
+      }
+
+      // 點（glow + core）
+      if (nodes.length) {
+        ctx.save();
+
+        // glow dots
+        nodes.forEach((p) => {
+          const node = getNode(p.row, p.col);
+          if (!node) return;
+
+          const v = vPoint(node);
+          const target = isBeamTarget(p.row, p.col);
+
+          ctx.beginPath();
+          ctx.arc(v.x, v.y, target ? 12 : 10, 0, Math.PI * 2);
+          ctx.fillStyle = target ? BOARD_THEME.beamTargetGlow : BOARD_THEME.beamNodeGlow;
+          ctx.shadowColor = target ? BOARD_THEME.beamTargetGlow : BOARD_THEME.beamNodeGlow;
+          ctx.shadowBlur = 12;
+          ctx.fill();
+        });
+
+        // core dots
+        ctx.shadowBlur = 0;
+        nodes.forEach((p) => {
+          const node = getNode(p.row, p.col);
+          if (!node) return;
+
+          const v = vPoint(node);
+          const target = isBeamTarget(p.row, p.col);
+
+          ctx.beginPath();
+          ctx.arc(v.x, v.y, target ? 6.5 : 5.5, 0, Math.PI * 2);
+          ctx.fillStyle = target ? BOARD_THEME.beamTarget : BOARD_THEME.beamNode;
+          ctx.fill();
+        });
+
+        ctx.restore();
+      }
+    };
+
+    // ✅ 導線畫在「一般線」之上，但在「節點白點/棋子」之下（最後會再覆蓋一次）
+    drawBeamLineAndDots();
 
     // --- 節點圓點 ---
     allNodes.forEach((node) => {
       const isHovered = hoveredNode?.row === node.row && hoveredNode?.col === node.col;
+      const v = vPoint(node);
+
       ctx.beginPath();
-      ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, NODE_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = isHovered ? BOARD_THEME.nodeHover : BOARD_THEME.nodeNormal;
       ctx.fill();
     });
@@ -443,18 +561,19 @@ export default function GameBoard({
     burnMarks.forEach((mark) => {
       const node = getNode(mark.row, mark.col);
       if (!node) return;
+      const v = vPoint(node);
 
-      const g2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 14);
+      const g2 = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, 14);
       g2.addColorStop(0, 'rgba(255, 140, 0, 0.8)');
       g2.addColorStop(0.5, 'rgba(255, 69, 0, 0.6)');
       g2.addColorStop(1, 'rgba(255, 69, 0, 0)');
       ctx.beginPath();
-      ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, 14, 0, Math.PI * 2);
       ctx.fillStyle = g2;
       ctx.fill();
 
       ctx.beginPath();
-      ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#ff4500';
       ctx.fill();
     });
@@ -463,13 +582,14 @@ export default function GameBoard({
     holyLights.forEach((light) => {
       const node = getNode(light.row, light.col);
       if (!node) return;
+      const v = vPoint(node);
 
-      const g3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 16);
+      const g3 = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, 16);
       g3.addColorStop(0, 'rgba(255, 215, 0, 0.9)');
       g3.addColorStop(0.5, 'rgba(255, 255, 100, 0.6)');
       g3.addColorStop(1, 'rgba(255, 255, 200, 0)');
       ctx.beginPath();
-      ctx.arc(node.x, node.y, 16, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, 16, 0, Math.PI * 2);
       ctx.fillStyle = g3;
       ctx.fill();
 
@@ -477,16 +597,16 @@ export default function GameBoard({
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(node.x, node.y - 8);
-      ctx.lineTo(node.x, node.y + 8);
+      ctx.moveTo(v.x, v.y - 8);
+      ctx.lineTo(v.x, v.y + 8);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(node.x - 8, node.y);
-      ctx.lineTo(node.x + 8, node.y);
+      ctx.moveTo(v.x - 8, v.y);
+      ctx.lineTo(v.x + 8, v.y);
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = '#ffd700';
       ctx.fill();
     });
@@ -496,16 +616,17 @@ export default function GameBoard({
       if (h.type !== 'move') return;
       const node = getNode(h.row, h.col);
       if (!node) return;
+      const v = vPoint(node);
 
       const isHovered = hoveredNode?.row === h.row && hoveredNode?.col === h.col;
       const opacity = isHovered ? 0.7 : 0.5;
       ctx.beginPath();
-      ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, 8, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(16, 185, 129, ${opacity})`;
       ctx.fill();
     });
 
-    // --- 座標標籤 A~I / 1~9 ---
+    // --- 座標標籤 A~I / 1~9（✅ 位置也跟著翻）---
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = BOARD_THEME.labelText;
 
@@ -513,9 +634,12 @@ export default function GameBoard({
     rowLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
+        const v = vPoint(rightNode);
+
+        // ✅ 文字依然保持正常方向，只翻位置
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, rightNode.x + 10, rightNode.y - 5);
+        ctx.fillText(label, v.x + 10, v.y - 5);
       }
     });
 
@@ -523,9 +647,11 @@ export default function GameBoard({
     colLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const leftNode = rows[rowIdx][0];
+        const v = vPoint(leftNode);
+
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, leftNode.x - 10, leftNode.y - 5);
+        ctx.fillText(label, v.x - 10, v.y - 5);
       }
     });
 
@@ -539,10 +665,14 @@ export default function GameBoard({
       const node = getNode(piece.row, piece.col);
       if (!node) return;
 
+      const vp = vPoint(node);
       const displaySize = PIECE_SIZE;
 
-      const drawX = overridePos && overridePos.pieceIndex === idx ? overridePos.x : node.x;
-      const drawY = overridePos && overridePos.pieceIndex === idx ? overridePos.y : node.y;
+      // overridePos（動畫）也要翻
+      const drawX =
+        overridePos && overridePos.pieceIndex === idx ? vx(overridePos.x) : vp.x;
+      const drawY =
+        overridePos && overridePos.pieceIndex === idx ? vy(overridePos.y) : vp.y;
 
       const swapHighlight = highlights.find((h) => h.type === 'swap' && h.row === piece.row && h.col === piece.col);
       const attackHighlight = highlights.find((h) => h.type === 'attack' && h.row === piece.row && h.col === piece.col);
@@ -558,12 +688,10 @@ export default function GameBoard({
         outlineColor = '#fbbf24';
         outlineWidth = 3;
       } else if (swapHighlight) {
-        // ✅ 換位：藍色 glow
         outlineStyle = 'glow';
         outlineColor = '#3b82f6';
         outlineWidth = 3;
       } else if (attackHighlight) {
-        // ✅ 攻擊目標：紅色描邊（沿圖片形狀）
         outlineStyle = 'outline';
         outlineColor = '#ef4444';
         outlineWidth = 2;
@@ -591,7 +719,7 @@ export default function GameBoard({
         ctx.globalAlpha = 0.5;
       }
 
-      // ✅ glow（選取 / 換位 / 守護 / 啟動吟遊）
+      // ✅ 原本的 glow（選取 / 換位 / 守護 / 啟動吟遊）
       if (outlineStyle === 'glow' && outlineColor && outlineWidth > 0) {
         ctx.save();
         ctx.shadowColor = outlineColor;
@@ -625,7 +753,7 @@ export default function GameBoard({
         ctx.restore();
       }
 
-      // ✅ 攻擊目標：先畫紅色描邊（沿圖片外緣）
+      // ✅ 攻擊目標：紅色描邊（沿圖片形狀）
       if (outlineStyle === 'outline' && outlineColor && outlineWidth > 0) {
         drawImageOutline(
           ctx,
@@ -639,7 +767,7 @@ export default function GameBoard({
         );
       }
 
-      // 畫棋子
+      // 先畫棋子
       ctx.drawImage(
         baseImg,
         0,
@@ -660,13 +788,14 @@ export default function GameBoard({
       const drawGuardGlow = (row: number, col: number, color: string, radius: number) => {
         const node = getNode(row, col);
         if (!node) return;
+        const v = vPoint(node);
 
-        const g = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius);
+        const g = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, radius);
         g.addColorStop(0, color.replace('0.9', '0.0'));
         g.addColorStop(0.4, color);
         g.addColorStop(1, color.replace('0.9', '0'));
         ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        ctx.arc(v.x, v.y, radius, 0, Math.PI * 2);
         ctx.fillStyle = g;
         ctx.fill();
       };
@@ -675,6 +804,9 @@ export default function GameBoard({
       drawGuardGlow(guardPreview.targetRow, guardPreview.targetCol, 'rgba(250, 204, 21, 0.9)', 26);
       drawGuardGlow(guardPreview.attackerRow, guardPreview.attackerCol, 'rgba(248, 113, 113, 0.9)', 26);
     }
+
+    // ✅ 最後再覆蓋一次導線線/點，避免被節點白點/棋子蓋掉
+    drawBeamLineAndDots();
   };
 
   // 非動畫時重繪
@@ -701,10 +833,11 @@ export default function GameBoard({
     observing,
     guardPreview,
     pieceImages,
-    wizardBeam, // ✅ 改動仍會觸發重繪，但不會畫任何導線效果
+    wizardBeam,
+    shouldFlip,
   ]);
 
-  // 動畫 loop
+  // 動畫 loop（動畫時 overridePos 會在 drawBoard 裡被 vx/vy 翻面）
   useEffect(() => {
     if (!animState) return;
     const canvas = canvasRef.current;
@@ -749,6 +882,7 @@ export default function GameBoard({
     selectedPieceIndex,
     pieceImages,
     wizardBeam,
+    shouldFlip,
   ]);
 
   // ========= Canvas 事件 =========
@@ -757,8 +891,14 @@ export default function GameBoard({
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
-    const y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
+    let x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
+    let y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
+
+    // ✅ 黑方視角：把點擊座標反轉回「邏輯座標」
+    if (shouldFlip) {
+      x = LOGICAL_SIZE - x;
+      y = LOGICAL_SIZE - y;
+    }
 
     for (const node of allNodes) {
       const dx = x - node.x;
@@ -776,8 +916,14 @@ export default function GameBoard({
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
-    const y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
+    let x = ((e.clientX - rect.left) / rect.width) * LOGICAL_SIZE;
+    let y = ((e.clientY - rect.top) / rect.height) * LOGICAL_SIZE;
+
+    // ✅ 黑方視角：hover 也要反轉回「邏輯座標」
+    if (shouldFlip) {
+      x = LOGICAL_SIZE - x;
+      y = LOGICAL_SIZE - y;
+    }
 
     let found = false;
     for (const node of allNodes) {
@@ -792,6 +938,7 @@ export default function GameBoard({
     }
     if (!found) setHoveredNode(null);
   };
+
   return (
     <div className="flex flex-col items-center gap-4">
       <canvas
@@ -803,7 +950,7 @@ export default function GameBoard({
         onMouseLeave={() => setHoveredNode(null)}
       />
       <p className="text-xs text-muted-foreground" data-testid="text-hint">
-        綠=移動、藍=換位、紅描邊=可攻擊
+        綠=移動、藍=換位、紅描邊=可攻擊（選到巫師時：可用導線＝黃線＋藍點，命中目標＝紅點）
       </p>
     </div>
   );
