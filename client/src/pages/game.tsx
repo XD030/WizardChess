@@ -596,7 +596,10 @@ function mergeWizardBeamAttackHighlightsAllTargets(args: {
   return out;
 }
 
+
 export default function Game() {
+  const isAIMoveRef = useRef(false);
+
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -669,6 +672,23 @@ export default function Game() {
 
   const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">("spectator");
   const [playMode, setPlayMode] = useState<PlayMode>("pvp");
+  // ===== SOLO AI TURN (FIXED) =====
+  useEffect(() => {
+    if (playMode !== "solo") return;
+    if (winner) return;
+
+    const aiSide: PlayerSide = localSide === "white" ? "black" : "white";
+    if (currentPlayer !== aiSide) return;
+
+    const t = setTimeout(() => {
+      isAIMoveRef.current = true;
+      runSimpleAIMove_AI();
+      isAIMoveRef.current = false;
+    }, 300);
+
+    return () => clearTimeout(t);
+  }, [playMode, currentPlayer, winner, localSide]);
+
 
   const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
     if (!piece) return false;
@@ -2328,7 +2348,7 @@ export default function Game() {
       return;
     }
 
-    if (!canPlay) return;
+    if (!canPlay && !isAIMoveRef.current) return;
 
     let newPieces = [...pieces];
     let moveDesc = "";
@@ -3187,44 +3207,4 @@ export default function Game() {
       />
     </div>
   );
-}
-
-
-/* =======================
-   MINIMAL SOLO AI (FIX)
-   ======================= */
-function runSimpleAIMove_AI() {
-  // AI just picks first movable piece and first highlight
-  const aiSide: PlayerSide = localSide === "white" ? "black" : "white";
-  const aiPieces = pieces
-    .map((p, idx) => ({ p, idx }))
-    .filter(({ p }) => p.side === aiSide);
-
-  for (const { p, idx } of aiPieces) {
-    const moves =
-      p.type === "wizard"
-        ? calculateWizardMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : p.type === "apprentice"
-        ? calculateApprenticeMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : p.type === "dragon"
-        ? calculateDragonMoves(p, idx, pieces, adjacency, allNodes, burnMarks, holyLights).highlights
-        : p.type === "ranger"
-        ? calculateRangerMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : p.type === "griffin"
-        ? calculateGriffinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : p.type === "assassin"
-        ? calculateAssassinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : p.type === "paladin"
-        ? calculatePaladinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : p.type === "bard"
-        ? calculateBardMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
-        : [];
-
-    if (moves.length > 0) {
-      const m = moves[0];
-      handleNodeClick(p.row, p.col);
-      setTimeout(() => handleNodeClick(m.row, m.col), 50);
-      return;
-    }
-  }
 }
