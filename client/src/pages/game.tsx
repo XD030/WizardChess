@@ -1,4 +1,3 @@
-// ===== Part 1/4 =====
 // client/src/pages/Game.tsx
 import WizardAttackDialog from "../components/WizardAttackDialog";
 import { useState, useEffect, useRef } from "react";
@@ -48,6 +47,7 @@ import {
 // ==== 型別 ====
 
 type PlayerSide = "white" | "black";
+type PlayMode = "pvp" | "solo";
 
 interface CapturedMap {
   white: Piece[];
@@ -69,10 +69,6 @@ type StartingMode = "manual" | "random";
 
 type WizardAttackMode = "line" | "move";
 
-type GameMode = "single" | "pvp";
-type LobbyStep = "password" | "mode";
-const AI_ID = "__AI__";
-
 interface PendingGuard {
   targetRow: number;
   targetCol: number;
@@ -80,7 +76,7 @@ interface PendingGuard {
   attackerPieceIndex: number;
   defenderSide: PlayerSide;
   guardPaladinIndices: number[];
-  wizardAttackMode?: WizardAttackMode | null;
+  wizardAttackMode?: WizardAttackMode | null; // ✅ 新增：若攻擊者是巫師，記錄本次攻擊選擇（導線 or 移動）
 }
 
 interface SyncedState {
@@ -171,6 +167,7 @@ function buildAllPaladinProtectedSet(pieces: Piece[], adjacency: number[][], all
   return protectedSet;
 }
 
+// Helper：吃子時啟動所有吟遊詩人
 function activateAllBards(pieces: Piece[]): Piece[] {
   return pieces.map((piece) => {
     if (piece.type !== "bard") return piece;
@@ -186,6 +183,7 @@ function activateAllBards(pieces: Piece[]): Piece[] {
   });
 }
 
+// Helper：複製被吃棋子 map
 function cloneCaptured(captured: CapturedMap): CapturedMap {
   return {
     white: [...captured.white],
@@ -194,6 +192,7 @@ function cloneCaptured(captured: CapturedMap): CapturedMap {
   };
 }
 
+// Helper：往被吃棋子 map 裡加一顆棋
 function addCaptured(captured: CapturedMap, piece: Piece): CapturedMap {
   const side = piece.side as keyof CapturedMap;
   return {
@@ -202,6 +201,7 @@ function addCaptured(captured: CapturedMap, piece: Piece): CapturedMap {
   };
 }
 
+// Helper：依「這一步的動子」決定 moveHistory 對不同視角的顯示
 function makeMoveRecord(text: string, movedPiece: Piece | null): MoveRecord {
   if (!movedPiece || movedPiece.type !== "assassin" || !movedPiece.stealthed) {
     return { fullText: text, whiteText: text, blackText: text };
@@ -230,6 +230,11 @@ function isAdjacentCell(
   return !!adjacency[ai]?.includes(bi);
 }
 
+/**
+ * ✅ NEW:
+ * 把 computeWizardBeam 的 target 轉成可點擊的 attack highlight
+ * 並做「更嚴格」：巫師只允許 1 個 attack（導線末端），否則不產生任何 attack。
+ */
 function mergeWizardBeamAttackHighlights(args: {
   moves: MoveHighlight[];
   beam: WizardBeamResult | null;
@@ -252,6 +257,18 @@ function mergeWizardBeamAttackHighlights(args: {
   const already = moves.some((h) => h.type === "attack" && h.row === t.row && h.col === t.col);
   return already ? moves : [...moves, { type: "attack" as const, row: t.row, col: t.col }];
 }
+
+/* =========================================================
+   ✅✅✅ 巫師導線：更嚴格版本（純 Game.tsx 內做二次驗證）
+   規則（你這次要求的）：
+   - 導線只能由巫師當起點
+   - 中間只能是「導體」（己方學徒 or 已啟動己方/中立吟遊詩人）
+   - 允許「空格」穿過，但空格不可轉彎
+   - 允許轉彎，但只能在「導體」上轉彎（不能在空格、不能在巫師自己上轉）
+   - 最後必須是「導體接敵人」（target 前一格必須有導體，且導體與敵人相鄰）
+   - 導線射擊不會使巫師移動（攻擊分支已確保巫師不動）
+   - ❌ 已移除「導線自動射擊」
+   ========================================================= */
 
 function isWizardConductorStrict(wizardSide: Side, p: Piece): boolean {
   if (p.type === "apprentice") return p.side === wizardSide;
@@ -472,7 +489,9 @@ function computeAllWizardBeamTargetsSafe(
     }|${s.consecutiveEmpty}`;
 
   const seen = new Set<string>();
-  const stack: State[] = [{ cur: { row: wizard.row, col: wizard.col }, prev: null, dir: null, consecutiveEmpty: 0 }];
+  const stack: State[] = [
+    { cur: { row: wizard.row, col: wizard.col }, prev: null, dir: null, consecutiveEmpty: 0 },
+  ];
 
   const canTurnHere = (r: number, c: number) => {
     const idx = idxAt(r, c);
@@ -543,7 +562,7 @@ function computeAllWizardBeamTargetsSafe(
       stack.push({
         cur: { row: nn.row, col: nn.col },
         prev: { row: s.cur.row, col: s.cur.col },
-        dir: ndir,
+        dir: s.dir ? ndir : ndir,
         consecutiveEmpty: nextConsecutiveEmpty,
       });
     }
@@ -634,7 +653,7 @@ export default function Game() {
     targetPieceIndex: number;
     attackerPieceIndex: number;
     defenderSide: PlayerSide;
-    wizardAttackMode?: WizardAttackMode | null;
+    wizardAttackMode?: WizardAttackMode | null; // ✅ 新增：把 pendingGuard 的模式帶進本機狀態
   } | null>(null);
   const [selectedGuardPaladinIndex, setSelectedGuardPaladinIndex] = useState<number | null>(null);
 
@@ -649,9 +668,12 @@ export default function Game() {
   }, [bardNeedsSwap]);
 
   const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">("spectator");
+  const [playMode, setPlayMode] = useState<PlayMode>("pvp");
 
   const isOwnBardOutOfTurnForPiece = (piece: Piece | null): boolean => {
     if (!piece) return false;
+    if (playMode === "solo") return false;
+
     if (piece.type !== "bard") return false;
     if (localSide === "spectator") return false;
     if (piece.side !== localSide) return false;
@@ -660,20 +682,17 @@ export default function Game() {
 
   const [seatError, setSeatError] = useState<string | null>(null);
 
-  const [lobbyStep, setLobbyStep] = useState<LobbyStep>("password");
-  const [gameMode, setGameMode] = useState<GameMode | null>(null);
-  const [aiSide, setAiSide] = useState<PlayerSide>("black");
-  const aiActingRef = useRef(false);
+  const canPlay =
+    !winner &&
+    gameStarted &&
+    (playMode === "solo" ? true : localSide !== "spectator" && localSide === currentPlayer);
 
-  const canPlay = localSide !== "spectator" && localSide === currentPlayer && !winner && gameStarted;
-
-  const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected");
+  const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [inRoom, setInRoom] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [roomError, setRoomError] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
-  const [pendingJoinPvp, setPendingJoinPvp] = useState(false);
 
   const [snapshots, setSnapshots] = useState<SyncedState[]>([]);
   const [viewSnapshotIndex, setViewSnapshotIndex] = useState<number | null>(null);
@@ -840,15 +859,49 @@ export default function Game() {
   }
 
   function broadcastState(next: SyncedState) {
-    if (gameMode === "single") return;
+    if (playMode === "solo") {
+      applySyncedState(next);
+      return;
+    }
+
     const ws = socketRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: "state", state: next, from: clientIdRef.current }));
   }
+  function startSoloGame() {
+    setPlayMode("solo");
+    setRoomError(null);
+    setSeatError(null);
+
+    const newSeats: Seats = {
+      whiteOwnerId: clientIdRef.current,
+      blackOwnerId: clientIdRef.current,
+    };
+
+    setSeats(newSeats);
+    setLocalSide("white");
+    setInRoom(true);
+
+    const initial: SyncedState = {
+      pieces: ensureDragonTags(getInitialPieces()),
+      currentPlayer: "white",
+      moveHistory: [],
+      burnMarks: [],
+      holyLights: [],
+      capturedPieces: { white: [], black: [], neutral: [] },
+      winner: null,
+      seats: newSeats,
+      startingPlayer: "white",
+      startingMode: "manual",
+      ready: { white: true, black: true },
+      gameStarted: true,
+      pendingGuard: null,
+    };
+
+    applySyncedState(initial);
+  }
 
   useEffect(() => {
-    if (gameMode !== "pvp") return;
-
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsHost = window.location.host;
     const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
@@ -897,42 +950,22 @@ export default function Game() {
     };
 
     return () => ws.close();
-  }, [gameMode]);
+  }, []);
 
-  useEffect(() => {
-    if (gameMode !== "pvp") return;
-    if (!pendingJoinPvp) return;
-    if (socketStatus !== "connected") return;
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
-
-    socketRef.current.send(JSON.stringify({ type: "joinRoom", password: passwordInput }));
-    setPendingJoinPvp(false);
-  }, [gameMode, pendingJoinPvp, socketStatus, passwordInput]);
-
-  function handleGoModeSelect() {
+  function handleJoinRoom() {
     if (!passwordInput.trim()) {
       setRoomError("請輸入房間密碼");
       return;
     }
-    setRoomError(null);
-    setLobbyStep("mode");
-  }
 
-  function handleSelectMode(nextMode: GameMode) {
-    setGameMode(nextMode);
-
-    if (nextMode === "single") {
-      setSocketStatus("disconnected");
-      setInRoom(true);
-      setRoomError(null);
-      const initialState = createInitialState();
-      applySyncedState(initialState);
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      setRoomError("WebSocket 尚未連線，請稍候再試");
       return;
     }
 
-    setInRoom(false);
     setRoomError(null);
-    setPendingJoinPvp(true);
+
+    socketRef.current.send(JSON.stringify({ type: "joinRoom", password: passwordInput }));
   }
 
   function checkWizardWin(newPieces: Piece[]): Side | null {
@@ -965,8 +998,14 @@ export default function Game() {
     moveHistory: MoveRecord[];
     winner: Side | null;
   } {
-    const { piecesAfterStealthExpire, updatedBurnMarks, remainingHolyLights, localCaptured, newMoveHistory, result } =
-      args;
+    const {
+      piecesAfterStealthExpire,
+      updatedBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      result,
+    } = args;
 
     return {
       pieces: piecesAfterStealthExpire,
@@ -979,6 +1018,13 @@ export default function Game() {
   }
 
   function handleRestartGame() {
+    if (playMode === "solo") {
+      startSoloGame();
+      setShowEndModal(false);
+      setViewSnapshotIndex(null);
+      return;
+    }
+
     const initialPieces = ensureDragonTags(getInitialPieces());
     const newStarting: PlayerSide = "white";
     const newReady: ReadyState = { white: false, black: false };
@@ -1018,54 +1064,11 @@ export default function Game() {
     setGuardDialogOpen(false);
     setGuardRequest(null);
     setSelectedGuardPaladinIndex(null);
-    setLobbyStep("password");
-    setGameMode(null);
-    setPendingJoinPvp(false);
-    setSeatError(null);
   }
-// ===== Part 2/4 =====
+
   function handleChooseSide(side: "white" | "black" | "spectator") {
     if (!inRoom) return;
-
-    if (gameMode === "single") {
-      if (side === "spectator") {
-        setSeatError("單人模式不可觀戰，請選白方或黑方");
-        return;
-      }
-
-      const human = side;
-      const ai: PlayerSide = human === "white" ? "black" : "white";
-
-      setAiSide(ai);
-      setLocalSide(human);
-
-      const newSeats: Seats =
-        human === "white"
-          ? { whiteOwnerId: clientIdRef.current, blackOwnerId: AI_ID }
-          : { whiteOwnerId: AI_ID, blackOwnerId: clientIdRef.current };
-
-      setSeats(newSeats);
-      setSeatError(null);
-
-      const syncState: SyncedState = {
-        pieces,
-        currentPlayer,
-        moveHistory,
-        burnMarks,
-        holyLights,
-        capturedPieces,
-        winner,
-        seats: newSeats,
-        startingPlayer,
-        startingMode,
-        ready,
-        gameStarted,
-        pendingGuard: null,
-      };
-
-      applySyncedState(syncState);
-      return;
-    }
+    if (playMode === "solo") return;
 
     if (side === "spectator") {
       const newSeats: Seats = {
@@ -1215,11 +1218,7 @@ export default function Game() {
     const sideKey = localSide;
     if (ready[sideKey]) return;
 
-    let newReady: ReadyState = { ...ready, [sideKey]: true };
-
-    if (gameMode === "single") {
-      newReady = { white: true, black: true };
-    }
+    const newReady: ReadyState = { ...ready, [sideKey]: true };
 
     let newGameStarted = gameStarted;
     let newCurrentPlayer = currentPlayer;
@@ -1347,8 +1346,8 @@ export default function Game() {
         ? mode === "line"
           ? true
           : mode === "move"
-          ? false
-          : isWizardLineShotAttack(selectedPiece, targetRowGuard, targetColGuard, pieces, allNodes, adjacency, holyLights)
+            ? false
+            : isWizardLineShotAttack(selectedPiece, targetRowGuard, targetColGuard, pieces, allNodes, adjacency, holyLights)
         : false;
 
     let movedAttacker: Piece;
@@ -1498,7 +1497,6 @@ export default function Game() {
     applySyncedState(syncState);
     broadcastState(syncState);
   };
-
   const handleGuardDecline = () => {
     if (!guardRequest) return;
     if (winner) return;
@@ -1535,8 +1533,8 @@ export default function Game() {
           mode === "line"
             ? true
             : mode === "move"
-            ? false
-            : isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
+              ? false
+              : isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
 
         if (!wizardLineShot) {
           const movedWizard: Piece = { ...selectedPiece, row: targetRow, col: targetCol };
@@ -1611,8 +1609,8 @@ export default function Game() {
         mode === "line"
           ? true
           : mode === "move"
-          ? false
-          : isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
+            ? false
+            : isWizardLineShotAttack(selectedPiece, targetRow, targetCol, pieces, allNodes, adjacency, holyLights);
 
       moveDesc = wizardLineShot
         ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
@@ -1668,298 +1666,943 @@ export default function Game() {
     applySyncedState(syncState);
     broadcastState(syncState);
   };
-// ===== Part 3/4 =====
-  // =========================
-  // 選取棋子 -> 計算可走/可攻擊格
-  // =========================
-  function computeHighlightsForPiece(piece: Piece, allPieces: Piece[]): MoveHighlight[] {
-    if (!piece) return [];
-    const side = piece.side as PlayerSide;
 
-    // 允許：自己回合 or 自己的吟遊詩人（不分回合）可點
-    const allowOutOfTurnBard = isOwnBardOutOfTurnForPiece(piece);
-    if (!allowOutOfTurnBard) {
-      if (localSide === "spectator") return [];
-      if (side !== localSide) return [];
-      if (currentPlayer !== localSide) return [];
-    }
-
-    if (winner) return [];
-
-    // 如果還沒開始遊戲，不給走
-    if (!gameStarted) return [];
-
-    // 刺客潛行：由 gameLogic 內處理/限制
-    let moves: MoveHighlight[] = [];
-
-    if (piece.type === "wizard") {
-      moves = calculateWizardMoves(piece, allPieces, adjacency, allNodes, holyLights);
-
-      // ✅ 導線射擊：多目標版本（穩健安全計算）
-      const targets = computeAllWizardBeamTargetsSafe(piece, allPieces, allNodes, adjacency, holyLights);
-      moves = mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: piece, pieces: allPieces });
-      return moves;
-    }
-
-    if (piece.type === "apprentice") {
-      return calculateApprenticeMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    if (piece.type === "dragon") {
-      return calculateDragonMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    if (piece.type === "ranger") {
-      return calculateRangerMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    if (piece.type === "griffin") {
-      return calculateGriffinMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    if (piece.type === "assassin") {
-      return calculateAssassinMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    if (piece.type === "paladin") {
-      return calculatePaladinMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    if (piece.type === "bard") {
-      // 吟遊詩人：通常只需要移動/能力格（由你的 gameLogic 定義）
-      return calculateBardMoves(piece, allPieces, adjacency, allNodes);
-    }
-
-    return [];
-  }
-
-  function handleSelectPiece(index: number) {
-    if (index < 0 || index >= pieces.length) return;
-    if (winner) return;
-
-    const piece = pieces[index];
-
-    // 遊戲未開始，不選
-    if (!gameStarted) return;
-
-    // Guard Dialog / Wizard Attack Dialog 開著時不允許操作棋盤
-    if (guardDialogOpen) return;
-    if (wizardAttackRequest) return;
-
-    // 若需要交換（吟遊詩人），則先完成交換
-    if (bardNeedsSwap) return;
-
-    // 一般：只有自己回合才能選（但允許 out-of-turn bard）
-    const allowOutOfTurnBard = isOwnBardOutOfTurnForPiece(piece);
-    if (!allowOutOfTurnBard) {
-      if (localSide === "spectator") return;
-      if (piece.side !== localSide) return;
-      if (currentPlayer !== localSide) return;
-    }
-
-    setSelectedPieceIndex(index);
-
-    const h = computeHighlightsForPiece(piece, pieces);
-    setHighlights(h);
-
-    // 龍路徑 preview
-    if (piece.type === "dragon") {
-      setDragonPathNodes([]);
-    } else {
-      setDragonPathNodes([]);
-    }
-
-    // 聖騎士保護區 preview
-    if (piece.type === "paladin") {
-      const zones = calculatePaladinProtectionZone(piece, pieces, adjacency, allNodes);
-      setProtectionZones(zones);
-    } else {
-      setProtectionZones([]);
-    }
-
-    // 巫師導線 preview（僅 UI 顯示用）
-    if (piece.type === "wizard") {
-      const beam = computeWizardBeamSafe(piece, pieces, allNodes, adjacency, holyLights);
-      setWizardBeam(beam);
-    } else {
-      setWizardBeam(null);
-    }
-  }
-
-  function clearSelection() {
-    setSelectedPieceIndex(-1);
-    setHighlights([]);
-    setDragonPathNodes([]);
-    setProtectionZones([]);
-    setWizardBeam(null);
-  }
-
-  function findHighlightAt(row: number, col: number): MoveHighlight | null {
-    return highlights.find((h) => h.row === row && h.col === col) ?? null;
-  }
-
-  // =========================
-  // 巫師攻擊：若是導線射擊（非相鄰）要先跳對話框選擇：導線射擊 or 移動攻擊
-  // =========================
-  function requestWizardAttackMode(args: {
-    wizardIndex: number;
-    targetRow: number;
-    targetCol: number;
-    targetPieceIndex: number;
-  }) {
-    setWizardAttackRequest(args);
-  }
-
-  function resolveWizardAttackWithMode(mode: WizardAttackMode) {
-    if (!wizardAttackRequest) return;
+  // ✅✅✅ 巫師攻擊方式選擇：導線射擊 or 移動攻擊
+  // ✅ 若目標有守護：先把選擇結果寫進 pendingGuard.wizardAttackMode，再進守護流程
+  const handleWizardLineShot = () => {
+    if (!wizardAttackRequest || winner) return;
 
     const { wizardIndex, targetRow, targetCol, targetPieceIndex } = wizardAttackRequest;
 
-    // 用 mode 帶入後續同一套處理流程（走 handleCellClick 的流程）
-    setWizardAttackRequest(null);
+    const wizard = pieces[wizardIndex];
+    const targetPiece = pieces[targetPieceIndex];
 
-    // 直接執行一次 cell click，但把 mode 帶進 guardRequest
-    performAttackOrMove({
-      attackerIndex: wizardIndex,
-      row: targetRow,
-      col: targetCol,
-      forceWizardMode: mode,
-    });
-  }
+    const guardingPaladinIndices =
+      targetPiece.side !== "neutral"
+        ? findGuardingPaladins(targetRow, targetCol, pieces, targetPiece.side, adjacency, allNodes)
+        : [];
 
-  // =========================
-  // 核心：落子/攻擊/觸發守護
-  // =========================
-  function performAttackOrMove(args: { attackerIndex: number; row: number; col: number; forceWizardMode?: WizardAttackMode }) {
-    const { attackerIndex, row, col, forceWizardMode } = args;
+    if (guardingPaladinIndices.length > 0) {
+      const pendingGuard: PendingGuard = {
+        targetRow,
+        targetCol,
+        targetPieceIndex,
+        attackerPieceIndex: wizardIndex,
+        defenderSide: targetPiece.side as PlayerSide,
+        guardPaladinIndices: guardingPaladinIndices,
+        wizardAttackMode: "line",
+      };
 
-    if (attackerIndex < 0 || attackerIndex >= pieces.length) return;
-    if (winner) return;
+      const syncState: SyncedState = {
+        pieces,
+        currentPlayer,
+        moveHistory,
+        burnMarks,
+        holyLights,
+        capturedPieces,
+        winner,
+        seats,
+        startingPlayer,
+        startingMode,
+        ready,
+        gameStarted,
+        pendingGuard,
+      };
 
-    const selectedPiece = pieces[attackerIndex];
-
-    // 不允許在 dialogs 開啟時操作
-    if (guardDialogOpen) return;
-    if (bardNeedsSwap) return;
-
-    // 只有自己回合（但 out-of-turn bard 允許被點、但它落子仍會切回你目前邏輯）
-    const allowOutOfTurnBard = isOwnBardOutOfTurnForPiece(selectedPiece);
-    if (!allowOutOfTurnBard) {
-      if (localSide === "spectator") return;
-      if (selectedPiece.side !== localSide) return;
-      if (currentPlayer !== localSide) return;
+      setWizardAttackRequest(null);
+      applySyncedState(syncState);
+      broadcastState(syncState);
+      return;
     }
 
-    const hl = findHighlightAt(row, col);
-    if (!hl) return;
-
-    // ✅ 若巫師要攻擊導線射擊目標：先詢問模式（除非已 forceWizardMode）
-    if (selectedPiece.type === "wizard" && hl.type === "attack") {
-      const lineShot = isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
-
-      if (lineShot && !forceWizardMode) {
-        const tIdx = getPieceAt(pieces, row, col);
-        if (tIdx !== -1) {
-          requestWizardAttackMode({
-            wizardIndex: attackerIndex,
-            targetRow: row,
-            targetCol: col,
-            targetPieceIndex: tIdx,
-          });
-          return;
-        }
-      }
-    }
-
-    // =========================
-    // 走/攻擊開始
-    // =========================
     let newPieces = [...pieces];
-    let updatedBurnMarks = [...burnMarks];
     let localCaptured = cloneCaptured(capturedPieces);
-    let movedAssassinFinal: Piece | null = null;
+    let updatedBurnMarks = [...burnMarks];
 
-    const fromRow = selectedPiece.row;
-    const fromCol = selectedPiece.col;
-
-    const fromCoord = getNodeCoordinate(fromRow, fromCol);
-    const toCoord = getNodeCoordinate(row, col);
-
-    // 目標棋子
-    const targetIdx = getPieceAt(newPieces, row, col);
-    const targetPiece = targetIdx !== -1 ? newPieces[targetIdx] : null;
-
-    // 龍：先清自己的舊灼痕，並在移動後生成新灼痕（你的既有規則）
-    if (selectedPiece.type === "dragon") {
-      const tag = getDragonTag(selectedPiece);
+    if (targetPiece.type === "dragon") {
+      const tag = getDragonTag(targetPiece);
       if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
     }
 
-    // 如果是攻擊：先判斷守護（聖騎士）
-    const isAttack = hl.type === "attack";
-    const isMove = hl.type === "move";
+    if (targetPiece.type !== "bard") {
+      localCaptured = addCaptured(localCaptured, targetPiece);
+      newPieces.splice(targetPieceIndex, 1);
+      newPieces = activateAllBards(newPieces);
+    }
 
-    // =========================
-    // 攻擊流程
-    // =========================
-    if (isAttack && targetPiece) {
-      // 吟遊詩人不可被擊殺
-      if (targetPiece.type === "bard") {
-        const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`;
-        const record = makeMoveRecord(moveDesc, movedAssassinFinal);
-        const newMoveHistory = [record, ...moveHistory];
+    const fromCoord = getNodeCoordinate(wizard.row, wizard.col);
+    const toCoord = getNodeCoordinate(targetRow, targetCol);
 
-        // 切回合 + 清敵方聖光
-        const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
-        const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
-        const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
-        const result = checkWizardWin(piecesAfterStealthExpire);
+    const moveDesc =
+      targetPiece.type === "bard"
+        ? `${PIECE_CHINESE[wizard.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺，導線射擊)`
+        : `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
 
-        const syncState: SyncedState = {
-          pieces: piecesAfterStealthExpire,
-          currentPlayer: result ? currentPlayer : nextPlayer,
-          moveHistory: newMoveHistory,
-          burnMarks: updatedBurnMarks,
-          holyLights: remainingHolyLights,
-          capturedPieces: localCaptured,
-          winner: result,
-          seats,
-          startingPlayer,
-          startingMode,
-          ready,
-          gameStarted,
-          pendingGuard: null,
-        };
+    const result = checkWizardWin(newPieces);
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
 
-        applySyncedState(syncState);
-        broadcastState(syncState);
-        return;
+    const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+    const record = makeMoveRecord(moveDesc, null);
+    const newMoveHistory = [record, ...moveHistory];
+
+    const finalized = finalizeTurnNoAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
+    const syncState: SyncedState = {
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
+      seats,
+      startingPlayer,
+      startingMode,
+      ready,
+      gameStarted,
+      pendingGuard: null,
+    };
+
+    applySyncedState(syncState);
+    broadcastState(syncState);
+    setWizardAttackRequest(null);
+  };
+
+  const handleWizardMoveAttack = () => {
+    if (!wizardAttackRequest || winner) return;
+
+    const { wizardIndex, targetRow, targetCol, targetPieceIndex } = wizardAttackRequest;
+
+    const wizard = pieces[wizardIndex];
+    const targetPiece = pieces[targetPieceIndex];
+
+    const guardingPaladinIndices =
+      targetPiece.side !== "neutral"
+        ? findGuardingPaladins(targetRow, targetCol, pieces, targetPiece.side, adjacency, allNodes)
+        : [];
+
+    if (guardingPaladinIndices.length > 0) {
+      const pendingGuard: PendingGuard = {
+        targetRow,
+        targetCol,
+        targetPieceIndex,
+        attackerPieceIndex: wizardIndex,
+        defenderSide: targetPiece.side as PlayerSide,
+        guardPaladinIndices: guardingPaladinIndices,
+        wizardAttackMode: "move",
+      };
+
+      const syncState: SyncedState = {
+        pieces,
+        currentPlayer,
+        moveHistory,
+        burnMarks,
+        holyLights,
+        capturedPieces,
+        winner,
+        seats,
+        startingPlayer,
+        startingMode,
+        ready,
+        gameStarted,
+        pendingGuard,
+      };
+
+      setWizardAttackRequest(null);
+      applySyncedState(syncState);
+      broadcastState(syncState);
+      return;
+    }
+
+    let newPieces = [...pieces];
+    let localCaptured = cloneCaptured(capturedPieces);
+    let updatedBurnMarks = [...burnMarks];
+
+    if (targetPiece.type === "dragon") {
+      const tag = getDragonTag(targetPiece);
+      if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
+    }
+
+    if (targetPiece.type !== "bard") {
+      localCaptured = addCaptured(localCaptured, targetPiece);
+      newPieces.splice(targetPieceIndex, 1);
+      newPieces = activateAllBards(newPieces);
+    }
+
+    const adjustedWizardIndex =
+      targetPiece.type !== "bard" && targetPieceIndex < wizardIndex ? wizardIndex - 1 : wizardIndex;
+
+    const movedWizard: Piece = { ...wizard, row: targetRow, col: targetCol };
+    newPieces[adjustedWizardIndex] = movedWizard;
+
+    const fromCoord = getNodeCoordinate(wizard.row, wizard.col);
+    const toCoord = getNodeCoordinate(targetRow, targetCol);
+
+    const moveDesc =
+      targetPiece.type === "bard"
+        ? `${PIECE_CHINESE[wizard.type]} ${fromCoord} 移動至 ${toCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} (無法擊殺)`
+        : `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
+
+    const result = checkWizardWin(newPieces);
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
+
+    const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+    const record = makeMoveRecord(moveDesc, null);
+    const newMoveHistory = [record, ...moveHistory];
+
+    const finalized = finalizeTurnNoAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
+    const syncState: SyncedState = {
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
+      seats,
+      startingPlayer,
+      startingMode,
+      ready,
+      gameStarted,
+      pendingGuard: null,
+    };
+
+    applySyncedState(syncState);
+    broadcastState(syncState);
+    setWizardAttackRequest(null);
+  };
+
+  const handleNodeClick = (row: number, col: number) => {
+    if (guardRequest) return;
+
+    const effectivePieces =
+      isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
+        ? snapshots[viewSnapshotIndex].pieces
+        : pieces;
+
+    const clickedPieceIdx = getPieceAt(effectivePieces, row, col);
+    let movedAssassinFinal: Piece | null = null;
+
+    if (bardNeedsSwap && !isObserving) {
+      if (clickedPieceIdx !== -1) {
+        const swapTarget = pieces[clickedPieceIdx];
+
+        if (
+          swapTarget.side === currentPlayer &&
+          swapTarget.type !== "bard" &&
+          swapTarget.type !== "dragon" &&
+          swapTarget.type !== "wizard"
+        ) {
+          const newPieces = [...pieces];
+          const bard = newPieces[bardNeedsSwap.bardIndex];
+
+          const movedBard = { ...bard, row: swapTarget.row, col: swapTarget.col };
+
+          let swappedPiece = { ...swapTarget, row: bardNeedsSwap.bardRow, col: bardNeedsSwap.bardCol };
+
+          if (swappedPiece.type === "assassin") {
+            const sp: any = { ...swappedPiece, stealthed: false };
+            delete sp.stealthExpiresOn;
+            swappedPiece = sp as Piece;
+          }
+
+          newPieces[bardNeedsSwap.bardIndex] = movedBard;
+          newPieces[clickedPieceIdx] = swappedPiece;
+
+          const paladinIndicesToCheck: number[] = [];
+          if ((movedBard as any).type === "paladin") paladinIndicesToCheck.push(bardNeedsSwap.bardIndex);
+          if ((swappedPiece as any).type === "paladin") paladinIndicesToCheck.push(clickedPieceIdx);
+
+          if (paladinIndicesToCheck.length > 0) {
+            for (const pi of paladinIndicesToCheck) {
+              const pal = newPieces[pi];
+              const zones = calculatePaladinProtectionZone(pal, newPieces, adjacency, allNodes);
+              const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, pal.side);
+              for (let i = 0; i < newPieces.length; i++) newPieces[i] = revealedPieces[i];
+            }
+          }
+
+          const bardCoord = getNodeCoordinate(bardNeedsSwap.bardRow, bardNeedsSwap.bardCol);
+          const swapCoord = getNodeCoordinate(swapTarget.row, swapTarget.col);
+          const moveDesc = `${PIECE_CHINESE["bard"]} ${bardCoord} ⇄ ${PIECE_CHINESE[swapTarget.type]} ${swapCoord}`;
+
+          const record = makeMoveRecord(moveDesc, null);
+          const newMoveHistory = [record, ...moveHistory];
+
+          const result = checkWizardWin(newPieces);
+          const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
+
+          const remainingBurnMarks = burnMarks;
+          const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+          const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
+
+          const finalized = finalizeTurnNoAutoShot({
+            piecesAfterStealthExpire,
+            updatedBurnMarks: remainingBurnMarks,
+            remainingHolyLights,
+            localCaptured: capturedPieces,
+            newMoveHistory,
+            nextPlayer,
+            result,
+          });
+
+          const syncState: SyncedState = {
+            pieces: finalized.pieces,
+            currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+            moveHistory: finalized.moveHistory,
+            burnMarks: finalized.burnMarks,
+            holyLights: finalized.holyLights,
+            capturedPieces: finalized.capturedPieces,
+            winner: finalized.winner ?? winner,
+            seats,
+            startingPlayer,
+            startingMode,
+            ready,
+            gameStarted,
+            pendingGuard: null,
+          };
+
+          setBardNeedsSwap(null);
+          applySyncedState(syncState);
+          broadcastState(syncState);
+        }
+      }
+      return;
+    }
+
+    if (selectedPieceIndex === -1) {
+      if (clickedPieceIdx !== -1) {
+        const piece = effectivePieces[clickedPieceIdx];
+        setSelectedPieceIndex(clickedPieceIdx);
+
+        if (isOwnBardOutOfTurnForPiece(piece)) {
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+          return;
+        }
+
+        const canShowMoves =
+          isObserving ||
+          playMode === "solo" ||
+          localSide === "spectator" ||
+          piece.side === localSide ||
+          piece.side === "neutral";
+
+        if (canShowMoves && allNodes.length > 0) {
+          if (piece.type === "wizard") {
+            const moves = calculateWizardMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+
+            const targets = computeAllWizardBeamTargetsSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+
+            const merged = mergeWizardBeamAttackHighlightsAllTargets({
+              moves,
+              targets,
+              wizard: piece,
+              pieces: effectivePieces,
+            });
+
+            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+
+            setHighlights(merged);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(beam);
+          } else if (piece.type === "apprentice") {
+            const moves = calculateApprenticeMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "dragon") {
+            const result = calculateDragonMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              burnMarks,
+              holyLights
+            );
+            setHighlights(result.highlights);
+            setDragonPathNodes(result.pathNodes);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "ranger") {
+            const moves = calculateRangerMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "griffin") {
+            const moves = calculateGriffinMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "assassin") {
+            const moves = calculateAssassinMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "paladin") {
+            const moves = calculatePaladinMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            const zones = calculatePaladinProtectionZone(piece, effectivePieces, adjacency, allNodes);
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones(zones);
+            setWizardBeam(null);
+
+            if (!isObserving) {
+              const revealedPieces = revealAssassinsInSpecificZone(pieces, zones, piece.side);
+              setPieces(revealedPieces);
+            }
+          } else if (piece.type === "bard") {
+            const moves = calculateBardMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else {
+            setHighlights([]);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          }
+        } else {
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+        }
+      }
+      return;
+    }
+
+    const selectedPiece =
+      isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
+        ? snapshots[viewSnapshotIndex].pieces[selectedPieceIndex]
+        : pieces[selectedPieceIndex];
+
+    if (clickedPieceIdx === selectedPieceIndex) {
+      setSelectedPieceIndex(-1);
+      setHighlights([]);
+      setDragonPathNodes([]);
+      setProtectionZones([]);
+      setWizardBeam(null);
+      return;
+    }
+
+    const highlight = highlights.find((h) => h.row === row && h.col === col);
+
+    if (!highlight || isObserving) {
+      if (clickedPieceIdx !== -1) {
+        const piece = effectivePieces[clickedPieceIdx];
+        setSelectedPieceIndex(clickedPieceIdx);
+
+        if (isOwnBardOutOfTurnForPiece(piece)) {
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+          return;
+        }
+
+        const canShowMoves =
+          isObserving ||
+          playMode === "solo" ||
+          localSide === "spectator" ||
+          piece.side === localSide ||
+          piece.side === "neutral";
+
+        if (canShowMoves && allNodes.length > 0) {
+          if (piece.type === "wizard") {
+            const moves = calculateWizardMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            const beam = computeWizardBeamSafe(piece, effectivePieces, allNodes, adjacency, holyLights);
+            const merged = mergeWizardBeamAttackHighlights({ moves, beam, wizard: piece, pieces: effectivePieces });
+
+            setHighlights(merged);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(beam);
+          } else if (piece.type === "apprentice") {
+            const moves = calculateApprenticeMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "dragon") {
+            const result = calculateDragonMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              burnMarks,
+              holyLights
+            );
+            setHighlights(result.highlights);
+            setDragonPathNodes(result.pathNodes);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "ranger") {
+            const moves = calculateRangerMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "griffin") {
+            const moves = calculateGriffinMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "assassin") {
+            const moves = calculateAssassinMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else if (piece.type === "paladin") {
+            const moves = calculatePaladinMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            const zones = calculatePaladinProtectionZone(piece, effectivePieces, adjacency, allNodes);
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones(zones);
+            setWizardBeam(null);
+          } else if (piece.type === "bard") {
+            const moves = calculateBardMoves(
+              piece,
+              clickedPieceIdx,
+              effectivePieces,
+              adjacency,
+              allNodes,
+              holyLights,
+              burnMarks
+            );
+            setHighlights(moves);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          } else {
+            setHighlights([]);
+            setDragonPathNodes([]);
+            setProtectionZones([]);
+            setWizardBeam(null);
+          }
+        } else {
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+        }
+      }
+      return;
+    }
+
+    if (!canPlay) return;
+
+    let newPieces = [...pieces];
+    let moveDesc = "";
+    const fromCoord = getNodeCoordinate(selectedPiece.row, selectedPiece.col);
+    const toCoord = getNodeCoordinate(row, col);
+    let updatedBurnMarks = [...burnMarks];
+    let localCaptured = cloneCaptured(capturedPieces);
+
+    if (highlight.type === "move") {
+      const actualTargetIdx = getPieceAt(pieces, row, col);
+
+      if (actualTargetIdx !== -1) {
+        const targetPiece = pieces[actualTargetIdx];
+
+        if (targetPiece.side === selectedPiece.side) {
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+          return;
+        }
+
+        if (
+          selectedPiece.type === "bard" &&
+          targetPiece.type === "assassin" &&
+          targetPiece.side !== selectedPiece.side &&
+          targetPiece.stealthed
+        ) {
+          const bardIdx = selectedPieceIndex;
+          const assassinIdx = actualTargetIdx;
+
+          const newBard: Piece = { ...selectedPiece, row, col };
+
+          const newAssassinAny: any = {
+            ...targetPiece,
+            row: selectedPiece.row,
+            col: selectedPiece.col,
+            stealthed: false,
+          };
+          delete newAssassinAny.stealthExpiresOn;
+          const newAssassin = newAssassinAny as Piece;
+
+          newPieces[bardIdx] = newBard;
+          newPieces[assassinIdx] = newAssassin;
+
+          moveDesc = `${PIECE_CHINESE["bard"]} ${fromCoord} ⇄ 刺客 ${toCoord}（現形）`;
+        } else if (targetPiece.type === "bard") {
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+          return;
+        } else {
+          if (targetPiece.type === "dragon") {
+            const tag = getDragonTag(targetPiece);
+            if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
+          }
+
+          localCaptured = addCaptured(localCaptured, targetPiece);
+
+          newPieces.splice(actualTargetIdx, 1);
+          newPieces = activateAllBards(newPieces);
+
+          const adjustedIdx = actualTargetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
+
+          let movedPiece = updateAssassinStealth(
+            { ...selectedPiece, row, col },
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col
+          );
+          movedPiece = setAssassinStealthMeta(movedPiece);
+
+          if (movedPiece.type === "assassin") {
+            const mp: any = { ...movedPiece, stealthed: false };
+            delete mp.stealthExpiresOn;
+            movedPiece = mp as Piece;
+            movedAssassinFinal = movedPiece;
+          }
+
+          newPieces[adjustedIdx] = movedPiece;
+
+          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+        }
+      } else {
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row, col },
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col
+        );
+        movedPiece = setAssassinStealthMeta(movedPiece);
+
+        if (movedPiece.type === "assassin" && movedPiece.stealthed) {
+          const enemySide = movedPiece.side === "white" ? "black" : "white";
+          if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
+            const mp: any = { ...movedPiece, stealthed: false };
+            delete mp.stealthExpiresOn;
+            movedPiece = mp as Piece;
+          }
+          movedAssassinFinal = movedPiece;
+        }
+
+        newPieces[selectedPieceIndex] = movedPiece;
+        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
       }
 
-      // ✅ 找是否有聖騎士守護
-      const guarding = findGuardingPaladins(targetPiece, newPieces, adjacency, allNodes);
-      const guardPaladinIndices = guarding.map((g) => g.paladinIndex);
+      if (selectedPiece.type === "dragon") {
+        const dragonTag = getDragonTag(selectedPiece);
+        const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
 
-      // ✅ 巫師攻擊模式
-      let wizardAttackMode: WizardAttackMode | null = null;
-      if (selectedPiece.type === "wizard") {
-        if (forceWizardMode) wizardAttackMode = forceWizardMode;
-        else {
-          const lineShot = isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
-          wizardAttackMode = lineShot ? "line" : "move";
+        if (dragonTag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, dragonTag);
+
+        newPieces = ensureDragonTags(newPieces);
+
+        const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
+
+        const addIfAllowed = (r: number, c: number) => {
+          const key = `${r},${c}`;
+          const isProtected = protectedSet.has(key);
+          const isEmpty = getPieceAt(newPieces, r, c) === -1;
+
+          if (isProtected && isEmpty) return;
+
+          if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
+            const m: any = { row: r, col: c, createdBy: selectedPiece.side };
+            if (dragonTag) m.dragonTag = dragonTag;
+            updatedBurnMarks.push(m as BurnMark);
+          }
+        };
+
+        addIfAllowed(selectedPiece.row, selectedPiece.col);
+        for (const pathNode of path) {
+          if (pathNode.row === row && pathNode.col === col) continue;
+          addIfAllowed(pathNode.row, pathNode.col);
         }
       }
 
-      if (guardPaladinIndices.length > 0) {
-        // 進入守護對話框（同時把 pendingGuard 存到 state，PVP 才需要同步）
-        const pending: PendingGuard = {
+      if (selectedPiece.type === "paladin") {
+        updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
+      }
+    } else if (highlight.type === "swap") {
+      const targetIdx = clickedPieceIdx!;
+      const targetPiece = pieces[targetIdx];
+
+      const isWizardApprenticeSwap =
+        (selectedPiece.type === "wizard" &&
+          targetPiece.type === "apprentice" &&
+          targetPiece.side === selectedPiece.side) ||
+        (selectedPiece.type === "apprentice" &&
+          targetPiece.type === "wizard" &&
+          targetPiece.side === selectedPiece.side);
+
+      if (isWizardApprenticeSwap) {
+        const apprenticeIdx = selectedPiece.type === "apprentice" ? selectedPieceIndex : targetIdx;
+        const wizardIdx = selectedPiece.type === "wizard" ? selectedPieceIndex : targetIdx;
+
+        const apprentice = pieces[apprenticeIdx];
+        const wizard = pieces[wizardIdx];
+
+        if ((apprentice as any).swapUsed) {
+          setSelectedPieceIndex(-1);
+          setHighlights([]);
+          setDragonPathNodes([]);
+          setProtectionZones([]);
+          setWizardBeam(null);
+          return;
+        }
+
+        const movedWizard = { ...wizard, row: apprentice.row, col: apprentice.col };
+        const movedApprentice: any = { ...apprentice, row: wizard.row, col: wizard.col, swapUsed: true };
+
+        newPieces[wizardIdx] = movedWizard;
+        newPieces[apprenticeIdx] = movedApprentice as Piece;
+
+        moveDesc = `${PIECE_CHINESE[wizard.type]} ${fromCoord} ⇄ ${PIECE_CHINESE["apprentice"]} ${toCoord}`;
+      } else {
+        let movedPiece = updateAssassinStealth(
+          { ...selectedPiece, row, col },
+          selectedPiece.row,
+          selectedPiece.col,
+          row,
+          col
+        );
+        let swappedPiece = updateAssassinStealth(
+          { ...targetPiece, row: selectedPiece.row, col: selectedPiece.col },
+          targetPiece.row,
+          targetPiece.col,
+          selectedPiece.row,
+          selectedPiece.col
+        );
+
+        movedPiece = setAssassinStealthMeta(movedPiece);
+        swappedPiece = setAssassinStealthMeta(swappedPiece);
+
+        if (movedPiece.type === "assassin") {
+          const mp: any = { ...movedPiece, stealthed: false };
+          delete mp.stealthExpiresOn;
+          movedPiece = mp as Piece;
+          movedAssassinFinal = movedPiece;
+        }
+        if (swappedPiece.type === "assassin") {
+          const sp: any = { ...swappedPiece, stealthed: false };
+          delete sp.stealthExpiresOn;
+          swappedPiece = sp as Piece;
+        }
+
+        newPieces[selectedPieceIndex] = movedPiece;
+        newPieces[targetIdx] = swappedPiece;
+
+        if (movedPiece.type === "paladin") {
+          const zones = calculatePaladinProtectionZone(movedPiece, newPieces, adjacency, allNodes);
+          const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPiece.side);
+          for (let i = 0; i < newPieces.length; i++) newPieces[i] = revealedPieces[i];
+          updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, movedPiece.row, movedPiece.col);
+        }
+
+        if (swappedPiece.type === "paladin") {
+          const zones = calculatePaladinProtectionZone(swappedPiece, newPieces, adjacency, allNodes);
+          const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, swappedPiece.side);
+          for (let i = 0; i < newPieces.length; i++) newPieces[i] = revealedPieces[i];
+          updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, swappedPiece.row, swappedPiece.col);
+        }
+
+        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⇄ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
+      }
+    } else if (highlight.type === "attack") {
+      const targetIdx = clickedPieceIdx!;
+      const targetPiece = pieces[targetIdx];
+
+      const isWizard = selectedPiece.type === "wizard";
+      const isAdjacent =
+        isWizard && isAdjacentCell(selectedPiece.row, selectedPiece.col, row, col, allNodes, adjacency);
+
+      const beamTargetsNow = isWizard
+        ? computeAllWizardBeamTargetsSafe(selectedPiece, pieces, allNodes, adjacency, holyLights)
+        : [];
+
+      const isBeamTarget = isWizard && beamTargetsNow.some((t) => t.row === row && t.col === col);
+
+      if (isWizard && isAdjacent && isBeamTarget) {
+        setWizardAttackRequest({
+          wizardIndex: selectedPieceIndex,
           targetRow: row,
           targetCol: col,
           targetPieceIndex: targetIdx,
-          attackerPieceIndex: attackerIndex,
+        });
+
+        setSelectedPieceIndex(-1);
+        setHighlights([]);
+        setDragonPathNodes([]);
+        setProtectionZones([]);
+        setWizardBeam(null);
+        return;
+      }
+
+      const guardingPaladinIndices =
+        targetPiece.side !== "neutral"
+          ? findGuardingPaladins(row, col, pieces, targetPiece.side, adjacency, allNodes)
+          : [];
+
+      if (guardingPaladinIndices.length > 0) {
+        const pendingGuard: PendingGuard = {
+          targetRow: row,
+          targetCol: col,
+          targetPieceIndex: targetIdx,
+          attackerPieceIndex: selectedPieceIndex,
           defenderSide: targetPiece.side as PlayerSide,
-          guardPaladinIndices,
-          wizardAttackMode,
+          guardPaladinIndices: guardingPaladinIndices,
+          wizardAttackMode: isWizard && !isAdjacent ? "line" : null,
         };
 
         const syncState: SyncedState = {
@@ -1975,233 +2618,7 @@ export default function Game() {
           startingMode,
           ready,
           gameStarted,
-          pendingGuard: pending,
-        };
-
-        if (gameMode === "pvp") {
-          broadcastState(syncState);
-        }
-        applySyncedState(syncState);
-        return;
-      }
-
-      // 沒有守護：直接擊殺 + (部分棋子可能要移動到目標格)
-      // 先移除被吃
-      localCaptured = addCaptured(localCaptured, targetPiece);
-
-      // 如果被吃的是龍：清灼痕
-      if (targetPiece.type === "dragon") {
-        const tag = getDragonTag(targetPiece);
-        if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
-      }
-
-      // 扣掉 target
-      newPieces = newPieces.filter((_, idx) => idx !== targetIdx);
-
-      // 攻擊者是否要移動到目標格：
-      if (selectedPiece.type === "wizard") {
-        const lineShot =
-          wizardAttackMode === "line"
-            ? true
-            : wizardAttackMode === "move"
-            ? false
-            : isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
-
-        if (!lineShot) {
-          let moved = updateAssassinStealth({ ...selectedPiece, row, col }, fromRow, fromCol, row, col);
-          moved = setAssassinStealthMeta(moved);
-          // 刺客若移到聖騎士區，會被揭露（下面回合切換前會再做一次）
-          if (moved.type === "assassin") movedAssassinFinal = moved;
-          // 更新 attacker（原 index 可能變動，直接找到同 side/type 原位置）
-          // 先移除舊 attacker
-          const oldIdx = newPieces.findIndex((p) => p.row === fromRow && p.col === fromCol && p.side === selectedPiece.side && p.type === selectedPiece.type);
-          if (oldIdx !== -1) newPieces.splice(oldIdx, 1);
-          newPieces.push(moved);
-        }
-      } else if (selectedPiece.type === "dragon") {
-        // 龍攻擊：龍一定會移動到目標格
-        let moved = updateAssassinStealth({ ...selectedPiece, row, col }, fromRow, fromCol, row, col);
-        moved = setAssassinStealthMeta(moved);
-        // 移除舊 attacker
-        const oldIdx = newPieces.findIndex((p) => p.row === fromRow && p.col === fromCol && p.side === selectedPiece.side && p.type === selectedPiece.type);
-        if (oldIdx !== -1) newPieces.splice(oldIdx, 1);
-        newPieces.push(moved);
-
-        // 生成灼痕：舊位 + 路徑中間（排除終點）
-        const tag = getDragonTag(moved);
-        const path = calculateDragonPath(fromRow, fromCol, row, col, adjacency, allNodes);
-
-        const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
-
-        const addIfAllowed = (r: number, c: number) => {
-          const key = `${r},${c}`;
-          const isProtected = protectedSet.has(key);
-          const isEmpty = getPieceAt(newPieces, r, c) === -1;
-          if (isProtected && isEmpty) return;
-
-          if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
-            const m: any = { row: r, col: c, createdBy: moved.side };
-            if (tag) m.dragonTag = tag;
-            updatedBurnMarks.push(m as BurnMark);
-          }
-        };
-
-        addIfAllowed(fromRow, fromCol);
-        for (const node of path) {
-          if (node.row === row && node.col === col) continue;
-          addIfAllowed(node.row, node.col);
-        }
-      } else {
-        // 其他棋子：一般攻擊會移動到目標格（依你原規則）
-        let moved = updateAssassinStealth({ ...selectedPiece, row, col }, fromRow, fromCol, row, col);
-        moved = setAssassinStealthMeta(moved);
-
-        // 刺客攻擊：通常會解除隱身（你原本 decline 也做了）
-        if (moved.type === "assassin") {
-          const mp: any = { ...moved, stealthed: false };
-          delete mp.stealthExpiresOn;
-          moved = mp as Piece;
-          movedAssassinFinal = moved;
-        }
-
-        const oldIdx = newPieces.findIndex((p) => p.row === fromRow && p.col === fromCol && p.side === selectedPiece.side && p.type === selectedPiece.type);
-        if (oldIdx !== -1) newPieces.splice(oldIdx, 1);
-        newPieces.push(moved);
-      }
-
-      // 吟遊詩人激活
-      newPieces = activateAllBards(ensureDragonTags(newPieces));
-
-      // 刺客若進入敵方聖騎士區：揭露
-      if (movedAssassinFinal && movedAssassinFinal.type === "assassin" && movedAssassinFinal.stealthed) {
-        const enemySide = movedAssassinFinal.side === "white" ? "black" : "white";
-        if (isInProtectionZone(movedAssassinFinal.row, movedAssassinFinal.col, newPieces, enemySide, adjacency, allNodes)) {
-          const idx = newPieces.findIndex((p) => p.row === movedAssassinFinal!.row && p.col === movedAssassinFinal!.col && p.side === movedAssassinFinal!.side && p.type === "assassin");
-          if (idx !== -1) {
-            const a: any = { ...newPieces[idx], stealthed: false };
-            delete a.stealthExpiresOn;
-            newPieces[idx] = a as Piece;
-          }
-        }
-      }
-
-      // 回合切換
-      const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
-      const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
-
-      // 清除刺客到期隱身
-      const piecesAfterStealthExpire = clearExpiredAssassinStealth(newPieces, nextPlayer);
-
-      // 勝負判定
-      const result = checkWizardWin(piecesAfterStealthExpire);
-
-      // 記錄文字（巫師導線射擊用 ⟼）
-      let moveDesc = "";
-      if (selectedPiece.type === "wizard") {
-        const lineShot =
-          wizardAttackMode === "line"
-            ? true
-            : wizardAttackMode === "move"
-            ? false
-            : isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
-
-        moveDesc = lineShot
-          ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
-          : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
-      } else {
-        moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
-      }
-
-      const record = makeMoveRecord(moveDesc, movedAssassinFinal);
-      const newMoveHistory = [record, ...moveHistory];
-
-      const syncState: SyncedState = {
-        pieces: piecesAfterStealthExpire,
-        currentPlayer: result ? currentPlayer : nextPlayer,
-        moveHistory: newMoveHistory,
-        burnMarks: updatedBurnMarks,
-        holyLights: remainingHolyLights,
-        capturedPieces: localCaptured,
-        winner: result,
-        seats,
-        startingPlayer,
-        startingMode,
-        ready,
-        gameStarted,
-        pendingGuard: null,
-      };
-
-      applySyncedState(syncState);
-      broadcastState(syncState);
-      return;
-    }
-
-    // =========================
-    // 移動流程
-    // =========================
-    if (isMove) {
-      // 龍移動：生成灼痕 + 路徑
-      if (selectedPiece.type === "dragon") {
-        const path = calculateDragonPath(fromRow, fromCol, row, col, adjacency, allNodes);
-        setDragonPathNodes(path);
-
-        let moved = updateAssassinStealth({ ...selectedPiece, row, col }, fromRow, fromCol, row, col);
-        moved = setAssassinStealthMeta(moved);
-
-        // 移除舊龍
-        newPieces = newPieces.filter((p) => !(p.row === fromRow && p.col === fromCol && p.side === selectedPiece.side && p.type === "dragon"));
-        newPieces.push(moved);
-        newPieces = ensureDragonTags(newPieces);
-
-        const tag = getDragonTag(moved);
-        if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
-
-        const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
-
-        const addIfAllowed = (r: number, c: number) => {
-          const key = `${r},${c}`;
-          const isProtected = protectedSet.has(key);
-          const isEmpty = getPieceAt(newPieces, r, c) === -1;
-          if (isProtected && isEmpty) return;
-
-          if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
-            const m: any = { row: r, col: c, createdBy: moved.side };
-            if (tag) m.dragonTag = tag;
-            updatedBurnMarks.push(m as BurnMark);
-          }
-        };
-
-        addIfAllowed(fromRow, fromCol);
-        for (const node of path) {
-          if (node.row === row && node.col === col) continue;
-          addIfAllowed(node.row, node.col);
-        }
-
-        newPieces = activateAllBards(newPieces);
-
-        const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
-        const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
-        const piecesAfterStealthExpire = clearExpiredAssassinStealth(newPieces, nextPlayer);
-        const result = checkWizardWin(piecesAfterStealthExpire);
-
-        const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
-        const record = makeMoveRecord(moveDesc, movedAssassinFinal);
-        const newMoveHistory = [record, ...moveHistory];
-
-        const syncState: SyncedState = {
-          pieces: piecesAfterStealthExpire,
-          currentPlayer: result ? currentPlayer : nextPlayer,
-          moveHistory: newMoveHistory,
-          burnMarks: updatedBurnMarks,
-          holyLights: remainingHolyLights,
-          capturedPieces: localCaptured,
-          winner: result,
-          seats,
-          startingPlayer,
-          startingMode,
-          ready,
-          gameStarted,
-          pendingGuard: null,
+          pendingGuard,
         };
 
         applySyncedState(syncState);
@@ -2209,472 +2626,564 @@ export default function Game() {
         return;
       }
 
-      // 其他棋子一般移動
-      let moved = updateAssassinStealth({ ...selectedPiece, row, col }, fromRow, fromCol, row, col);
-      moved = setAssassinStealthMeta(moved);
-
-      // 刺客若移進敵方聖騎士區 -> 揭露
-      if (moved.type === "assassin" && moved.stealthed) {
-        const enemySide = moved.side === "white" ? "black" : "white";
-        if (isInProtectionZone(row, col, newPieces, enemySide, adjacency, allNodes)) {
-          const mp: any = { ...moved, stealthed: false };
-          delete mp.stealthExpiresOn;
-          moved = mp as Piece;
+      if (targetPiece.type !== "bard") {
+        if (targetPiece.type === "dragon") {
+          const tag = getDragonTag(targetPiece);
+          if (tag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, tag);
         }
+
+        localCaptured = addCaptured(localCaptured, targetPiece);
+        newPieces.splice(targetIdx, 1);
+        newPieces = activateAllBards(newPieces);
       }
 
-      newPieces = newPieces.filter((p) => !(p.row === fromRow && p.col === fromCol && p.side === selectedPiece.side && p.type === selectedPiece.type));
-      newPieces.push(moved);
-      newPieces = activateAllBards(ensureDragonTags(newPieces));
+      const adjustedIdx =
+        targetPiece.type !== "bard" && targetIdx < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex;
 
-      const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
-      const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
-      const piecesAfterStealthExpire = clearExpiredAssassinStealth(newPieces, nextPlayer);
-      const result = checkWizardWin(piecesAfterStealthExpire);
-
-      // 若吟遊詩人移動後需要交換（依你原本機制）：這裡保留 hook
-      if (moved.type === "bard") {
-        setBardNeedsSwap({ bardIndex: attackerIndex, bardRow: row, bardCol: col });
-      }
-
-      const moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} → ${toCoord}`;
-      const record = makeMoveRecord(moveDesc, movedAssassinFinal);
-      const newMoveHistory = [record, ...moveHistory];
-
-      const syncState: SyncedState = {
-        pieces: piecesAfterStealthExpire,
-        currentPlayer: result ? currentPlayer : nextPlayer,
-        moveHistory: newMoveHistory,
-        burnMarks: updatedBurnMarks,
-        holyLights: remainingHolyLights,
-        capturedPieces: localCaptured,
-        winner: result,
-        seats,
-        startingPlayer,
-        startingMode,
-        ready,
-        gameStarted,
-        pendingGuard: null,
-      };
-
-      applySyncedState(syncState);
-      broadcastState(syncState);
-      return;
-    }
-  }
-
-  function handleCellClick(row: number, col: number) {
-    if (selectedPieceIndex === -1) return;
-    performAttackOrMove({ attackerIndex: selectedPieceIndex, row, col });
-    clearSelection();
-  }
-
-  // =========================
-  // ✅ 單人 AI：極簡版（隨機合法走一步）
-  // =========================
-  function getAllLegalActions(forSide: PlayerSide): { attackerIndex: number; row: number; col: number; forceWizardMode?: WizardAttackMode }[] {
-    const actions: { attackerIndex: number; row: number; col: number; forceWizardMode?: WizardAttackMode }[] = [];
-
-    for (let i = 0; i < pieces.length; i++) {
-      const p = pieces[i];
-      if (p.side !== forSide) continue;
-
-      const h = computeHighlightsForPiece(p, pieces);
-      for (const m of h) {
-        if (m.type !== "move" && m.type !== "attack") continue;
-
-        // 若是巫師攻擊且是導線射擊格：AI 也要選模式
-        if (p.type === "wizard" && m.type === "attack") {
-          const isLine = isWizardLineShotAttack(p, m.row, m.col, pieces, allNodes, adjacency, holyLights);
-          if (isLine) {
-            // 兩種模式都加入（讓 AI 也可能選擇移動攻擊）
-            actions.push({ attackerIndex: i, row: m.row, col: m.col, forceWizardMode: "line" });
-            actions.push({ attackerIndex: i, row: m.row, col: m.col, forceWizardMode: "move" });
-            continue;
+      if (targetPiece.type !== "bard") {
+        if (selectedPiece.type === "wizard") {
+          if (!isAdjacent) {
+          } else {
+            const isLineShot = isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
+            if (!isLineShot) {
+              const movedWizard: Piece = { ...selectedPiece, row, col };
+              newPieces[adjustedIdx] = movedWizard;
+            }
           }
-        }
+        } else if (selectedPiece.type === "dragon") {
+          const dragonTag = getDragonTag(selectedPiece);
+          const path = calculateDragonPath(selectedPiece.row, selectedPiece.col, row, col, adjacency, allNodes);
 
-        actions.push({ attackerIndex: i, row: m.row, col: m.col });
+          if (dragonTag) updatedBurnMarks = removeBurnMarksByDragonTag(updatedBurnMarks, dragonTag);
+
+          let movedPiece = updateAssassinStealth(
+            { ...selectedPiece, row, col },
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col
+          );
+          movedPiece = ensureDragonTags([movedPiece])[0];
+          newPieces[adjustedIdx] = movedPiece;
+
+          const protectedSet = buildAllPaladinProtectedSet(newPieces, adjacency, allNodes);
+
+          const addIfAllowed = (r: number, c: number) => {
+            const key = `${r},${c}`;
+            const isProtected = protectedSet.has(key);
+            const isEmpty = getPieceAt(newPieces, r, c) === -1;
+            if (isProtected && isEmpty) return;
+
+            if (!updatedBurnMarks.some((b) => b.row === r && b.col === c)) {
+              const m: any = { row: r, col: c, createdBy: movedPiece.side };
+              const tag = getDragonTag(movedPiece);
+              if (tag) m.dragonTag = tag;
+              updatedBurnMarks.push(m as BurnMark);
+            }
+          };
+
+          addIfAllowed(selectedPiece.row, selectedPiece.col);
+          for (const node of path) {
+            if (node.row === row && node.col === col) continue;
+            addIfAllowed(node.row, node.col);
+          }
+        } else {
+          let movedPiece = updateAssassinStealth(
+            { ...selectedPiece, row, col },
+            selectedPiece.row,
+            selectedPiece.col,
+            row,
+            col
+          );
+          movedPiece = setAssassinStealthMeta(movedPiece);
+
+          if (movedPiece.type === "assassin") {
+            const mp: any = { ...movedPiece, stealthed: false };
+            delete mp.stealthExpiresOn;
+            movedPiece = mp as Piece;
+            movedAssassinFinal = movedPiece;
+          }
+
+          newPieces[adjustedIdx] = movedPiece;
+        }
+      }
+
+      if (selectedPiece.type === "paladin") {
+        updatedBurnMarks = removeBurnMarkAtCell(updatedBurnMarks, row, col);
+      }
+
+      if (selectedPiece.type === "wizard") {
+        if (targetPiece.type === "bard") {
+          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`;
+        } else if (!isAdjacent) {
+          moveDesc = `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`;
+        } else {
+          const isLineShot = isWizardLineShotAttack(selectedPiece, row, col, pieces, allNodes, adjacency, holyLights);
+
+          moveDesc = isLineShot
+            ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⟼ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (導線射擊)`
+            : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (巫師移動)`;
+        }
+      } else {
+        moveDesc =
+          targetPiece.type === "bard"
+            ? `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} 攻擊 ${PIECE_CHINESE[targetPiece.type]} ${toCoord} (無法擊殺)`
+            : `${PIECE_CHINESE[selectedPiece.type]} ${fromCoord} ⚔ ${PIECE_CHINESE[targetPiece.type]} ${toCoord}`;
       }
     }
 
-    return actions;
-  }
+    if (selectedPiece.type === "paladin") {
+      const movedPaladin =
+        newPieces[
+          highlight.type === "attack" && clickedPieceIdx! < selectedPieceIndex ? selectedPieceIndex - 1 : selectedPieceIndex
+        ];
 
-  function randomPick<T>(arr: T[]): T | null {
-    if (arr.length === 0) return null;
-    const idx = Math.floor(Math.random() * arr.length);
-    return arr[idx];
-  }
-
-  useEffect(() => {
-    if (gameMode !== "single") return;
-    if (!gameStarted) return;
-    if (winner) return;
-    if (currentPlayer !== aiSide) return;
-
-    // AI 不能在對話框狀態下動作
-    if (guardDialogOpen) return;
-
-    // 若巫師模式對話框在 AI 手上：自動選「導線射擊優先」
-    if (wizardAttackRequest) {
-      // 如果是 AI 的 wizard attack request，直接 line
-      resolveWizardAttackWithMode("line");
-      return;
-    }
-
-    // 吟遊詩人交換狀態：AI 直接取消（依你原機制可改成自動交換）
-    if (bardNeedsSwap) {
-      setBardNeedsSwap(null);
-      return;
-    }
-
-    if (aiActingRef.current) return;
-    aiActingRef.current = true;
-
-    // 稍微延遲一下，讓 UI 有感（不影響規則）
-    const t = window.setTimeout(() => {
-      try {
-        // 若此時需要守護選擇，且防守方是 AI：直接拒絕守護（最簡）
-        if (guardDialogOpen && guardRequest) {
-          const defenderIsAI = guardRequest.defenderSide === aiSide;
-          if (defenderIsAI) handleGuardDecline();
-          return;
-        }
-
-        const actions = getAllLegalActions(aiSide);
-        const pick = randomPick(actions);
-        if (!pick) return;
-
-        // 模擬選棋+落子
-        const p = pieces[pick.attackerIndex];
-        const h = computeHighlightsForPiece(p, pieces);
-        setSelectedPieceIndex(pick.attackerIndex);
-        setHighlights(h);
-
-        performAttackOrMove({
-          attackerIndex: pick.attackerIndex,
-          row: pick.row,
-          col: pick.col,
-          forceWizardMode: pick.forceWizardMode,
-        });
-
-        clearSelection();
-      } finally {
-        aiActingRef.current = false;
+      if (movedPaladin) {
+        const zones = calculatePaladinProtectionZone(movedPaladin, newPieces, adjacency, allNodes);
+        const revealedPieces = revealAssassinsInSpecificZone(newPieces, zones, movedPaladin.side);
+        for (let i = 0; i < newPieces.length; i++) newPieces[i] = revealedPieces[i];
       }
-    }, 450);
+    }
 
-    return () => {
-      window.clearTimeout(t);
-      aiActingRef.current = false;
+    if (selectedPiece.type === "bard" && highlight.type === "move") {
+      const bardNewIdx = selectedPieceIndex;
+      const movedBard = newPieces[bardNewIdx];
+
+      if (movedBard) {
+        setPieces(newPieces);
+        setCapturedPieces(localCaptured);
+        setBurnMarks(updatedBurnMarks);
+
+        setBardNeedsSwap({ bardIndex: bardNewIdx, bardRow: movedBard.row, bardCol: movedBard.col });
+
+        const swapHighlights: MoveHighlight[] = newPieces
+          .filter((p) => p.side === currentPlayer && p.type !== "bard" && p.type !== "dragon" && p.type !== "wizard")
+          .map((p) => ({ type: "swap" as const, row: p.row, col: p.col }));
+
+        setHighlights(swapHighlights);
+        setDragonPathNodes([]);
+        setProtectionZones([]);
+        setWizardBeam(null);
+        return;
+      }
+    }
+
+    const result = checkWizardWin(newPieces);
+    const nextPlayer: PlayerSide = currentPlayer === "white" ? "black" : "white";
+
+    const record = makeMoveRecord(moveDesc, movedAssassinFinal);
+    const newMoveHistory = [record, ...moveHistory];
+
+    const remainingBurnMarks = updatedBurnMarks;
+    const remainingHolyLights = holyLights.filter((light) => light.createdBy !== nextPlayer);
+
+    const piecesAfterStealthExpire = clearExpiredAssassinStealth(ensureDragonTags(newPieces), nextPlayer);
+
+    const finalized = finalizeTurnNoAutoShot({
+      piecesAfterStealthExpire,
+      updatedBurnMarks: remainingBurnMarks,
+      remainingHolyLights,
+      localCaptured,
+      newMoveHistory,
+      nextPlayer,
+      result,
+    });
+
+    const syncState: SyncedState = {
+      pieces: finalized.pieces,
+      currentPlayer: finalized.winner ? currentPlayer : nextPlayer,
+      moveHistory: finalized.moveHistory,
+      burnMarks: finalized.burnMarks,
+      holyLights: finalized.holyLights,
+      capturedPieces: finalized.capturedPieces,
+      winner: finalized.winner ?? winner,
+      seats,
+      startingPlayer,
+      startingMode,
+      ready,
+      gameStarted,
+      pendingGuard: null,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    gameMode,
-    gameStarted,
-    winner,
-    currentPlayer,
-    aiSide,
-    guardDialogOpen,
-    wizardAttackRequest,
-    bardNeedsSwap,
-    pieces,
-    holyLights,
-    burnMarks,
-    capturedPieces,
-    moveHistory,
-    adjacency,
-    allNodes,
-  ]);
 
-  // =========================
-  // 快照回放顯示：若正在回放就用快照資料渲染
-  // =========================
-  const viewing = viewSnapshotIndex !== null && snapshots[viewSnapshotIndex];
-  const viewState = viewing ? snapshots[viewSnapshotIndex!] : null;
+    applySyncedState(syncState);
+    broadcastState(syncState);
+  };
 
-  const renderPieces = viewState ? viewState.pieces : pieces;
-  const renderCurrentPlayer = viewState ? viewState.currentPlayer : currentPlayer;
-  const renderMoveHistory = viewState ? viewState.moveHistory : moveHistory;
-  const renderBurnMarks = viewState ? viewState.burnMarks : burnMarks;
-  const renderHolyLights = viewState ? viewState.holyLights : holyLights;
-  const renderCaptured = viewState ? viewState.capturedPieces : capturedPieces;
-  const renderWinner = viewState ? viewState.winner : winner;
+  const boardState: SyncedState =
+    isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
+      ? snapshots[viewSnapshotIndex]
+      : ({
+          pieces,
+          burnMarks,
+          holyLights,
+          capturedPieces,
+          moveHistory,
+          currentPlayer,
+          seats,
+          startingPlayer,
+          startingMode,
+          ready,
+          gameStarted,
+          winner,
+          pendingGuard: null,
+        } as SyncedState);
 
-  const selectedPiece = selectedPieceIndex !== -1 ? pieces[selectedPieceIndex] : null;
+  const isMyTurn =
+    !winner &&
+    gameStarted &&
+    (playMode === "solo" ? true : localSide !== "spectator" && localSide === boardState.currentPlayer);
 
-  // =========================
-  // UI：Lobby 兩步（密碼 -> 模式）-> 選邊 -> 準備/開始
-  // =========================
-  function renderLobby() {
-    if (lobbyStep === "password") {
-      return (
-        <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
-          <div className="text-2xl font-bold">輸入坊間密碼</div>
-          <input
-            className="border rounded px-3 py-2 w-[260px]"
-            value={passwordInput}
-            onChange={(e) => setPasswordInput(e.target.value)}
-            placeholder="房間密碼"
-          />
-          <button className="px-4 py-2 rounded bg-black text-white" onClick={handleGoModeSelect}>
-            下一步
-          </button>
-          {roomError && <div className="text-red-600">{roomError}</div>}
-        </div>
-      );
-    }
+  const displayPieces: Piece[] = isObserving
+    ? boardState.pieces.map((p) => (p.type === "assassin" ? { ...p, stealthed: false } : p))
+    : boardState.pieces;
 
-    // mode
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
-        <div className="text-2xl font-bold">選擇模式</div>
+  const effectivePiecesForPanel = boardState.pieces;
+  const selectedPieceForPanel = selectedPieceIndex !== -1 ? effectivePiecesForPanel[selectedPieceIndex] : null;
 
-        <div className="flex gap-3">
-          <button className="px-4 py-2 rounded bg-black text-white" onClick={() => handleSelectMode("single")}>
-            單人 vs AI
-          </button>
-          <button className="px-4 py-2 rounded border" onClick={() => handleSelectMode("pvp")}>
-            PVP 對戰
-          </button>
-        </div>
+  const handleSelectMoveFromHistory = (index: number) => {
+    if (!isObserving) return;
+    if (snapshots.length === 0) return;
 
-        {gameMode === "pvp" && (
-          <div className="text-sm text-gray-600">
-            連線狀態：{socketStatus === "connected" ? "已連線" : socketStatus === "connecting" ? "連線中" : "未連線"}
-          </div>
-        )}
+    const latest = snapshots[snapshots.length - 1];
+    const totalMoves = latest.moveHistory.length;
+    if (totalMoves === 0) return;
 
-        {roomError && <div className="text-red-600">{roomError}</div>}
-      </div>
-    );
-  }
-// ===== Part 4/4 =====
-  function renderSideSelect() {
-    const you = localSide === "spectator" ? "觀戰" : localSide === "white" ? "白方" : "黑方";
-    const modeText = gameMode === "single" ? "單人 vs AI" : "PVP 對戰";
+    const moveNumber = totalMoves - index;
+    let snapshotIndex = moveNumber;
 
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 p-6">
-        <div className="text-2xl font-bold">已進入房間</div>
-        <div className="text-sm text-gray-600">模式：{modeText}</div>
+    if (snapshotIndex < 0) snapshotIndex = 0;
+    if (snapshotIndex >= snapshots.length) snapshotIndex = snapshots.length - 1;
 
-        {gameMode === "single" ? (
-          <div className="text-sm text-gray-600">單人模式不可觀戰，請選擇你的陣營（另一方將由 AI 操控）</div>
-        ) : (
-          <div className="text-sm text-gray-600">請選擇白/黑/觀戰</div>
-        )}
+    const movedIndices = findMovedPieceIndicesForSnapshot(snapshotIndex);
 
-        <div className="flex gap-3">
-          <button className="px-4 py-2 rounded border" onClick={() => handleChooseSide("white")}>
-            白方
-          </button>
-          <button className="px-4 py-2 rounded border" onClick={() => handleChooseSide("black")}>
-            黑方
-          </button>
-          {gameMode !== "single" && (
-            <button className="px-4 py-2 rounded border" onClick={() => handleChooseSide("spectator")}>
-              觀戰
-            </button>
-          )}
-        </div>
+    setViewSnapshotIndex(snapshotIndex);
+    setSelectedPieceIndex(movedIndices.length > 0 ? movedIndices[0] : -1);
+    setHighlights([]);
+    setDragonPathNodes([]);
+    setProtectionZones([]);
+    setWizardBeam(null);
+  };
 
-        <div className="text-sm">
-          你目前：<span className="font-semibold">{you}</span>
-        </div>
+  const myReady = localSide === "white" ? ready.white : localSide === "black" ? ready.black : false;
+  const otherReady = localSide === "white" ? ready.black : localSide === "black" ? ready.white : false;
 
-        {seatError && <div className="text-red-600">{seatError}</div>}
+  const baseHistory = snapshots.length > 0 ? snapshots[snapshots.length - 1].moveHistory : moveHistory;
 
-        <div className="mt-2 flex flex-col items-center gap-2">
-          <div className="text-sm text-gray-600">
-            先手：<span className="font-semibold">{startingPlayer === "white" ? "白方" : "黑方"}</span>{" "}
-            {startingMode === "random" ? "(隨機)" : "(手動)"}
-          </div>
-
-          <div className="flex gap-2">
-            <button className="px-3 py-1 rounded border" onClick={handleToggleStartingPlayer} disabled={gameMode === "single"}>
-              切換先手
-            </button>
-            <button className="px-3 py-1 rounded border" onClick={handleRandomStartingPlayer} disabled={gameMode === "single"}>
-              隨機先手
-            </button>
-          </div>
-
-          <button
-            className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
-            onClick={handlePressReady}
-            disabled={localSide === "spectator" || (localSide !== "spectator" && ready[localSide])}
-          >
-            {localSide === "spectator" ? "觀戰" : ready[localSide] ? "已準備" : "準備"}
-          </button>
-
-          <div className="text-sm text-gray-600">
-            白方：{ready.white ? "✅" : "⏳"}　黑方：{ready.black ? "✅" : "⏳"}　遊戲：{gameStarted ? "已開始" : "未開始"}
-          </div>
-        </div>
-      </div>
-    );
+  let displayHistory: string[] = [];
+  if (baseHistory) {
+    if (isObserving || localSide === "spectator") displayHistory = baseHistory.map((r) => r.fullText);
+    else if (localSide === "white") displayHistory = baseHistory.map((r) => r.whiteText);
+    else if (localSide === "black") displayHistory = baseHistory.map((r) => r.blackText);
   }
 
-  function renderTopBar() {
-    const turnText = renderWinner
-      ? `勝者：${renderWinner === "white" ? "白方" : "黑方"}`
-      : `目前回合：${renderCurrentPlayer === "white" ? "白方" : "黑方"}`;
-
-    const modeText = gameMode === "single" ? `單人 vs AI（AI：${aiSide === "white" ? "白方" : "黑方"}）` : "PVP";
-
-    return (
-      <div className="w-full flex items-center justify-between px-4 py-2 border-b">
-        <div className="font-semibold">{modeText}</div>
-
-        <div className="flex items-center gap-3">
-          <div className="font-bold">{turnText}</div>
-
-          {viewState && (
-            <div className="text-sm text-gray-600">
-              回放：第 {viewSnapshotIndex} / {snapshots.length - 1} 手
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button className="px-3 py-1 rounded border" onClick={handleRestartGame}>
-            重新開始
-          </button>
-          <button className="px-3 py-1 rounded border" onClick={handleExitGame}>
-            離開
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  function renderReplayControls() {
-    if (!snapshots.length || !showEndModal) return null;
-
-    return (
-      <div className="flex items-center gap-2 mt-2">
-        <button
-          className="px-3 py-1 rounded border disabled:opacity-50"
-          disabled={viewSnapshotIndex === null || viewSnapshotIndex <= 0}
-          onClick={() => setViewSnapshotIndex((v) => (v === null ? 0 : Math.max(0, v - 1)))}
-        >
-          上一步
-        </button>
-        <button
-          className="px-3 py-1 rounded border disabled:opacity-50"
-          disabled={viewSnapshotIndex === null || viewSnapshotIndex >= snapshots.length - 1}
-          onClick={() => setViewSnapshotIndex((v) => (v === null ? snapshots.length - 1 : Math.min(snapshots.length - 1, v + 1)))}
-        >
-          下一步
-        </button>
-        <button className="px-3 py-1 rounded border" onClick={() => setViewSnapshotIndex(snapshots.length - 1)}>
-          最後局面
-        </button>
-      </div>
-    );
-  }
-
-  // =========================
-  // JSX 主畫面
-  // =========================
   if (!inRoom) {
-    return <div className="w-full h-[calc(100vh-0px)]">{renderLobby()}</div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
+        <div className="w-full max-w-md bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl">
+          <h1 className="text-2xl font-bold text-center mb-2 text-slate-100">巫師棋 Wizard Chess</h1>
+          <p className="text-xs text-slate-400 text-center mb-6">
+            請選擇遊玩方式。<br />
+            PVP：輸入密碼加入同一房間；單機：同一台控制雙方直接開始。
+          </p>
+
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPlayMode("pvp")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold ${
+                  playMode === "pvp"
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "border-slate-600 text-slate-100 hover:border-slate-300"
+                }`}
+              >
+                PVP 連線
+              </button>
+
+              <button
+                onClick={startSoloGame}
+                className="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+              >
+                單機
+              </button>
+            </div>
+
+            {playMode === "pvp" && (
+              <>
+                <div>
+                  <label htmlFor="room-password" className="block text-sm text-slate-300 mb-1">
+                    房間密碼（必填）
+                  </label>
+                  <input
+                    id="room-password"
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full rounded-lg bg-slate-950 border border-slate-600 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    placeholder="請輸入房間密碼"
+                  />
+                </div>
+
+                <button
+                  onClick={handleJoinRoom}
+                  className="w-full mt-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+                >
+                  建立 / 加入 房間
+                </button>
+
+                {roomError && <div className="text-red-400 text-xs mt-2">{roomError}</div>}
+              </>
+            )}
+
+            <div className="text-[11px] text-slate-500 text-center mt-4">
+              WebSocket 狀態：
+              {socketStatus === "connecting" && "連線中..."}
+              {socketStatus === "connected" && "已連線"}
+              {socketStatus === "disconnected" && "未連線"}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  // 已入房但未選邊/未開始
-  if (!gameStarted) {
+  if (inRoom && !gameStarted) {
+    const startingText = startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
+
     return (
-      <div className="w-full h-[calc(100vh-0px)] flex flex-col">
-        {renderTopBar()}
-        <div className="flex-1">{renderSideSelect()}</div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
+        <div className="w-full max-w-lg bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+          <h1 className="text-2xl font-bold text-center text-slate-100">巫師棋 Wizard Chess</h1>
+          <p className="text-lg text-slate-300 text-center font-medium">
+            準備階段：請先選擇白方、黑方或觀戰，並設定這局的先後攻。白方與黑方都按下「開始遊戲」後，對局才會正式開始。
+          </p>
+
+          <div>
+            <div className="text-sm text-slate-200 mb-2 text-center">座位選擇</div>
+            <div className="flex justify-center items-center gap-4 mb-2 text-sm text-slate-300">
+              <button
+                className={`px-3 py-1 rounded-full border ${
+                  localSide === "white"
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "border-slate-500 hover:border-slate-300"
+                }`}
+                onClick={() => handleChooseSide("white")}
+              >
+                白方
+              </button>
+              <button
+                className={`px-3 py-1 rounded-full border ${
+                  localSide === "black"
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "border-slate-500 hover:border-slate-300"
+                }`}
+                onClick={() => handleChooseSide("black")}
+              >
+                黑方
+              </button>
+              <button
+                className={`px-3 py-1 rounded-full border ${
+                  localSide === "spectator"
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "border-slate-500 hover:border-slate-300"
+                }`}
+                onClick={() => handleChooseSide("spectator")}
+              >
+                觀戰
+              </button>
+            </div>
+            <div className="text-[11px] text-slate-400 text-center">
+              白方：{seats.whiteOwnerId ? "有人就座" : "空位"} ｜ 黑方：{seats.blackOwnerId ? "有人就座" : "空位"}
+            </div>
+            {seatError && <div className="text-xs text-red-400 mt-1 text-center">{seatError}</div>}
+          </div>
+
+          <div>
+            <div className="text-sm text-slate-200 mb-2 text-center">先後攻設定</div>
+            <div className="text-xs text-slate-400 text-center mb-2">
+              目前設定： <span className="text-emerald-300">{startingText}</span>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                onClick={handleToggleStartingPlayer}
+                className="px-3 py-1 rounded-lg border border-slate-600 bg-slate-950 text-xs text-slate-100 hover:border-emerald-400 hover:text-emerald-300"
+              >
+                自訂先後攻： {startingPlayer === "white" ? "白方先攻" : "黑方先攻"}
+              </button>
+              <button
+                onClick={handleRandomStartingPlayer}
+                className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-xs text-slate-950 font-semibold"
+              >
+                隨機決定先後攻
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm text-slate-200 mb-2 text-center">準備狀態</div>
+            {localSide === "spectator" ? (
+              <div className="text-xs text-slate-400 text-center">
+                目前為觀戰模式，無需準備。
+                <br />
+                若要參與對局，請先選擇白方或黑方。
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-center">
+                  <button
+                    onClick={handlePressReady}
+                    disabled={myReady}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                      myReady
+                        ? "bg-slate-700 text-slate-300 cursor-default"
+                        : "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
+                    }`}
+                  >
+                    {myReady ? "已準備完成" : "開始遊戲"}
+                  </button>
+                </div>
+                <div className="mt-2 text-[11px] text-slate-400 text-center">
+                  白方：{ready.white ? "已準備" : "未準備"} ｜ 黑方：{ready.black ? "已準備" : "未準備"}
+                </div>
+                <div className="mt-1 text-[11px] text-amber-300 text-center">
+                  {myReady && !otherReady && "你已準備完成，正在等待另一位玩家…"}
+                  {!myReady && otherReady && "另一位玩家已準備完成，請按「開始遊戲」開始對局。"}
+                  {myReady && otherReady && "雙方已準備完成，對局即將開始。"}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="text-[11px] text-slate-500 text-center">
+            WebSocket 狀態：
+            {socketStatus === "connecting" && "連線中..."}
+            {socketStatus === "connected" && "已連線"}
+            {socketStatus === "disconnected" && "未連線"}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-[calc(100vh-0px)] flex flex-col">
-      {renderTopBar()}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8">
+      <div className="max-w-[1400px] mx-auto">
+        <h1 className="text-3xl font-bold text-center mb-4 text-slate-100" data-testid="text-title">
+          巫師棋 Wizard Chess
+        </h1>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* 左側：棋子資訊 */}
-        <div className="w-[320px] border-r overflow-auto">
-          <PieceInfoPanel
-            selectedPiece={selectedPiece}
-            currentPlayer={renderCurrentPlayer}
-            localSide={localSide}
-          />
-          <div className="p-3 border-t">
-            <CapturedPiecesPanel capturedPieces={renderCaptured} />
-          </div>
-
-          {showEndModal && (
-            <div className="p-3 border-t">
-              <div className="font-bold mb-2">對局結束</div>
-              <div className="text-sm text-gray-700 mb-2">
-                勝者：{renderWinner === "white" ? "白方" : renderWinner === "black" ? "黑方" : "—"}
-              </div>
-              {renderReplayControls()}
-            </div>
+        <div className="text-xs text-center mb-2 text-slate-400 font-mono" data-testid="text-debug">
+          選中: {selectedPieceIndex >= 0 ? `#${selectedPieceIndex}` : "無"} | 高亮: {highlights.length} | 玩家:{" "}
+          {boardState.currentPlayer} | 守護區: {protectionZones.length}
+          {protectionZones.length > 0 && (
+            <span className="ml-2">[{protectionZones.map((z) => `${getNodeCoordinate(z.row, z.col)}`).join(", ")}]</span>
           )}
         </div>
 
-        {/* 中間：棋盤 */}
-        <div className="flex-1 flex items-center justify-center overflow-hidden">
-          <GameBoard
-            pieces={renderPieces}
-            selectedPieceIndex={selectedPieceIndex}
-            highlights={highlights}
-            burnMarks={renderBurnMarks}
-            holyLights={renderHolyLights}
-            dragonPathNodes={dragonPathNodes}
-            protectionZones={protectionZones}
-            wizardBeam={wizardBeam}
-            onSelectPiece={handleSelectPiece}
-            onCellClick={handleCellClick}
-            canPlay={canPlay}
-            getNodeCoordinate={getNodeCoordinate}
-          />
-        </div>
-
-        {/* 右側：回合顯示 + 歷史（座標已是 A~I,1~9 由 getNodeCoordinate 處理） */}
-        <div className="w-[360px] border-l overflow-auto">
-          <div className="p-3">
-            <div className="text-lg font-bold mb-2">
-              {renderWinner
-                ? `勝者：${renderWinner === "white" ? "白方" : "黑方"}`
-                : `目前回合：${renderCurrentPlayer === "white" ? "白方" : "黑方"}`}
-            </div>
-            <div className="text-sm text-gray-600">
-              你是：{localSide === "spectator" ? "觀戰" : localSide === "white" ? "白方" : "黑方"}
-              {gameMode === "single" && `（AI：${aiSide === "white" ? "白方" : "黑方"}）`}
-            </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-3">
+          <div
+            className={`px-3 py-1 rounded-full text-xs sm:text-sm border ${
+              isMyTurn
+                ? "border-emerald-400 text-emerald-300 bg-emerald-500/10"
+                : "border-slate-600 text-slate-200 bg-slate-800/60"
+            }`}
+          >
+            目前回合：{boardState.currentPlayer === "white" ? "白方" : "黑方"}
           </div>
 
-          <TurnHistoryPanel
-            moveHistory={renderMoveHistory}
-            localSide={localSide}
-          />
+          <div className="px-3 py-1 rounded-full text-[11px] sm:text-xs border border-slate-700 text-slate-300 bg-slate-900/60">
+            {localSide === "spectator"
+              ? "你目前是：觀戰者"
+              : `你扮演：${localSide === "white" ? "白方" : "黑方"}${isMyTurn ? "（現在輪到你）" : ""}`}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-6 items-start">
+          <div className="order-2 lg:order-1 flex flex-col gap-4">
+            <CapturedPiecesPanel capturedPieces={boardState.capturedPieces} />
+            <PieceInfoPanel piece={selectedPieceForPanel || null} />
+          </div>
+
+          <div className="order-1 lg:order-2 flex justify-center">
+            <GameBoard
+              pieces={displayPieces}
+              selectedPieceIndex={selectedPieceIndex}
+              highlights={highlights}
+              currentPlayer={boardState.currentPlayer}
+              onNodeClick={handleNodeClick}
+              burnMarks={boardState.burnMarks}
+              protectionZones={protectionZones}
+              holyLights={boardState.holyLights}
+              viewerSide={localSide}
+              observing={isObserving}
+              wizardBeam={wizardBeam}
+            />
+          </div>
+
+          <div className="order-3 flex flex-col gap-3">
+            {winner && (
+              <button
+                onClick={handleRestartGame}
+                className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+              >
+                再來一局
+              </button>
+            )}
+            <TurnHistoryPanel
+              currentPlayer={currentPlayer}
+              moveHistory={displayHistory}
+              winner={winner}
+              onSelectMove={handleSelectMoveFromHistory}
+            />
+          </div>
         </div>
       </div>
 
-      {/* 守護對話框 */}
+      {winner && showEndModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-xs text-center shadow-2xl">
+            <div className="text-lg font-bold text-slate-100 mb-1">{winner === "white" ? "白方勝利" : "黑方勝利"}</div>
+            <div className="text-xs text-slate-400 mb-4">巫師被擊倒，遊戲結束。</div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleRestartGame}
+                className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+              >
+                再來一局
+              </button>
+              <button
+                onClick={() => setShowEndModal(false)}
+                className="w-full rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 font-semibold py-2 text-sm"
+              >
+                觀察棋局
+              </button>
+              <button
+                onClick={handleExitGame}
+                className="w-full rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold py-2 text-sm"
+              >
+                退出遊戲
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <GuardDialog
-        open={guardDialogOpen}
-        options={guardOptions}
+        isOpen={guardDialogOpen && !!guardRequest && localSide === guardRequest?.defenderSide}
+        guardOptions={guardOptions}
+        targetCoordinate={guardRequest ? getNodeCoordinate(guardRequest.targetRow, guardRequest.targetCol) : ""}
         selectedPaladinIndex={selectedGuardPaladinIndex}
-        onChangeSelected={handleChangeSelectedGuardPaladin}
-        onConfirm={handleGuardConfirm}
+        onChangeSelectedPaladin={handleChangeSelectedGuardPaladin}
+        onConfirmGuard={handleGuardConfirm}
         onDecline={handleGuardDecline}
       />
 
-      {/* 巫師攻擊模式對話框 */}
       <WizardAttackDialog
-        open={!!wizardAttackRequest}
-        onChooseLine={() => resolveWizardAttackWithMode("line")}
-        onChooseMove={() => resolveWizardAttackWithMode("move")}
-        onClose={() => setWizardAttackRequest(null)}
+        isOpen={!!wizardAttackRequest}
+        targetCoordinate={
+          wizardAttackRequest ? getNodeCoordinate(wizardAttackRequest.targetRow, wizardAttackRequest.targetCol) : ""
+        }
+        onLineShot={handleWizardLineShot}
+        onMoveAttack={handleWizardMoveAttack}
       />
     </div>
   );
