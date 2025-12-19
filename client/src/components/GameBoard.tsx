@@ -630,7 +630,7 @@ export default function GameBoard({
 ctx.font = 'bold 14px sans-serif';
 ctx.fillStyle = BOARD_THEME.labelText;
 
-const PAD = 14; // 距離外推（可調 10~18）
+const PAD = 16; // 距離外推（可調 10~18）
 
 // 用 vPoint 後的節點算出棋盤中心（翻面後也正確）
 let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -663,7 +663,7 @@ rowLabels.forEach((label, rowIdx) => {
     // 依外推方向決定對齊，避免文字蓋到棋盤
     ctx.textAlign = out.x >= cx ? 'left' : 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, out.x+3, out.y+3);
+    ctx.fillText(label, out.x+5, out.y+5);
   }
 });
 
@@ -677,7 +677,7 @@ colLabels.forEach((label, rowIdx) => {
 
     ctx.textAlign = out.x >= cx ? 'left' : 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, out.x-3, out.y-3);
+    ctx.fillText(label, out.x-5, out.y-5);
   }
 });
 
