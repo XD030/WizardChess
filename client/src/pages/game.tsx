@@ -672,10 +672,7 @@ export default function Game() {
   const [playMode, setPlayMode] = useState<PlayMode>("pvp");
 
   // ✅ Solo (vs AI) setup
-  const [soloHumanSide, setSoloHumanSide] = useState<PlayerSide>("white");
-  const aiSide: PlayerSide | null = playMode === "solo"
-    ? (soloHumanSide === "white" ? "black" : "white")
-    : null;
+
   // ✅ Solo (vs AI) — 人類玩家扮演哪一邊
   const [soloHumanSide, setSoloHumanSide] = useState<PlayerSide>("white");
   const soloAiSide: PlayerSide = soloHumanSide === "white" ? "black" : "white";
