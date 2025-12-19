@@ -2828,7 +2828,29 @@ export default function Game() {
           pendingGuard: null,
         } as SyncedState);
 
-  const isMyTurn =
+  
+  // ===== AI TURN HANDLER (minimal, solo only) =====
+  useEffect(() => {
+    if (playMode !== "solo") return;
+    if (winner) return;
+
+    // AI plays the opposite side of localSide
+    const aiSide = localSide === "white" ? "black" : "white";
+    if (currentPlayer !== aiSide) return;
+
+    // small delay so UI can render
+    const t = setTimeout(() => {
+      try {
+        runSimpleAIMove_AI();
+      } catch (e) {
+        console.error("AI move failed", e);
+      }
+    }, 400);
+
+    return () => clearTimeout(t);
+  }, [playMode, currentPlayer, winner]);
+
+const isMyTurn =
     !winner &&
     gameStarted &&
     (playMode === "solo" ? true : localSide !== "spectator" && localSide === boardState.currentPlayer);
@@ -3188,69 +3210,3 @@ export default function Game() {
     </div>
   );
 }
-
-
-// ===== AI AUTO MOVE (minimal, non-invasive) =====
-const aiThinkingRef = { current: false };
-
-function getAllMovesForPiece_AI(p, idx, pieces, allNodes, adjacency, holyLights, burnMarks) {
-  if (p.type === "wizard") {
-    const moves = calculateWizardMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-    const targets = computeAllWizardBeamTargetsSafe(p, pieces, allNodes, adjacency, holyLights);
-    return mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: p, pieces });
-  }
-  if (p.type === "apprentice") return calculateApprenticeMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-  if (p.type === "dragon") return calculateDragonMoves(p, idx, pieces, adjacency, allNodes, burnMarks, holyLights).highlights;
-  if (p.type === "ranger") return calculateRangerMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-  if (p.type === "griffin") return calculateGriffinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-  if (p.type === "assassin") return calculateAssassinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-  if (p.type === "paladin") return calculatePaladinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-  if (p.type === "bard") return calculateBardMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks);
-  return [];
-}
-
-function runSimpleAIMove_AI(state) {
-  const { pieces, currentPlayer, soloSide, handleNodeClick, allNodes, adjacency, holyLights, burnMarks } = state;
-  const aiSide = soloSide === "white" ? "black" : "white";
-
-  const aiPieces = pieces.map((p, idx) => ({ p, idx })).filter(x => x.p.side === aiSide);
-
-  // 1. eat wizard
-  for (const { p, idx } of aiPieces) {
-    const moves = getAllMovesForPiece_AI(p, idx, pieces, allNodes, adjacency, holyLights, burnMarks);
-    for (const m of moves) {
-      if (m.type === "attack") {
-        const t = getPieceAt(pieces, m.row, m.col);
-        if (t !== -1 && pieces[t].type === "wizard") {
-          handleNodeClick(p.row, p.col);
-          handleNodeClick(m.row, m.col);
-          return true;
-        }
-      }
-    }
-  }
-
-  // 2. eat anything
-  for (const { p, idx } of aiPieces) {
-    const moves = getAllMovesForPiece_AI(p, idx, pieces, allNodes, adjacency, holyLights, burnMarks);
-    const m = moves.find(x => x.type === "attack");
-    if (m) {
-      handleNodeClick(p.row, p.col);
-      handleNodeClick(m.row, m.col);
-      return true;
-    }
-  }
-
-  // 3. move
-  for (const { p, idx } of aiPieces) {
-    const moves = getAllMovesForPiece_AI(p, idx, pieces, allNodes, adjacency, holyLights, burnMarks);
-    const m = moves.find(x => x.type === "move");
-    if (m) {
-      handleNodeClick(p.row, p.col);
-      handleNodeClick(m.row, m.col);
-      return true;
-    }
-  }
-  return false;
-}
-// ===== END AI AUTO MOVE =====
