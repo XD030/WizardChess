@@ -626,34 +626,53 @@ export default function GameBoard({
       ctx.fill();
     });
 
-    // --- 座標標籤 A~I / 1~9（✅ 位置也跟著翻）---
+    // --- 座標標籤 A~I / 1~9（✅ 放到棋盤外面，且跟著翻面位置）---
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = BOARD_THEME.labelText;
-
+    
+    // 先算出「翻面後」所有節點的 bounding box
+    let minX = Infinity;
+    let maxX = -Infinity;
+    
+    for (const n of allNodes) {
+      const v = vPoint(n);
+      if (v.x < minX) minX = v.x;
+      if (v.x > maxX) maxX = v.x;
+    }
+    
+    // 往外推的距離（可自行調大/小）
+    const OUT = 26;
+    
+    // 固定放在棋盤外的左右兩側
+    const labelXRight = maxX + OUT; // 英文字母
+    const labelXLeft = minX - OUT;  // 數字
+    
+    // A~I（每一排的「最右節點」取 y，x 固定在棋盤外右側）
     const rowLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     rowLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const rightNode = rows[rowIdx][rows[rowIdx].length - 1];
         const v = vPoint(rightNode);
-
-        // ✅ 文字依然保持正常方向，只翻位置
+    
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, v.x + 10, v.y - 5);
+        ctx.fillText(label, labelXRight, v.y - 5);
       }
     });
-
+    
+    // 1~9（每一排的「最左節點」取 y，x 固定在棋盤外左側）
     const colLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
     colLabels.forEach((label, rowIdx) => {
       if (rowIdx < rows.length && rowIdx <= 8) {
         const leftNode = rows[rowIdx][0];
         const v = vPoint(leftNode);
-
+    
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, v.x - 10, v.y - 5);
+        ctx.fillText(label, labelXLeft, v.y - 5);
       }
     });
+
 
     // --- 棋子（圖片） ---
     pieces.forEach((piece, idx) => {
