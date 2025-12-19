@@ -2828,29 +2828,7 @@ export default function Game() {
           pendingGuard: null,
         } as SyncedState);
 
-  
-  // ===== AI TURN HANDLER (minimal, solo only) =====
-  useEffect(() => {
-    if (playMode !== "solo") return;
-    if (winner) return;
-
-    // AI plays the opposite side of localSide
-    const aiSide = localSide === "white" ? "black" : "white";
-    if (currentPlayer !== aiSide) return;
-
-    // small delay so UI can render
-    const t = setTimeout(() => {
-      try {
-        runSimpleAIMove_AI();
-      } catch (e) {
-        console.error("AI move failed", e);
-      }
-    }, 400);
-
-    return () => clearTimeout(t);
-  }, [playMode, currentPlayer, winner]);
-
-const isMyTurn =
+  const isMyTurn =
     !winner &&
     gameStarted &&
     (playMode === "solo" ? true : localSide !== "spectator" && localSide === boardState.currentPlayer);
@@ -3209,4 +3187,44 @@ const isMyTurn =
       />
     </div>
   );
+}
+
+
+/* =======================
+   MINIMAL SOLO AI (FIX)
+   ======================= */
+function runSimpleAIMove_AI() {
+  // AI just picks first movable piece and first highlight
+  const aiSide: PlayerSide = localSide === "white" ? "black" : "white";
+  const aiPieces = pieces
+    .map((p, idx) => ({ p, idx }))
+    .filter(({ p }) => p.side === aiSide);
+
+  for (const { p, idx } of aiPieces) {
+    const moves =
+      p.type === "wizard"
+        ? calculateWizardMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : p.type === "apprentice"
+        ? calculateApprenticeMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : p.type === "dragon"
+        ? calculateDragonMoves(p, idx, pieces, adjacency, allNodes, burnMarks, holyLights).highlights
+        : p.type === "ranger"
+        ? calculateRangerMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : p.type === "griffin"
+        ? calculateGriffinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : p.type === "assassin"
+        ? calculateAssassinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : p.type === "paladin"
+        ? calculatePaladinMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : p.type === "bard"
+        ? calculateBardMoves(p, idx, pieces, adjacency, allNodes, holyLights, burnMarks)
+        : [];
+
+    if (moves.length > 0) {
+      const m = moves[0];
+      handleNodeClick(p.row, p.col);
+      setTimeout(() => handleNodeClick(m.row, m.col), 50);
+      return;
+    }
+  }
 }
