@@ -663,7 +663,7 @@ rowLabels.forEach((label, rowIdx) => {
     // 依外推方向決定對齊，避免文字蓋到棋盤
     ctx.textAlign = out.x >= cx ? 'left' : 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, out.x, out.y);
+    ctx.fillText(label, out.x+3, out.y+3);
   }
 });
 
@@ -677,7 +677,7 @@ colLabels.forEach((label, rowIdx) => {
 
     ctx.textAlign = out.x >= cx ? 'left' : 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, out.x, out.y);
+    ctx.fillText(label, out.x-3, out.y-3);
   }
 });
 
