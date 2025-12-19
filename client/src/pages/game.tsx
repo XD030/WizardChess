@@ -598,193 +598,6 @@ function mergeWizardBeamAttackHighlightsAllTargets(args: {
 
 
 export default function Game() {
-  const isAIMoveRef = useRef(false);
-
-  // =========================
-  // ✅ Solo AI（最小改動版）：只讓 AI 自己下棋，不動其他規則/流程
-  // =========================
-
-  const aiTimerRef = useRef<number | null>(null);
-
-  const PIECE_VALUE: Record<string, number> = {
-    wizard: 100000,
-    dragon: 5000,
-    paladin: 2500,
-    assassin: 2200,
-    griffin: 2000,
-    ranger: 1800,
-    apprentice: 1200,
-    bard: 200,
-  };
-
-  function buildAttackSetForSide(side: PlayerSide, ps: Piece[]): Set<string> {
-    if (allNodes.length === 0) return new Set<string>();
-
-    const out = new Set<string>();
-
-    for (let i = 0; i < ps.length; i++) {
-      const p = ps[i];
-      if (p.side !== side) continue;
-
-      let moves: MoveHighlight[] = [];
-
-      if (p.type === "wizard") {
-        moves = calculateWizardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-        const targets = computeAllWizardBeamTargetsSafe(p, ps, allNodes, adjacency, holyLights);
-        moves = mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: p, pieces: ps });
-      } else if (p.type === "apprentice") {
-        moves = calculateApprenticeMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "dragon") {
-        moves = calculateDragonMoves(p, i, ps, adjacency, allNodes, burnMarks, holyLights).highlights;
-      } else if (p.type === "ranger") {
-        moves = calculateRangerMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "griffin") {
-        moves = calculateGriffinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "assassin") {
-        moves = calculateAssassinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "paladin") {
-        moves = calculatePaladinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "bard") {
-        moves = calculateBardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      }
-
-      for (const h of moves) {
-        if (h.type === "attack" || h.type === "move") {
-          out.add(`${h.row},${h.col}`);
-        }
-      }
-    }
-
-    return out;
-  }
-
-  function isWizardThreatened(side: PlayerSide, ps: Piece[]): boolean {
-    const wiz = ps.find((p) => p.type === "wizard" && p.side === side);
-    if (!wiz) return false;
-    const enemySide: PlayerSide = side === "white" ? "black" : "white";
-    const enemyAtk = buildAttackSetForSide(enemySide, ps);
-    return enemyAtk.has(`${wiz.row},${wiz.col}`);
-  }
-
-  function pickBestAIMove(ps: Piece[], aiSide: PlayerSide): { from: Piece; to: { row: number; col: number } } | null {
-    if (allNodes.length === 0) return null;
-
-    const enemySide: PlayerSide = aiSide === "white" ? "black" : "white";
-    const enemyAttackSet = buildAttackSetForSide(enemySide, ps);
-    const aiWizard = ps.find((p) => p.type === "wizard" && p.side === aiSide) || null;
-    const aiWizardThreatened = aiWizard ? enemyAttackSet.has(`${aiWizard.row},${aiWizard.col}`) : false;
-
-    let best: { from: Piece; to: { row: number; col: number }; score: number } | null = null;
-
-    for (let i = 0; i < ps.length; i++) {
-      const p = ps[i];
-      if (p.side !== aiSide) continue;
-
-      let moves: MoveHighlight[] = [];
-
-      if (p.type === "wizard") {
-        moves = calculateWizardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-        const targets = computeAllWizardBeamTargetsSafe(p, ps, allNodes, adjacency, holyLights);
-        moves = mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: p, pieces: ps });
-      } else if (p.type === "apprentice") {
-        moves = calculateApprenticeMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "dragon") {
-        moves = calculateDragonMoves(p, i, ps, adjacency, allNodes, burnMarks, holyLights).highlights;
-      } else if (p.type === "ranger") {
-        moves = calculateRangerMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "griffin") {
-        moves = calculateGriffinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "assassin") {
-        moves = calculateAssassinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "paladin") {
-        moves = calculatePaladinMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      } else if (p.type === "bard") {
-        moves = calculateBardMoves(p, i, ps, adjacency, allNodes, holyLights, burnMarks);
-      }
-
-      for (const h of moves) {
-        if (h.type !== "move" && h.type !== "attack" && h.type !== "swap") continue;
-
-        // 基礎分：吃子優先
-        let score = 1;
-
-        const tIdx = getPieceAt(ps, h.row, h.col);
-        if (tIdx !== -1) {
-          const tp = ps[tIdx];
-          if (tp.side !== aiSide) {
-            score += (PIECE_VALUE[tp.type] ?? 100) * 10;
-            if (tp.type === "wizard") score += 10000000;
-          } else {
-            // 不打自己人
-            continue;
-          }
-        }
-
-        // 保巫師：如果己方巫師正被威脅，強力偏好「能解除威脅」的走法
-        if (aiWizardThreatened) {
-          // 1) 直接用吃子解除（只做粗略：只要本步吃子就給大加成）
-          if (tIdx !== -1) score += 250000;
-
-          // 2) 移動己方巫師躲到目前敵方攻擊不到的格子
-          if (p.type === "wizard" && (h.type === "move" || h.type === "attack")) {
-            const destKey = `${h.row},${h.col}`;
-            if (!enemyAttackSet.has(destKey)) score += 200000;
-            else score -= 500000;
-          }
-        } else {
-          // 一般情況：也避免把巫師走進敵方攻擊格
-          if (p.type === "wizard" && (h.type === "move" || h.type === "attack")) {
-            const destKey = `${h.row},${h.col}`;
-            if (enemyAttackSet.has(destKey)) score -= 8000;
-          }
-        }
-
-        // 小隨機避免同分卡死
-        score += Math.random();
-
-        if (!best || score > best.score) {
-          best = { from: p, to: { row: h.row, col: h.col }, score };
-        }
-      }
-    }
-
-    return best ? { from: best.from, to: best.to } : null;
-  }
-
-  function runSimpleAIMove_AI(args: { aiSide: PlayerSide }) {
-    const { aiSide } = args;
-
-    if (isAIMoveRef.current) return;
-    if (guardRequest) return;
-    if (wizardAttackRequest) return;
-    if (winner) return;
-    if (!gameStarted) return;
-    if (playMode !== "solo") return;
-    if (currentPlayer !== aiSide) return;
-
-    const choice = pickBestAIMove(pieces, aiSide);
-    if (!choice) return;
-
-    // 用「模擬點擊」避免改動既有走子/吃子邏輯
-    isAIMoveRef.current = true;
-
-    // 清掉可能殘留的 timer
-    if (aiTimerRef.current) {
-      window.clearTimeout(aiTimerRef.current);
-      aiTimerRef.current = null;
-    }
-
-    // 先選子
-    handleNodeClick(choice.from.row, choice.from.col);
-
-    // 再走子（下一個 event loop，確保 highlights 已更新）
-    aiTimerRef.current = window.setTimeout(() => {
-      handleNodeClick(choice.to.row, choice.to.col);
-      isAIMoveRef.current = false;
-      aiTimerRef.current = null;
-    }, 80);
-  }
-
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -857,6 +670,12 @@ export default function Game() {
 
   const [localSide, setLocalSide] = useState<"white" | "black" | "spectator">("spectator");
   const [playMode, setPlayMode] = useState<PlayMode>("pvp");
+
+  // ✅ Solo (vs AI) setup
+  const [soloHumanSide, setSoloHumanSide] = useState<PlayerSide>("white");
+  const aiSide: PlayerSide | null = playMode === "solo"
+    ? (soloHumanSide === "white" ? "black" : "white")
+    : null;
   // ✅ Solo (vs AI) — 人類玩家扮演哪一邊
   const [soloHumanSide, setSoloHumanSide] = useState<PlayerSide>("white");
   const soloAiSide: PlayerSide = soloHumanSide === "white" ? "black" : "white";
@@ -947,9 +766,251 @@ export default function Game() {
     !winner &&
     gameStarted &&
     (playMode === "solo"
-      ? (localSide !== "spectator" && (localSide as PlayerSide) === currentPlayer) || isAIMoveRef.current
+      ? localSide !== "spectator" && (localSide as PlayerSide) === currentPlayer
       : localSide !== "spectator" && localSide === currentPlayer);
 
+
+
+  // =========================
+  // ✅ Solo AI (優先吃子 / 保巫師)
+  // =========================
+  const aiBusyRef = useRef(false);
+
+  const PIECE_VALUE: Record<string, number> = {
+    wizard: 1000,
+    dragon: 90,
+    paladin: 70,
+    griffin: 60,
+    ranger: 50,
+    assassin: 55,
+    bard: 40,
+    apprentice: 30,
+  };
+
+  function getPieceValue(p: Piece): number {
+    return PIECE_VALUE[p.type] ?? 10;
+  }
+
+  function computeHighlightsForPiece(idx: number, piece: Piece, snapshotPieces: Piece[]): MoveHighlight[] {
+    if (allNodes.length === 0) return [];
+
+    if (piece.type === "wizard") {
+      const moves = calculateWizardMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+      const targets = computeAllWizardBeamTargetsSafe(piece, snapshotPieces, allNodes, adjacency, holyLights);
+      return mergeWizardBeamAttackHighlightsAllTargets({ moves, targets, wizard: piece, pieces: snapshotPieces });
+    }
+
+    if (piece.type === "apprentice")
+      return calculateApprenticeMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "dragon")
+      return calculateDragonMoves(piece, idx, snapshotPieces, adjacency, allNodes, burnMarks, holyLights).highlights;
+
+    if (piece.type === "ranger")
+      return calculateRangerMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "griffin")
+      return calculateGriffinMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "assassin")
+      return calculateAssassinMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "paladin") return calculatePaladinMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+
+    if (piece.type === "bard") return calculateBardMoves(piece, idx, snapshotPieces, adjacency, allNodes, holyLights, burnMarks);
+
+    return [];
+  }
+
+  function findWizard(side: PlayerSide, snapshotPieces: Piece[]): Piece | null {
+    const w = snapshotPieces.find((p) => p.side === side && p.type === "wizard");
+    return w ?? null;
+  }
+
+  function getThreateningEnemyIndices(ownSide: PlayerSide, snapshotPieces: Piece[]): Set<number> {
+    const enemySide: PlayerSide = ownSide === "white" ? "black" : "white";
+    const myWizard = findWizard(ownSide, snapshotPieces);
+    if (!myWizard) return new Set();
+
+    const out = new Set<number>();
+    for (let i = 0; i < snapshotPieces.length; i++) {
+      const p = snapshotPieces[i];
+      if (p.side !== enemySide) continue;
+      const hs = computeHighlightsForPiece(i, p, snapshotPieces);
+      for (const h of hs) {
+        if (h.type !== "attack" && h.type !== "move") continue;
+        if (h.row === myWizard.row && h.col === myWizard.col) {
+          out.add(i);
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  type AIAction = { pieceIndex: number; toRow: number; toCol: number; kind: "move" | "attack" | "swap" };
+
+  function chooseAIMove(): AIAction | null {
+    if (playMode !== "solo") return null;
+    if (!aiSide) return null;
+    if (allNodes.length === 0) return null;
+
+    const snapshotPieces = pieces;
+    const threats = getThreateningEnemyIndices(aiSide, snapshotPieces);
+
+    let best: { a: AIAction; score: number } | null = null;
+
+    for (let i = 0; i < snapshotPieces.length; i++) {
+      const p = snapshotPieces[i];
+      if (p.side !== aiSide) continue;
+
+      const hs = computeHighlightsForPiece(i, p, snapshotPieces);
+      for (const h of hs) {
+        if (h.type !== "move" && h.type !== "attack" && h.type !== "swap") continue;
+
+        const targetIdx = getPieceAt(snapshotPieces, h.row, h.col);
+        const targetPiece = targetIdx !== -1 ? snapshotPieces[targetIdx] : null;
+
+        // ignore illegal self-capture
+        if (targetPiece && targetPiece.side === p.side) continue;
+
+        let score = 0;
+
+        // prioritize captures
+        if (targetPiece && targetPiece.side !== p.side && targetPiece.type !== "bard") {
+          score += getPieceValue(targetPiece) * 100;
+          if (targetPiece.type === "wizard") score += 100000;
+          // if we are under threat, prefer capturing the threatening piece
+          if (threats.has(targetIdx)) score += 5000;
+        }
+
+        // protect own wizard: avoid moving wizard unless it wins / captures high value
+        if (p.type === "wizard" && (h.type === "move" || h.type === "attack")) {
+          score -= 300;
+        }
+
+        // small preference: attacks over quiet moves
+        if (h.type === "attack") score += 20;
+
+        // avoid swapping unless needed
+        if (h.type === "swap") score -= 50;
+
+        // if currently threatened and action is non-capture, penalize a bit
+        if (threats.size > 0 && !(targetPiece && targetPiece.side !== p.side && targetPiece.type !== "bard")) {
+          score -= 200;
+        }
+
+        // deterministic tie-breaker: prefer lower index
+        score -= i * 0.001;
+
+        const action: AIAction = { pieceIndex: i, toRow: h.row, toCol: h.col, kind: h.type };
+        if (!best || score > best.score) best = { a: action, score };
+      }
+    }
+
+    return best?.a ?? null;
+  }
+
+  function clickForAI(action: AIAction) {
+    const p = pieces[action.pieceIndex];
+    if (!p) return;
+
+    // 1) select
+    handleNodeClick(p.row, p.col);
+
+    // 2) execute
+    window.setTimeout(() => {
+      handleNodeClick(action.toRow, action.toCol);
+    }, 40);
+  }
+
+  // AI driver: auto-resolve wizard attack modal / guard / swap chain, and take a move on its turn
+  useEffect(() => {
+    if (playMode !== "solo") return;
+    if (winner) return;
+    if (!gameStarted) return;
+    if (!aiSide) return;
+
+    // if there's pending guard and AI is defender, always guard with the first option
+    if (guardRequest && guardOptions.length > 0 && guardRequest.defenderSide === aiSide) {
+      if (aiBusyRef.current) return;
+      aiBusyRef.current = true;
+      const pal = guardOptions[0].paladinIndex;
+      setSelectedGuardPaladinIndex(pal);
+      window.setTimeout(() => {
+        handleGuardConfirm();
+        aiBusyRef.current = false;
+      }, 60);
+      return;
+    }
+
+    // if wizard attack modal opened and AI is the wizard, choose line-shot (safer)
+    if (wizardAttackRequest) {
+      const wiz = pieces[wizardAttackRequest.wizardIndex];
+      if (wiz && wiz.side === aiSide) {
+        if (aiBusyRef.current) return;
+        aiBusyRef.current = true;
+        window.setTimeout(() => {
+          handleWizardLineShot();
+          aiBusyRef.current = false;
+        }, 60);
+        return;
+      }
+    }
+
+    // if bard needs swap and it's AI's turn, pick a swap target quickly (highest value)
+    if (bardNeedsSwap && currentPlayer === aiSide) {
+      if (aiBusyRef.current) return;
+      const candidates = pieces
+        .map((pp, idx) => ({ pp, idx }))
+        .filter(({ pp }) => pp.side === aiSide && pp.type !== "bard" && pp.type !== "dragon" && pp.type !== "wizard");
+
+      if (candidates.length === 0) return;
+
+      candidates.sort((a, b) => getPieceValue(b.pp) - getPieceValue(a.pp));
+      const target = candidates[0].pp;
+      aiBusyRef.current = true;
+
+      // select bard already handled by UI state in this phase; just click the target coordinate
+      window.setTimeout(() => {
+        handleNodeClick(target.row, target.col);
+        aiBusyRef.current = false;
+      }, 60);
+      return;
+    }
+
+    // AI normal turn
+    if (currentPlayer !== aiSide) return;
+    if (guardRequest) return; // wait guard resolved
+    if (wizardAttackRequest) return; // wait modal resolved
+    if (bardNeedsSwap) return;
+
+    if (aiBusyRef.current) return;
+
+    const action = chooseAIMove();
+    if (!action) return;
+
+    aiBusyRef.current = true;
+    window.setTimeout(() => {
+      clickForAI(action);
+      aiBusyRef.current = false;
+    }, 120);
+  }, [
+    playMode,
+    gameStarted,
+    currentPlayer,
+    winner,
+    aiSide,
+    pieces,
+    allNodes.length,
+    adjacency,
+    burnMarks,
+    holyLights,
+    guardRequest,
+    guardOptions,
+    wizardAttackRequest,
+    bardNeedsSwap,
+  ]);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [inRoom, setInRoom] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -1131,24 +1192,19 @@ export default function Game() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: "state", state: next, from: clientIdRef.current }));
   }
-  function startSoloGame() {
-    // ✅ 進入單人（AI）模式：先進準備階段，讓玩家選「我玩白/黑」
+  function startSoloSetup() {
     setPlayMode("solo");
     setRoomError(null);
     setSeatError(null);
-
-    const newSeats: Seats = {
-      whiteOwnerId: clientIdRef.current,
-      blackOwnerId: clientIdRef.current,
-    };
-
-    setSeats(newSeats);
     setInRoom(true);
-
-    // 預設玩家先選白（可在準備階段切換）
-    setSoloHumanSide("white");
-    setLocalSide("white");
-
+    setGameStarted(false);
+    setShowEndModal(false);
+    setViewSnapshotIndex(null);
+  
+    // reset to initial board but stay in "準備階段"
+    const newSeats: Seats = { whiteOwnerId: clientIdRef.current, blackOwnerId: clientIdRef.current };
+    setSeats(newSeats);
+  
     const initial: SyncedState = {
       pieces: ensureDragonTags(getInitialPieces()),
       currentPlayer: "white",
@@ -1160,14 +1216,48 @@ export default function Game() {
       seats: newSeats,
       startingPlayer: "white",
       startingMode: "manual",
-      ready: { white: false, black: false },
+      ready: { white: true, black: true },
       gameStarted: false,
       pendingGuard: null,
     };
-
+  
     applySyncedState(initial);
   }
-
+  
+  function startSoloGameWithSide(humanSide: PlayerSide) {
+    setPlayMode("solo");
+    setRoomError(null);
+    setSeatError(null);
+  
+    const newSeats: Seats = {
+      whiteOwnerId: clientIdRef.current,
+      blackOwnerId: clientIdRef.current,
+    };
+  
+    setSeats(newSeats);
+    setLocalSide(humanSide);
+    setSoloHumanSide(humanSide);
+    setInRoom(true);
+  
+    const initial: SyncedState = {
+      pieces: ensureDragonTags(getInitialPieces()),
+      currentPlayer: "white",
+      moveHistory: [],
+      burnMarks: [],
+      holyLights: [],
+      capturedPieces: { white: [], black: [], neutral: [] },
+      winner: null,
+      seats: newSeats,
+      startingPlayer: "white",
+      startingMode: "manual",
+      ready: { white: true, black: true },
+      gameStarted: true,
+      pendingGuard: null,
+    };
+  
+    applySyncedState(initial);
+  }
+  
   useEffect(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsHost = window.location.host;
@@ -1286,7 +1376,7 @@ export default function Game() {
 
   function handleRestartGame() {
     if (playMode === "solo") {
-      startSoloGame();
+      startSoloSetup();
       setShowEndModal(false);
       setViewSnapshotIndex(null);
       return;
@@ -2626,7 +2716,7 @@ export default function Game() {
       return;
     }
 
-    if (!canPlay && !isAIMoveRef.current) return;
+    if (!canPlay && !(playMode === "solo" && aiSide && currentPlayer === aiSide)) return;
 
     let newPieces = [...pieces];
     let moveDesc = "";
@@ -3200,7 +3290,7 @@ export default function Game() {
               </button>
 
               <button
-                onClick={startSoloGame}
+                onClick={startSoloSetup}
                 className="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
               >
                 單機
@@ -3246,7 +3336,71 @@ export default function Game() {
     );
   }
 
-  if (inRoom && !gameStarted) {
+if (inRoom && !gameStarted) {
+  if (playMode === "solo") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
+        <div className="w-full max-w-lg bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+          <h1 className="text-2xl font-bold text-center text-slate-100">巫師棋 Wizard Chess</h1>
+          <p className="text-sm text-slate-300 text-center">
+            單人（對 AI）準備階段：選擇你要扮演的顏色，按下開始遊戲後，另一方由 AI 操作。
+          </p>
+
+          <div>
+            <div className="text-sm text-slate-200 mb-2 text-center">我方顏色</div>
+            <div className="flex justify-center gap-3">
+              <button
+                className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
+                  soloHumanSide === "white"
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "border-slate-600 text-slate-100 hover:border-slate-300"
+                }`}
+                onClick={() => setSoloHumanSide("white")}
+              >
+                我玩白
+              </button>
+              <button
+                className={`px-4 py-2 rounded-lg border text-sm font-semibold ${
+                  soloHumanSide === "black"
+                    ? "bg-slate-100 text-slate-900 border-slate-100"
+                    : "border-slate-600 text-slate-100 hover:border-slate-300"
+                }`}
+                onClick={() => setSoloHumanSide("black")}
+              >
+                我玩黑
+              </button>
+            </div>
+            <div className="text-[11px] text-slate-400 text-center mt-2">
+              AI：{soloHumanSide === "white" ? "黑方" : "白方"}（優先吃子/保巫師）
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => startSoloGameWithSide(soloHumanSide)}
+              className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2 text-sm"
+            >
+              開始遊戲
+            </button>
+
+            <button
+              onClick={handleExitGame}
+              className="w-full rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold py-2 text-sm"
+            >
+              返回
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-500 text-center">
+            WebSocket 狀態：
+            {socketStatus === "connecting" && "連線中..."}
+            {socketStatus === "connected" && "已連線"}
+            {socketStatus === "disconnected" && "未連線"}
+          </div>
+        </div>
+      </div>
+    );
+  }
     const startingText = startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
 
     // ✅ 單人（AI）模式：準備階段（選我玩白/黑）
