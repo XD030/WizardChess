@@ -682,6 +682,10 @@ export default function Game() {
 
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [inRoom, setInRoom] = useState(false);
+  const [uiMode, setUiMode] = useState<"menu" | "pvp" | "single">("menu");
+  const [singlePlayerSide, setSinglePlayerSide] = useState<PlayerSide>("white");
+  const isSinglePlayer = uiMode === "single";
+  const aiSide: PlayerSide = singlePlayerSide === "white" ? "black" : "white";
   const [passwordInput, setPasswordInput] = useState("");
   const [roomError, setRoomError] = useState<string | null>(null);
 
@@ -852,12 +856,24 @@ export default function Game() {
   }
 
   function broadcastState(next: SyncedState) {
+    if (uiMode !== "pvp") return;
     const ws = socketRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: "state", state: next, from: clientIdRef.current }));
   }
 
   useEffect(() => {
+    if (uiMode !== "pvp") {
+      // single / menu 模式不使用 WebSocket
+      try {
+        socketRef.current?.close();
+      } catch {}
+      socketRef.current = null;
+      setSocketStatus("disconnected");
+      setInRoom(false);
+      return;
+    }
+
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsHost = window.location.host;
     const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
@@ -906,7 +922,7 @@ export default function Game() {
     };
 
     return () => ws.close();
-  }, []);
+  }, [uiMode]);
 
   function handleJoinRoom() {
     if (!passwordInput.trim()) {
@@ -1007,13 +1023,97 @@ export default function Game() {
 
   function handleExitGame() {
     setShowEndModal(false);
+    setUiMode("menu");
     setInRoom(false);
     setLocalSide("spectator");
     setViewSnapshotIndex(null);
     setGuardDialogOpen(false);
     setGuardRequest(null);
     setSelectedGuardPaladinIndex(null);
-  }
+
+function handleEnterPvp() {
+  setUiMode("pvp");
+  setRoomError(null);
+  setPasswordInput("");
+  setInRoom(false);
+  setLocalSide("spectator");
+}
+
+function handleEnterSingle() {
+  // 進入單人：不走 WebSocket
+  setUiMode("single");
+  setInRoom(true);
+  setRoomError(null);
+  setPasswordInput("");
+  setLocalSide(singlePlayerSide);
+  setSeats({
+    whiteOwnerId: singlePlayerSide === "white" ? clientIdRef.current : "AI",
+    blackOwnerId: singlePlayerSide === "black" ? clientIdRef.current : "AI",
+  });
+  setReady({ white: false, black: false });
+  setGameStarted(false);
+  setWinner(null);
+  setShowEndModal(false);
+  setMoveHistory([]);
+  setSnapshots([]);
+  setViewSnapshotIndex(null);
+  setSelectedPieceIndex(-1);
+  setHighlights([]);
+  setDragonPathNodes([]);
+  setProtectionZones([]);
+  setWizardBeam(null);
+  setGuardDialogOpen(false);
+  setGuardRequest(null);
+  setSelectedGuardPaladinIndex(null);
+  setGuardOptions([]);
+  setBardNeedsSwap(null);
+  setWizardAttackRequest(null);
+  setPieces(ensureDragonTags(getInitialPieces()));
+  setBurnMarks([]);
+  setHolyLights([]);
+  setCapturedPieces({ white: [], black: [], neutral: [] });
+  setCurrentPlayer(startingPlayer);
+}
+
+function handleStartSingleGame() {
+  const initialPieces = ensureDragonTags(getInitialPieces());
+  const chosenStarting: PlayerSide =
+    startingMode === "random" ? (Math.random() < 0.5 ? "white" : "black") : startingPlayer;
+
+  setPieces(initialPieces);
+  setBurnMarks([]);
+  setHolyLights([]);
+  setCapturedPieces({ white: [], black: [], neutral: [] });
+  setMoveHistory([]);
+  setSnapshots([]);
+  setViewSnapshotIndex(null);
+  setWinner(null);
+  setShowEndModal(false);
+
+  setSeats({
+    whiteOwnerId: singlePlayerSide === "white" ? clientIdRef.current : "AI",
+    blackOwnerId: singlePlayerSide === "black" ? clientIdRef.current : "AI",
+  });
+
+  setReady({ white: true, black: true });
+  setGameStarted(true);
+  setCurrentPlayer(chosenStarting);
+  setStartingPlayer(chosenStarting);
+  setStartingMode("manual");
+
+  // 清掉 UI 選取
+  setSelectedPieceIndex(-1);
+  setHighlights([]);
+  setDragonPathNodes([]);
+  setProtectionZones([]);
+  setWizardBeam(null);
+  setGuardDialogOpen(false);
+  setGuardRequest(null);
+  setSelectedGuardPaladinIndex(null);
+  setGuardOptions([]);
+  setBardNeedsSwap(null);
+  setWizardAttackRequest(null);
+}
 
   function handleChooseSide(side: "white" | "black" | "spectator") {
     if (!inRoom) return;
@@ -2657,6 +2757,127 @@ export default function Game() {
     broadcastState(syncState);
   };
 
+// =========================
+// ✅ 單人模式：AI 自動守護
+// =========================
+useEffect(() => {
+  if (!isSinglePlayer) return;
+  if (!gameStarted || winner) return;
+  if (!guardRequest) return;
+  if (guardRequest.defenderSide !== aiSide) return;
+
+  // AI 一律優先守護（保巫師 / 保關鍵棋）
+  const paladinIdx = guardRequest.guardPaladinIndices[0];
+  if (paladinIdx == null) {
+    handleGuardDecline();
+    return;
+  }
+
+  setSelectedGuardPaladinIndex(paladinIdx);
+  setTimeout(() => {
+    handleGuardConfirm();
+  }, 0);
+}, [isSinglePlayer, gameStarted, winner, guardRequest, aiSide]);
+
+// =========================
+// ✅ 單人模式：AI 自動走子（優先吃子）
+// =========================
+useEffect(() => {
+  if (!isSinglePlayer) return;
+  if (!gameStarted || winner) return;
+  if (currentPlayer !== aiSide) return;
+
+  // 有需要玩家決策的流程時，AI 先不動
+  if (bardNeedsSwap) return;
+  if (wizardAttackRequest) return;
+  if (guardRequest) return;
+  if (isObserving) return;
+
+  const effective = pieces;
+
+  const scoreAction = (piece: Piece, h: MoveHighlight): number => {
+    if (h.type === "attack" || h.type === "move") {
+      const tidx = getPieceAt(effective, h.row, h.col);
+      if (tidx !== -1) {
+        const tp = effective[tidx];
+        if (tp.side !== piece.side && tp.side !== "neutral") {
+          if (tp.type === "wizard") return 100000;
+          return 1000;
+        }
+      }
+    }
+    if (h.type === "swap") return 10;
+    return 1;
+  };
+
+  const getHighlightsFor = (piece: Piece, idx: number): MoveHighlight[] => {
+    if (allNodes.length === 0) return [];
+    if (piece.type === "wizard") {
+      const moves = calculateWizardMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+      const beam = computeWizardBeamSafe(piece, effective, allNodes, adjacency, holyLights);
+      return mergeWizardBeamAttackHighlights({ moves, beam, wizard: piece, pieces: effective });
+    }
+    if (piece.type === "apprentice") return calculateApprenticeMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+    if (piece.type === "dragon") return calculateDragonMoves(piece, idx, effective, adjacency, allNodes, burnMarks, holyLights).highlights;
+    if (piece.type === "ranger") return calculateRangerMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+    if (piece.type === "griffin") return calculateGriffinMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+    if (piece.type === "assassin") return calculateAssassinMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+    if (piece.type === "paladin") return calculatePaladinMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+    if (piece.type === "bard") return calculateBardMoves(piece, idx, effective, adjacency, allNodes, holyLights, burnMarks);
+    return [];
+  };
+
+  // 1) 收集所有可行動作
+  let best: { pieceIdx: number; target: MoveHighlight; score: number } | null = null;
+
+  for (let i = 0; i < effective.length; i++) {
+    const p = effective[i];
+    if (p.side !== aiSide) continue;
+
+    const hs = getHighlightsFor(p, i);
+    for (const h of hs) {
+      // 避免一些明顯無效點
+      if (h.type === "move" || h.type === "attack" || h.type === "swap") {
+        const sc = scoreAction(p, h);
+        if (!best || sc > best.score) best = { pieceIdx: i, target: h, score: sc };
+      }
+    }
+  }
+
+  if (!best) return;
+
+  // 2) 用「模擬點擊」沿用原本的規則/邏輯（避免動到棋子規則）
+  const p = effective[best.pieceIdx];
+  const tr = best.target.row;
+  const tc = best.target.col;
+
+  // 暫時把 localSide 切到 AI，讓既有 handleNodeClick 可以跑（走完再切回玩家）
+  setLocalSide(aiSide);
+  setTimeout(() => {
+    handleNodeClick(p.row, p.col);
+    setTimeout(() => {
+      handleNodeClick(tr, tc);
+      setTimeout(() => setLocalSide(singlePlayerSide), 0);
+    }, 0);
+  }, 0);
+}, [
+  isSinglePlayer,
+  gameStarted,
+  winner,
+  currentPlayer,
+  aiSide,
+  pieces,
+  burnMarks,
+  holyLights,
+  bardNeedsSwap,
+  wizardAttackRequest,
+  guardRequest,
+  isObserving,
+  adjacency,
+  allNodes,
+  singlePlayerSide,
+]);
+
   const boardState: SyncedState =
     isObserving && viewSnapshotIndex !== null && snapshots[viewSnapshotIndex]
       ? snapshots[viewSnapshotIndex]
@@ -2721,11 +2942,54 @@ export default function Game() {
     else if (localSide === "black") displayHistory = baseHistory.map((r) => r.blackText);
   }
 
-  if (!inRoom) {
+if (uiMode === "menu") {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
+      <div className="w-full max-w-md bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-5">
+        <h1 className="text-2xl font-bold text-center text-slate-100">巫師棋 Wizard Chess</h1>
+        <div className="text-sm text-slate-300 text-center">請選擇遊戲模式</div>
+
+        <div className="grid grid-cols-1 gap-3">
+          <button
+            onClick={handleEnterPvp}
+            className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-3 text-sm"
+          >
+            PVP（線上對戰）
+          </button>
+
+          <button
+            onClick={handleEnterSingle}
+            className="w-full rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 font-semibold py-3 text-sm"
+          >
+            單人（對 AI）
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-500 text-center">
+          PVP 需要建立/加入房間；單人模式不需要房間。
+        </div>
+      </div>
+    </div>
+  );
+}
+
+if (uiMode === "pvp" && !inRoom) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
         <div className="w-full max-w-md bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl">
-          <h1 className="text-2xl font-bold text-center mb-2 text-slate-100">巫師棋 Wizard Chess</h1>
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-10" />
+            <h1 className="text-2xl font-bold text-center text-slate-100 flex-1">巫師棋 Wizard Chess</h1>
+            <button
+              onClick={() => {
+                setUiMode("menu");
+                setInRoom(false);
+              }}
+              className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-100"
+            >
+              返回
+            </button>
+          </div>
           <p className="text-xs text-slate-400 text-center mb-6">
             請輸入本局的密碼（必填）。<br />
             之後其他玩家輸入相同密碼即可加入同一局。
@@ -2767,7 +3031,100 @@ export default function Game() {
     );
   }
 
-  if (inRoom && !gameStarted) {
+if (uiMode === "single" && !gameStarted) {
+  const startingText = startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 md:p-8 flex items-center justify-center">
+      <div className="w-full max-w-lg bg-slate-900/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-slate-100">單人模式（對 AI）</h1>
+          <button
+            onClick={() => {
+              setUiMode("menu");
+              setInRoom(false);
+            }}
+            className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-100"
+          >
+            返回
+          </button>
+        </div>
+
+        <div>
+          <div className="text-sm text-slate-200 mb-2 text-center">選擇你要扮演的顏色</div>
+          <div className="flex justify-center items-center gap-4 mb-2 text-sm text-slate-300">
+            <button
+              className={`px-3 py-1 rounded-full border ${
+                singlePlayerSide === "white"
+                  ? "bg-slate-100 text-slate-900 border-slate-100"
+                  : "border-slate-500 hover:border-slate-300"
+              }`}
+              onClick={() => {
+                setSinglePlayerSide("white");
+                setLocalSide("white");
+                setSeats({ whiteOwnerId: clientIdRef.current, blackOwnerId: "AI" });
+              }}
+            >
+              我玩白
+            </button>
+
+            <button
+              className={`px-3 py-1 rounded-full border ${
+                singlePlayerSide === "black"
+                  ? "bg-slate-100 text-slate-900 border-slate-100"
+                  : "border-slate-500 hover:border-slate-300"
+              }`}
+              onClick={() => {
+                setSinglePlayerSide("black");
+                setLocalSide("black");
+                setSeats({ whiteOwnerId: "AI", blackOwnerId: clientIdRef.current });
+              }}
+            >
+              我玩黑
+            </button>
+          </div>
+          <div className="text-[11px] text-slate-400 text-center">
+            你：{singlePlayerSide === "white" ? "白方" : "黑方"} ｜ AI：{singlePlayerSide === "white" ? "黑方" : "白方"}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm text-slate-200 mb-2 text-center">先後攻設定</div>
+          <div className="text-xs text-slate-400 text-center mb-2">
+            目前設定： <span className="text-emerald-300">{startingText}</span>
+          </div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              onClick={handleToggleStartingPlayer}
+              className="px-3 py-1 rounded-lg border border-slate-600 bg-slate-950 text-xs text-slate-100 hover:border-emerald-400 hover:text-emerald-300"
+            >
+              自訂先後攻： {startingPlayer === "white" ? "白方先攻" : "黑方先攻"}
+            </button>
+            <button
+              onClick={handleRandomStartingPlayer}
+              className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-xs text-slate-950 font-semibold"
+            >
+              隨機決定先後攻
+            </button>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <button
+            onClick={handleStartSingleGame}
+            className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold"
+          >
+            開始遊戲
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-500 text-center">AI 會在自己的回合自動走子（優先吃子）。</div>
+      </div>
+    </div>
+  );
+}
+
+if (uiMode === "pvp" && inRoom && !gameStarted) {
     const startingText = startingMode === "random" ? "隨機" : startingPlayer === "white" ? "白方先攻" : "黑方先攻";
 
     return (
@@ -3008,4 +3365,7 @@ export default function Game() {
       />
     </div>
   );
+}
+
+
 }
